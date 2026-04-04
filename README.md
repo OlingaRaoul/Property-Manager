@@ -1,4 +1,4 @@
-# Property Manager Admin (Aura Manager) 🏢
+# Property Manager Admin🏢
 
 A comprehensive, state-of-the-art property management suite built to simplify the operations of modern real estate portfolios. Property Manager Admin handles everything from tracking units and tenants to recording rent ledgers, distributing digital PDF receipts, and monitoring overdue payments effortlessly.
 
