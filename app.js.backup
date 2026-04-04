@@ -1,0 +1,2136 @@
+/**
+ * Aura Property Manager | Core Logic
+ */
+console.log("Aura core logic initialized.");
+
+// Initial State and Storage Key
+const STORAGE_KEY = 'aura_property_manager_data';
+const initialState = {
+    properties: [],
+    apartments: [],
+    tenants: [],
+    payments: [],
+    unit_types: [],
+    contracts: [],
+    utilities: [],
+    settings: {
+        currency: '$',
+        lang: 'en',
+        notificationThresholdDays: 3
+    }
+};
+
+const translations = {
+    en: {
+        dashboard: "Dashboard",
+        properties: "Properties",
+        tenants: "Tenants",
+        payments: "Payments",
+        settings: "Settings",
+        active_tenants: "Active Tenants",
+        collected_rent: "Collected Rent",
+        rent_due: "Total Due",
+        recent_activity: "Recent Activity",
+        tenant: "Tenant",
+        unit: "Unit",
+        due_date: "Due Date",
+        amount: "Amount",
+        status: "Status",
+        actions: "Actions",
+        paid: "Paid",
+        overdue: "Overdue",
+        due_soon: "Due Soon",
+        upcoming: "Upcoming",
+        move_out: "Move Out",
+        edit: "Edit",
+        add_property: "Add Property",
+        add_tenant: "Add Tenant",
+        save: "Save",
+        cancel: "Cancel",
+        lang_sel: "Application Language",
+        currency_sel: "Currency Symbol",
+        total_revenue: "Lifetime Revenue",
+        currently_due: "Currently Due",
+        recent_history: "Recent History",
+        property_label: "Property",
+        add_unit: "Add Unit",
+        vacant: "Vacant",
+        inventory: "Apartment Inventory",
+        unassigned: "Unassigned",
+        no_room: "No Room Assigned",
+        Room: "Room",
+        Studio: "Studio",
+        unit_types_title: "Managed Unit Categories",
+        add_type: "Add Category",
+        type_name: "Category Name",
+        cat_placeholder: "e.g. Warehouse",
+        contracts: "Contracts",
+        add_contract: "New Contract",
+        start_date: "Start Date",
+        end_date: "End Date",
+        active: "Active",
+        expired: "Expired",
+        leasing: "Lease Management",
+        edit_contract: "Edit Contract",
+        day: "Day",
+        jan: "Jan", feb: "Feb", mar: "Mar", apr: "Apr", may: "May", jun: "Jun",
+        jul: "Jul", aug: "Aug", sep: "Sep", oct: "Oct", nov: "Nov", dec: "Dec"
+    },
+    fr: {
+        dashboard: "Tableau de bord",
+        properties: "Propriétés",
+        tenants: "Locataires",
+        payments: "Paiements",
+        settings: "Paramètres",
+        active_tenants: "Locataires Actifs",
+        collected_rent: "Loyer Collecté",
+        rent_due: "Loyer Dû",
+        recent_activity: "Activité Récente",
+        tenant: "Locataire",
+        unit: "Unité",
+        due_date: "Date d'échéance",
+        amount: "Montant",
+        status: "Statut",
+        actions: "Actions",
+        paid: "Payé",
+        overdue: "En retard",
+        due_soon: "Bientôt dû",
+        upcoming: "À venir",
+        move_out: "Déménager",
+        edit: "Modifier",
+        add_property: "Ajouter la propriété",
+        add_tenant: "Ajouter un locataire",
+        save: "Enregistrer",
+        cancel: "Annuler",
+        lang_sel: "Langue de l'application",
+        currency_sel: "Symbole Monétaire",
+        total_revenue: "Revenu Total",
+        currently_due: "Actuellement Dû",
+        recent_history: "Historique Récent",
+        currently_due: "Actuellement Dû",
+        recent_history: "Historique Récent",
+        property_label: "Propriété",
+        add_unit: "Ajouter l'unité",
+        vacant: "Vacant",
+        inventory: "Inventaire des Appartements",
+        unassigned: "Non assigné",
+        no_room: "Sans pièce",
+        Room: "Chambre",
+        Studio: "Studio",
+        unit_types_title: "Catégories d'unités gérées",
+        add_type: "Ajouter une catégorie",
+        type_name: "Nom de la catégorie",
+        cat_placeholder: "ex: Entrepôt",
+        contracts: "Contrats",
+        add_contract: "Nouveau Contrat",
+        start_date: "Date de début",
+        end_date: "Date de fin",
+        active: "Actif",
+        expired: "Expiré",
+        leasing: "Gestion des Baux",
+        edit_contract: "Modifier le Contrat",
+        day: "Jour",
+        jan: "Janv", feb: "Févr", mar: "Mars", apr: "Avril", may: "Mai", jun: "Juin",
+        jul: "Juil", aug: "Août", sep: "Sept", oct: "Oct", nov: "Nov", dec: "Déc"
+    }
+};
+
+function t(key) {
+    const lang = state.settings.lang || 'en';
+    return translations[lang][key] || key;
+}
+
+function formatMonth(monthStr) {
+    if (!monthStr || !monthStr.includes('-')) return monthStr;
+    const [year, month] = monthStr.split('-');
+    const months = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+    const monthKey = months[parseInt(month) - 1];
+    return t(monthKey);
+}
+
+function applyTranslations() {
+    document.querySelectorAll('[data-t]').forEach(el => {
+        const key = el.getAttribute('data-t');
+        el.textContent = t(key);
+    });
+}
+
+let currentEditId = null; // Tracks current entity being edited
+let state = initialState;
+
+const API_URL = 'http://localhost:3000/api';
+
+async function loadState() {
+    try {
+        const response = await fetch(`${API_URL}/data`);
+        if (response.ok) {
+            const data = await response.json();
+            state.properties = data.properties || [];
+            state.apartments = data.apartments || [];
+            state.tenants = data.tenants || [];
+            state.payments = data.payments || [];
+            state.unit_types = data.unit_types || [];
+            state.contracts = data.contracts || [];
+            state.utilities = data.utilities || [];
+            if (data.settings) {
+                state.settings = { ...state.settings, ...data.settings };
+            }
+            updateDashboard();
+        }
+    } catch (e) {
+        console.warn("DB Server not found. Falling back to local cache.");
+        const data = localStorage.getItem(STORAGE_KEY);
+        state = data ? JSON.parse(data) : initialState;
+        // Ensure arrays exist even in fallback
+        state.properties = state.properties || [];
+        state.apartments = state.apartments || [];
+        state.tenants = state.tenants || [];
+        updateDashboard();
+    }
+}
+
+async function saveState(type, data) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); // Always cache locally
+    try {
+        if (type === 'property') {
+            await fetch(`${API_URL}/properties`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+        } else if (type === 'edit-property') {
+            await fetch(`${API_URL}/properties/${data.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+        } else if (type === 'tenant') {
+            await fetch(`${API_URL}/tenants`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+        } else if (type === 'apartment') {
+            await fetch(`${API_URL}/apartments`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+        } else if (type === 'contract') {
+            await fetch(`${API_URL}/contracts`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+        } else if (type === 'edit-contract') {
+            await fetch(`${API_URL}/contracts/${data.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+        } else if (type === 'edit-tenant') {
+            await fetch(`${API_URL}/tenants/${data.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+        }
+    } catch (e) {
+        console.error("DB Save failed:", e);
+    }
+    await loadState(); // Force-sync to ensure all views have the latest DB state
+}
+
+// --- Rent Calculation Engine ---
+
+function calculateRentStatus(tenant) {
+    const today = new Date();
+    const currentMonthStr = today.toISOString().slice(0, 7); // YYYY-MM
+    const currentDay = today.getDate();
+    
+    // Check if paid this month
+    if (tenant.lastPaidMonth === currentMonthStr) {
+        return { status: t('paid'), class: 'paid', message: t('paid') };
+    }
+    
+    // Check if due or overdue
+    if (currentDay > tenant.dueDateDay) {
+        return { status: t('overdue'), class: 'overdue', message: t('overdue') };
+    }
+    
+    // If within threshold before due date
+    if (tenant.dueDateDay - currentDay <= state.settings.notificationThresholdDays) {
+        return { status: t('due_soon'), class: 'due', message: `${t('due_date')} ${tenant.dueDateDay}` };
+    }
+    
+    return { status: t('upcoming'), class: '', message: `${t('due_date')} ${tenant.dueDateDay}` };
+}
+
+// --- View Rendering ---
+
+function switchView(viewId) {
+    const view = document.getElementById(`${viewId}-view`);
+    if (!view) {
+        console.warn(`Work in Progress: The ${viewId} view is coming soon!`);
+        return;
+    }
+    
+    document.querySelectorAll('.view').forEach(v => v.classList.add('hidden'));
+    view.classList.remove('hidden');
+    
+    document.querySelectorAll('.nav-item').forEach(item => {
+        item.classList.remove('active');
+        if (item.getAttribute('data-view') === viewId) {
+            item.classList.add('active');
+        }
+    });
+
+    const titleMap = {
+        'dashboard': t('dashboard'),
+        'properties': t('properties'),
+        'tenants': t('tenants'),
+        'payments': t('payments'),
+        'settings': t('settings'),
+        'utilities': 'Utilities'
+    };
+    document.getElementById('view-title').textContent = titleMap[viewId] || 'Property Manager Admin';
+    
+    // Refresh content
+    if (viewId === 'dashboard') renderRecentTenants();
+    if (viewId === 'properties') renderProperties();
+    if (viewId === 'tenants') renderTenants();
+    if (viewId === 'payments') renderPayments();
+    if (viewId === 'contracts') renderContracts();
+    if (viewId === 'settings') renderUnitTypesSettings();
+    if (viewId === 'utilities') renderUtilities();
+    
+    applyTranslations();
+}
+
+// --- Content Rendering ---
+
+// --- Content Rendering ---
+
+function renderRecentTenants(filter = '') {
+    const listElement = document.getElementById('recent-tenants-list');
+    listElement.innerHTML = '';
+    
+    const filteredTenants = state.tenants.filter(t => 
+        t.name.toLowerCase().includes(filter.toLowerCase())
+    ).slice(0, 10);
+    
+    if (filteredTenants.length === 0) {
+        listElement.innerHTML = '<tr><td colspan="6" style="text-align:center; padding: 2rem;">No tenants found. Add your first tenant to get started!</td></tr>';
+        return;
+    }
+
+    filteredTenants.forEach(tenant => {
+        const apartment = state.apartments.find(a => String(a.id) === String(tenant.apartmentId));
+        const property = apartment ? state.properties.find(p => String(p.id) === String(apartment.propertyId)) : null;
+        const rentStatus = calculateRentStatus(tenant);
+        const lastPayment = state.payments.find(p => 
+            String(p.tenantId) === String(tenant.id) && p.monthPaid === tenant.lastPaidMonth
+        );
+        const datePaid = lastPayment ? lastPayment.date : 'N/A';
+        
+        // Group all months settled on the same transaction date
+        const monthCovered = lastPayment ? state.payments
+            .filter(p => String(p.tenantId) === String(tenant.id) && p.date === lastPayment.date)
+            .map(p => formatMonth(p.monthPaid))
+            .reverse()
+            .join(', ') : 'N/A';
+        
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>
+                <div style="display: flex; align-items: center; gap: 0.6rem;">
+                    <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=${tenant.name}" alt="Avatar" style="width: 30px; height: 30px; border-radius: 50%;">
+                    <span style="font-weight: 500; font-size: 0.9rem;">${tenant.name}</span>
+                </div>
+            </td>
+            <td style="line-height: 1.2;">
+                <div style="font-weight: 500; color:var(--text-main); font-size:0.9rem; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${property ? property.name : 'Unknown'}">${property ? property.name : 'Unknown'}</div>
+                <div style="font-size: 0.75rem; color: var(--secondary);">${apartment ? apartment.unitNumber : 'N/A'}</div>
+            </td>
+            <td><div style="font-weight: 600; color:var(--text-main); font-size:0.9rem;">${monthCovered}</div></td>
+            <td><div style="font-size: 0.85rem; color: var(--text-muted);">${datePaid}</div></td>
+            <td style="font-weight: 600;">${tenant.rentAmount.toLocaleString()} ${state.settings.currency}</td>
+            <td><span class="status-pill ${rentStatus.class}">${rentStatus.status}</span></td>
+            <td>
+                <div style="display: flex; gap: 0.5rem;">
+                   <button class="btn-icon" onclick="window.markAsPaid('${tenant.id}')" title="Mark as Paid">
+                       <i data-lucide="check-circle" style="color:var(--success); width: 14px;"></i>
+                   </button>
+                   <button class="btn-icon" onclick="window.generateReceipt('${lastPayment ? lastPayment.id : ''}')" title="Receipt" ${!lastPayment ? 'disabled style="opacity:0.3"' : ''}>
+                       <i data-lucide="printer" style="color:var(--primary); width: 14px;"></i>
+                   </button>
+                </div>
+            </td>
+        `;
+        listElement.appendChild(row);
+    });
+    
+    lucide.createIcons();
+}
+
+function updateDashboard() {
+    const activeTenantsCount = state.tenants.length;
+    const totalCollected = state.tenants.reduce((sum, t) => {
+        const status = calculateRentStatus(t);
+        return status.status === 'Paid' ? sum + t.rentAmount : sum;
+    }, 0);
+    const totalDue = state.tenants.reduce((sum, t) => {
+        const status = calculateRentStatus(t);
+        return (status.status === 'Overdue' || status.status === 'Due Soon') ? sum + t.rentAmount : sum;
+    }, 0);
+
+    document.getElementById('stat-active-tenants').textContent = activeTenantsCount;
+    document.getElementById('stat-collected-rent').textContent = `${totalCollected.toLocaleString()} ${state.settings.currency}`;
+    document.getElementById('stat-rent-due').textContent = `${totalDue.toLocaleString()} ${state.settings.currency}`;
+    
+    // Refresh all visible lists
+    renderRecentTenants();
+    renderProperties();
+    renderTenants();
+
+    // Check for alarms
+    checkRentAlarms();
+}
+
+function checkRentAlarms() {
+    const overdueTenants = state.tenants.filter(t => calculateRentStatus(t).status === 'Overdue');
+    const dot = document.querySelector('.notification-dot');
+    
+    if (overdueTenants.length > 0) {
+        dot.classList.remove('hidden');
+        // Browser notification if permitted
+        if (Notification.permission === "granted") {
+            new Notification("Property Manager Admin Rent Alert", {
+                body: `${overdueTenants.length} tenants have overdue rent!`,
+                icon: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Aura'
+            });
+        } else if (Notification.permission !== "denied") {
+            Notification.requestPermission();
+        }
+    } else {
+        dot.classList.add('hidden');
+    }
+}
+
+// Seeding demo data
+window.seedDemoData = async () => {
+    console.log("Seeding demo data to database...");
+    try {
+        const response = await fetch(`${API_URL}/seed`, { method: 'POST' });
+        const result = await response.json();
+        console.log(result.message);
+        await loadState(); // Reload the UI
+        alert('Real Database seeded successfully!');
+    } catch (e) {
+        console.error("Seeding failed. Is the server running?");
+        alert("Failed to seed database. Using local cache fallback.");
+    }
+};
+
+// --- Global Actions (Exposed to window for inline onclick) ---
+
+window.addApartment = (propertyId) => {
+    showModal('apartment', propertyId);
+};
+
+window.editProperty = (id) => {
+    showModal('edit-property', id);
+};
+
+window.editTenant = (id) => {
+    showModal('edit-tenant', id);
+};
+
+window.deleteTenant = async (id) => {
+    const t = state.tenants.find(tenant => tenant.id === id);
+    if (!t) return;
+    
+    if (confirm(`⚠️ Move Out: Are you sure you want to Move Out ${t.name}? Their record will be kept, but the room will be marked VACANT.`)) {
+        try {
+            const index = state.tenants.findIndex(ten => ten.id === id);
+            state.tenants[index].apartmentId = null; // Unassign from room
+            await saveState('edit-tenant', state.tenants[index]);
+            updateDashboard();
+            alert('Tenant moved out successfully. Room is now vacant.');
+        } catch (e) {
+            console.error("Action failed.");
+        }
+    }
+};
+
+window.permanentlyDeleteTenant = async (id) => {
+    const t = state.tenants.find(tenant => tenant.id === id);
+    if (confirm(`⚠️ DELETE: Permanently remove ${t.name} and all their records?`)) {
+        try {
+            await fetch(`${API_URL}/tenants/${id}`, { method: 'DELETE' });
+            state.tenants = state.tenants.filter(ten => ten.id !== id);
+            saveState();
+            updateDashboard();
+        } catch (e) { console.error("Delete failed."); }
+    }
+};
+
+window.deleteProperty = async (id) => {
+    const p = state.properties.find(prop => prop.id === id);
+    if (!p) return;
+    
+    if (confirm(`⚠️ Confirmation: Are you sure you want to delete ${p.name}? This will also remove any linked tenants.`)) {
+        try {
+            await fetch(`${API_URL}/properties/${id}`, { method: 'DELETE' });
+            state.properties = state.properties.filter(prop => prop.id !== id);
+            state.tenants = state.tenants.filter(t => t.propertyId !== id);
+            saveState(); // Update local cache
+            renderProperties();
+            alert('Property deleted successfully.');
+        } catch (e) {
+            console.error("Delete failed.");
+        }
+    }
+};
+
+window.updatePayTotalGrid = (rent) => {
+    const checked = document.querySelectorAll('input[name="selected-months"]:checked:not(:disabled)');
+    const total = checked.length * rent;
+    const display = document.getElementById('total-display');
+    if (display) display.textContent = `${total.toLocaleString()} ${state.settings.currency}`;
+    const valInput = document.getElementById('pay-total-val');
+    if (valInput) valInput.value = total;
+};
+
+function nextMonth(monthStr) {
+    if (!monthStr || !monthStr.includes('-')) return new Date().toISOString().slice(0, 7);
+    let [year, month] = monthStr.split('-').map(Number);
+    month++;
+    if (month > 12) {
+        month = 1;
+        year++;
+    }
+    return `${year}-${String(month).padStart(2, '0')}`;
+}
+
+window.markAsPaid = async (tenantId) => {
+    const tenant = state.tenants.find(t => String(t.id) === String(tenantId));
+    if (!tenant) return;
+    
+    // Deep audit of payments to identify already paid months
+    const tenantPayments = state.payments.filter(p => String(p.tenantId) === String(tenantId));
+    const monthsToDisplay = [];
+    let cur = new Date().toISOString().slice(0, 7); // Start from current month
+    // Go back some months to show recent history too in the selection
+    let backCur = new Date();
+    backCur.setMonth(backCur.getMonth() - 2);
+    let startPoint = backCur.toISOString().slice(0, 7);
+    
+    let genMonth = startPoint;
+    for (let i = 0; i < 15; i++) {
+        const isPaid = tenantPayments.some(p => p.monthPaid === genMonth);
+        monthsToDisplay.push({ month: genMonth, isPaid });
+        genMonth = nextMonth(genMonth);
+    }
+    
+    const modal = document.getElementById('modal-container');
+    const form = document.getElementById('app-form');
+    const title = document.getElementById('modal-title');
+    
+    modal.classList.add('active');
+    modal.setAttribute('data-mode', 'receive-payment-grid');
+    modal.setAttribute('data-target', tenantId);
+    
+    title.textContent = "💸 Select Months for Collection";
+    form.innerHTML = `
+        <div style="display: flex; flex-direction: column; gap: 1.25rem;">
+            <div style="background: rgba(59, 130, 246, 0.05); padding: 1rem; border-radius: 12px; border: 1px solid rgba(59, 130, 246, 0.1);">
+                <p style="margin:0; font-size: 0.8rem; color: var(--text-muted); text-transform:uppercase;">Tenant Portfolio</p>
+                <h3 style="margin:0; font-family: 'Outfit'; color: var(--primary);">${tenant.name}</h3>
+                <p style="margin:0; font-size: 0.9rem; font-weight: 600;">Monthly Rent: ${tenant.rentAmount.toLocaleString()} ${state.settings.currency}</p>
+            </div>
+            
+            <label style="margin-bottom: -0.75rem;">Select Payment Months (Uncheck to skip)</label>
+            <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; max-height: 220px; overflow-y: auto; padding: 0.75rem; background: #f9fafb; border-radius: 12px; border:1px solid #eee;">
+                ${monthsToDisplay.map(m => `
+                    <div style="display:flex; align-items:center; gap:0.5rem; padding: 0.6rem; border-radius: 8px; border: 1px solid #eee; background: ${m.isPaid ? '#f1f1f1' : '#fff'}; cursor: ${m.isPaid ? 'not-allowed' : 'pointer'}; opacity: ${m.isPaid ? '0.7' : '1'};">
+                        <input type="checkbox" name="selected-months" value="${m.month}" ${m.isPaid ? 'disabled checked' : ''} onchange="window.updatePayTotalGrid(${tenant.rentAmount})" style="width:16px; height:16px;">
+                        <span style="font-size: 0.8rem; font-weight: 500; color: ${m.isPaid ? '#999' : '#333'}">${formatMonth(m.month)} ${m.month.slice(0,4)}</span>
+                    </div>
+                `).join('')}
+            </div>
+            
+            <div>
+                <label>Transaction Date Asset Recorded</label>
+                <input type="text" id="pay-date-manual" class="search-box" style="width:100%" value="${new Date().toLocaleDateString()}" placeholder="MM/DD/YYYY">
+            </div>
+
+            <div style="background: #e6fffa; padding: 1rem; border-radius: 12px; border: 1px solid #38b2ac; display:flex; justify-content: space-between; align-items:center;">
+                <span style="font-weight: 600; color: #234e52;">TOTAL COLLECTION</span>
+                <span style="font-size: 1.25rem; font-weight: 800; color: #234e52;" id="total-display">0 ${state.settings.currency}</span>
+                <input type="hidden" id="pay-total-val" value="0">
+            </div>
+        </div>
+    `;
+};
+
+window.openGlobalPaymentModal = () => {
+    const modal = document.getElementById('modal-container');
+    const form = document.getElementById('app-form');
+    const title = document.getElementById('modal-title');
+    
+    modal.classList.add('active');
+    modal.setAttribute('data-mode', 'receive-payment-grid');
+    modal.setAttribute('data-target', ''); // Initially empty
+    
+    title.textContent = "💸 Global Rent Collection";
+    
+    const activeTenants = state.tenants.filter(t => t.apartmentId).sort((a,b) => a.name.localeCompare(b.name));
+    
+    form.innerHTML = `
+        <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+            <div>
+                <label>Identify Portfolio Member</label>
+                <select id="global-pay-tenant" class="search-box" style="width:100%" onchange="window.updateGlobalPayContext(this.value)">
+                    <option value="">Select Portfolio Member...</option>
+                    ${activeTenants.map(t => `<option value="${t.id}">${t.name} (Rent: ${t.rentAmount})</option>`).join('')}
+                </select>
+            </div>
+            
+            <div id="global-pay-context-container" style="min-height: 250px; transition: opacity 0.3s; opacity: 0.5; pointer-events: none; border: 1px dashed var(--border-light); border-radius: 12px; display:flex; align-items:center; justify-content:center;">
+                <p style="text-align:center; color: var(--text-muted); font-size: 0.9rem;">Select a tenant above to identify collection months.</p>
+            </div>
+
+            <div style="background: #e6fffa; padding: 1rem; border-radius: 12px; border: 1px solid #38b2ac; display:flex; justify-content: space-between; align-items:center;">
+                <span style="font-weight: 600; color: #234e52;">TOTAL COLLECTION</span>
+                <span style="font-size: 1.25rem; font-weight: 800; color: #234e52;" id="total-display">0 ${state.settings.currency}</span>
+                <input type="hidden" id="pay-total-val" value="0">
+            </div>
+        </div>
+    `;
+};
+
+window.updateGlobalPayContext = (tenantId) => {
+    const container = document.getElementById('global-pay-context-container');
+    const modal = document.getElementById('modal-container');
+    modal.setAttribute('data-target', tenantId);
+    
+    if (!tenantId) {
+        container.style.opacity = '0.5';
+        container.style.pointerEvents = 'none';
+        container.innerHTML = `<p style="text-align:center; color: var(--text-muted); font-size: 0.9rem;">Select a tenant above to identify collection months.</p>`;
+        return;
+    }
+    
+    const tenant = state.tenants.find(t => String(t.id) === String(tenantId));
+    if (!tenant) return;
+    
+    container.style.opacity = '1';
+    container.style.pointerEvents = 'all';
+    container.style.display = 'block';
+    container.style.border = 'none';
+    
+    const tenantPayments = state.payments.filter(p => String(p.tenantId) === String(tenantId));
+    const monthsToDisplay = [];
+    let backCur = new Date();
+    backCur.setMonth(backCur.getMonth() - 2);
+    let genMonth = backCur.toISOString().slice(0, 7);
+    
+    for (let i = 0; i < 15; i++) {
+        const isPaid = tenantPayments.some(p => p.monthPaid === genMonth);
+        monthsToDisplay.push({ month: genMonth, isPaid });
+        genMonth = nextMonth(genMonth);
+    }
+
+    container.innerHTML = `
+        <div style="display: flex; flex-direction: column; gap: 1rem;">
+            <label style="margin-bottom: -0.5rem;">Select Months for ${tenant.name}</label>
+            <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; max-height: 220px; overflow-y: auto; padding: 0.75rem; background: #f9fafb; border-radius: 12px; border:1px solid #eee;">
+                ${monthsToDisplay.map(m => `
+                    <div style="display:flex; align-items:center; gap:0.5rem; padding: 0.6rem; border-radius: 8px; border: 1px solid #eee; background: ${m.isPaid ? '#f1f1f1' : '#fff'}; cursor: ${m.isPaid ? 'not-allowed' : 'pointer'}; opacity: ${m.isPaid ? '0.7' : '1'};">
+                        <input type="checkbox" name="selected-months" value="${m.month}" ${m.isPaid ? 'disabled checked' : ''} onchange="window.updatePayTotalGrid(${tenant.rentAmount})" style="width:16px; height:16px;">
+                        <span style="font-size: 0.8rem; font-weight: 500; color: ${m.isPaid ? '#999' : '#333'}">${formatMonth(m.month)} ${m.month.slice(0,4)}</span>
+                    </div>
+                `).join('')}
+            </div>
+            
+            <div>
+                <label>Payment Execution Date</label>
+                <input type="text" id="pay-date-manual" class="search-box" style="width:100%" value="${new Date().toLocaleDateString()}" placeholder="MM/DD/YYYY">
+            </div>
+        </div>
+    `;
+    window.updatePayTotalGrid(tenant.rentAmount);
+};
+
+window.deletePayment = async (id) => {
+    const pay = state.payments.find(p => String(p.id) === String(id));
+    if (!pay) return;
+    
+    if (confirm(`💸 Ledger Audit: Are you sure you want to delete this payment entry of ${pay.amount.toLocaleString()} ${state.settings.currency}?`)) {
+        try {
+            await fetch(`${API_URL}/payments/${id}`, { method: 'DELETE' });
+            state.payments = state.payments.filter(p => String(p.id) !== String(id));
+            
+            const tenantObj = state.tenants.find(t => String(t.id) === String(pay.tenantId));
+            if (tenantObj && tenantObj.lastPaidMonth === pay.monthPaid) {
+               const remainingPays = state.payments.filter(p => String(p.tenantId) === String(pay.tenantId));
+               tenantObj.lastPaidMonth = remainingPays.length > 0 ? remainingPays[0].monthPaid : '';
+               await fetch(`${API_URL}/tenants/${tenantObj.id}/pay`, {
+                   method: 'PATCH',
+                   headers: { 'Content-Type': 'application/json' },
+                   body: JSON.stringify({ lastPaidMonth: tenantObj.lastPaidMonth })
+               });
+            }
+            updateDashboard();
+        } catch (e) { console.error("Payment deletion failed."); }
+    }
+};
+
+window.editPayment = (id) => {
+    // We reuse the existing modal for editing payment
+    const pay = state.payments.find(p => String(p.id) === String(id));
+    if (!pay) return;
+    
+    const modal = document.getElementById('modal-container');
+    const form = document.getElementById('app-form');
+    const title = document.getElementById('modal-title');
+    
+    modal.classList.add('active');
+    modal.setAttribute('data-mode', 'edit-payment');
+    modal.setAttribute('data-target', id);
+    
+    title.textContent = "⚙️ Edit Transaction";
+    form.innerHTML = `
+        <div style="display: flex; flex-direction: column; gap: 1rem;">
+            <div>
+                <label>Amount Paid</label>
+                <input type="number" id="pay-amount" class="search-box" style="width:100%" value="${pay.amount}" required>
+            </div>
+            <div>
+                <label>Date of Transaction</label>
+                <input type="text" id="pay-date" class="search-box" style="width:100%" value="${pay.date}" placeholder="MM/DD/YYYY">
+            </div>
+            <div>
+                <label>Month Covered (YYYY-MM)</label>
+                <input type="text" id="pay-month" class="search-box" style="width:100%" value="${pay.monthPaid}" placeholder="2024-01">
+            </div>
+        </div>
+    `;
+};
+
+window.generateReceipt = (id) => {
+    const pay = state.payments.find(p => String(p.id) === String(id));
+    if (!pay) return;
+    
+    const tenant = state.tenants.find(t => String(t.id) === String(pay.tenantId));
+    const apartment = tenant ? state.apartments.find(a => String(a.id) === String(tenant.apartmentId)) : null;
+    const property = apartment ? state.properties.find(p => String(p.id) === String(apartment.propertyId)) : null;
+    
+    const modal = document.getElementById('modal-container');
+    const form = document.getElementById('app-form');
+    const title = document.getElementById('modal-title');
+    
+    modal.classList.add('active');
+    modal.setAttribute('data-mode', 'receipt');
+    
+    title.textContent = "🏆 Payment Receipt";
+    form.innerHTML = `
+        <div id="printable-area" style="background:#fff; color:#333; padding:2rem; border-radius:12px; border:1px solid #eee; font-family: 'Inter', sans-serif;">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:2rem; border-bottom:2px solid var(--primary); padding-bottom:1rem;">
+                <div>
+                    <h2 style="color:var(--primary); margin:0; font-family: 'Outfit'; font-weight:700;">${property ? property.name : 'Property Manager Admin'}</h2>
+                    <p style="margin:0; font-size:0.8rem; color:#666;">${property ? property.address : 'Official Rental Receipt'}</p>
+                </div>
+                <div style="text-align:right;">
+                    <h3 style="margin:0; color:#333; font-weight:700;">RENT RECEIPT</h3>
+                    <p style="margin:0; font-size:0.8rem; color:#666;">No: #${pay.id.slice(-6)}</p>
+                </div>
+            </div>
+            
+            <div style="margin-bottom:2rem; display:grid; grid-template-columns: 1fr 1fr; gap:1.5rem;">
+                <div>
+                    <p style="margin:0; font-size:0.7rem; text-transform:uppercase; color:#888;">Received From:</p>
+                    <p style="margin:0; font-size:1rem; font-weight:600;">${tenant ? tenant.name : 'Unknown'}</p>
+                    <p style="margin:0; font-size:0.85rem; color:#444;">${apartment ? apartment.unitNumber : 'N/A'}</p>
+                </div>
+                <div style="text-align:right;">
+                    <p style="margin:0; font-size:0.7rem; text-transform:uppercase; color:#888;">Payment Date:</p>
+                    <p style="margin:0; font-size:1rem; font-weight:600;">${pay.date}</p>
+                </div>
+            </div>
+            
+            <table style="width:100%; border-collapse:collapse; margin-bottom:2rem;">
+                <thead>
+                    <tr style="background:#f9fafb; text-align:left;">
+                        <th style="padding:1rem; border:1px solid #eee; font-size:0.8rem; font-weight:700; text-transform:uppercase; color:#666;">Transaction Details</th>
+                        <th style="padding:1rem; border:1px solid #eee; text-align:right; font-size:0.8rem; font-weight:700; text-transform:uppercase; color:#666;">Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td style="padding:1rem; border:1px solid #eee;">
+                            <div style="font-weight:600;">Rent Payment</div>
+                            <div style="font-size:0.85rem; color:#666;">Period Covered: ${pay.monthPaid}</div>
+                        </td>
+                        <td style="padding:1rem; border:1px solid #eee; text-align:right; font-weight:700; font-size:1.1rem;">${pay.amount.toLocaleString()} ${state.settings.currency}</td>
+                    </tr>
+                </tbody>
+            </table>
+            
+            <div style="display:flex; justify-content:space-between; align-items:flex-end;">
+                <div>
+                     <p style="font-size:0.75rem; color:#999; font-style:italic;">Note: This is a computer-generated receipt.</p>
+                </div>
+                <div style="text-align:right; background: #fdfdfd; padding:1rem; border-radius:10px; border:1px dashed #ddd;">
+                    <p style="font-size:0.7rem; margin:0; text-transform:uppercase; color:#888;">Grand Total Received</p>
+                    <h2 style="margin:0; color:var(--success); font-family: 'Outfit'; font-weight:800;">${pay.amount.toLocaleString()} ${state.settings.currency}</h2>
+                </div>
+            </div>
+        </div>
+        <div style="margin-top:2rem; display:flex; gap:1rem; justify-content:center; flex-wrap:wrap;">
+            <button class="btn btn-primary" onclick="window.printReceipt()" style="gap:0.75rem;"><i data-lucide="printer"></i> Print / PDF</button>
+            ${tenant && tenant.email ? `<button class="btn" onclick="window.sendRentReceiptEmail('${pay.id}')" style="gap:0.75rem; background: linear-gradient(135deg,#4F46E5,#7C3AED); color:#fff; border:none; border-radius:50px; padding:0.6rem 1.5rem; font-weight:700; cursor:pointer; display:flex; align-items:center; gap:0.5rem;"><i data-lucide="mail"></i> Email to ${tenant.email}</button>` : '<span style="font-size:0.8rem; color:var(--text-muted); align-self:center;">⚠️ No email on file – edit tenant to add one.</span>'}
+            <button class="btn btn-secondary" onclick="document.getElementById('modal-container').classList.remove('active')">Dismiss</button>
+        </div>
+    `;
+    lucide.createIcons();
+};
+
+window.printReceipt = () => {
+    const printContent = document.getElementById('printable-area').innerHTML;
+    const win = window.open('', '_blank', 'width=800,height=900');
+    win.document.write(`
+        <html>
+            <head>
+                <title>Property Manager Admin Receipt</title>
+                <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Outfit:wght@700;800&display=swap" rel="stylesheet">
+                <style>
+                    :root { --primary: #2D60FF; --success: #41D433; }
+                    body { font-family: 'Inter', sans-serif; padding: 40px; color: #333; }
+                </style>
+            </head>
+            <body>
+                ${printContent}
+                <script>
+                    window.onload = () => { window.print(); window.close(); };
+                </script>
+            </body>
+        </html>
+    `);
+    win.document.close();
+};
+
+// --- Email Receipt Engine ---
+
+window.sendRentReceiptEmail = async (paymentId) => {
+    const pay = state.payments.find(p => String(p.id) === String(paymentId));
+    if (!pay) return;
+    const tenant = state.tenants.find(t => String(t.id) === String(pay.tenantId));
+    if (!tenant || !tenant.email) {
+        return alert('⚠️ No email address on file for this tenant.\nEdit the tenant profile to add one.');
+    }
+    const apt = tenant.apartmentId ? state.apartments.find(a => String(a.id) === String(tenant.apartmentId)) : null;
+    const prop = apt ? state.properties.find(p => String(p.id) === String(apt.propertyId)) : null;
+
+    const body = [
+        'RENT PAYMENT RECEIPT',
+        '─'.repeat(40),
+        `Property  : ${prop ? prop.name : 'N/A'}`,
+        `Unit      : ${apt ? apt.unitNumber : 'N/A'}`,
+        `Tenant    : ${tenant.name}`,
+        '─'.repeat(40),
+        `Period    : ${pay.monthPaid}`,
+        `Date Paid : ${pay.date}`,
+        `Amount    : ${pay.amount.toLocaleString()} ${state.settings.currency}`,
+        '─'.repeat(40),
+        `Receipt # : ${String(pay.id).slice(-8).toUpperCase()}`,
+        '',
+        'Thank you for your payment.',
+        'This is a computer-generated receipt — no signature required.',
+        '',
+        '— Property Manager Admin'
+    ].join('\n');
+
+    try {
+        const res = await fetch(`${API_URL}/send-receipt`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                to: tenant.email,
+                subject: `Rent Receipt – ${pay.monthPaid} | ${prop ? prop.name : 'Property Manager Admin'}`,
+                body
+            })
+        });
+        const data = await res.json();
+        if (data.status === 'success') {
+            alert(`✅ Receipt dispatched to ${tenant.email}\n\n(Check the server console — connect an SMTP service to enable live delivery.)`);
+        }
+    } catch (e) {
+        console.error('Email dispatch failed:', e);
+        alert('❌ Could not reach the mail server. Is the server running?');
+    }
+};
+
+window.sendUtilityReceiptEmail = async (utilityId) => {
+    const util = state.utilities.find(u => String(u.id) === String(utilityId));
+    if (!util) return;
+    const tenant = state.tenants.find(t => String(t.id) === String(util.tenantId));
+    if (!tenant || !tenant.email) {
+        return alert('⚠️ No email address on file for this tenant.\nEdit the tenant profile to add one.');
+    }
+    const apt = util.apartmentId ? state.apartments.find(a => String(a.id) === String(util.apartmentId)) : null;
+    const prop = apt ? state.properties.find(p => String(p.id) === String(apt.propertyId)) : null;
+    const icons = { Electricity: '⚡', Water: '💧', Gas: '🔥' };
+    const icon = icons[util.type] || '🔧';
+
+    const body = [
+        `${icon} UTILITY BILL RECEIPT`,
+        '─'.repeat(40),
+        `Property  : ${prop ? prop.name : 'N/A'}`,
+        `Unit      : ${apt ? apt.unitNumber : 'N/A'}`,
+        `Tenant    : ${tenant.name}`,
+        '─'.repeat(40),
+        `Service   : ${util.type}`,
+        `Month     : ${util.month}`,
+        `Reading   : ${util.lastReading} → ${util.currentReading}`,
+        `Bill Date : ${util.date}`,
+        `Status    : ${util.status}`,
+        '─'.repeat(40),
+        `Amount    : ${util.amount.toLocaleString()} ${state.settings.currency}`,
+        '─'.repeat(40),
+        `Ref #     : ${String(util.id).slice(-8).toUpperCase()}`,
+        '',
+        'Please settle any outstanding balance promptly.',
+        'This is a computer-generated receipt — no signature required.',
+        '',
+        '— Property Manager Admin'
+    ].join('\n');
+
+    try {
+        const res = await fetch(`${API_URL}/send-receipt`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                to: tenant.email,
+                subject: `${util.type} Bill – ${util.month} | ${prop ? prop.name : 'Property Manager Admin'}`,
+                body
+            })
+        });
+        const data = await res.json();
+        if (data.status === 'success') {
+            alert(`✅ Utility receipt dispatched to ${tenant.email}\n\n(Check the server console — connect an SMTP service to enable live delivery.)`);
+        }
+    } catch (e) {
+        console.error('Email dispatch failed:', e);
+        alert('❌ Could not reach the mail server. Is the server running?');
+    }
+};
+
+// --- Form & Modal Logic ---
+
+function showModal(type, target) {
+    const modal = document.getElementById('modal-container');
+    const form = document.getElementById('app-form');
+    const title = document.getElementById('modal-title');
+    
+    modal.classList.add('active');
+    modal.setAttribute('data-mode', type);
+    form.innerHTML = '';
+    
+    if (type === 'property') {
+        title.textContent = t('add_property');
+        form.innerHTML = `
+            <div style="display: flex; flex-direction: column; gap: 1rem;">
+                <div>
+                    <label style="display:block; margin-bottom: 0.5rem; color: var(--text-muted);">Property Name</label>
+                    <input type="text" id="prop-name" class="search-box" style="width:100%" placeholder="e.g. Westside Towers" required>
+                </div>
+                <div>
+                    <label style="display:block; margin-bottom: 0.5rem; color: var(--text-muted);">Address</label>
+                    <input type="text" id="prop-address" class="search-box" style="width:100%" placeholder="123 Main St">
+                </div>
+            </div>
+        `;
+    } else if (type === 'edit-property') {
+        const p = state.properties.find(prop => prop.id === target);
+        currentEditId = target;
+        title.textContent = t('edit');
+        form.innerHTML = `
+            <div style="display: flex; flex-direction: column; gap: 1rem;">
+                <div>
+                    <label style="display:block; margin-bottom: 0.5rem;">Property Name</label>
+                    <input type="text" id="prop-name" class="search-box" style="width:100%" value="${p.name}" required>
+                </div>
+                <div>
+                    <label style="display:block; margin-bottom: 0.5rem;">Address</label>
+                    <input type="text" id="prop-address" class="search-box" style="width:100%" value="${p.address}">
+                </div>
+            </div>
+        `;
+    } else if (type === 'apartment') {
+        currentEditId = target; // Store propertyId
+        title.textContent = t('add_unit');
+        form.innerHTML = `
+             <div style="display: flex; flex-direction: column; gap: 1rem;">
+                <div>
+                    <label style="display:block; margin-bottom: 0.5rem;">Unit Number / Name</label>
+                    <input type="text" id="apt-number" class="search-box" style="width:100%" placeholder="e.g. 101" required>
+                </div>
+                <div>
+                    <label style="display:block; margin-bottom: 0.5rem;">Apartment Type</label>
+                    <select id="apt-type" class="search-box" style="width:100%; color: var(--text-main); background: var(--bg-sidebar);">
+                        ${state.unit_types.map(ut => `<option value="${ut.name}">${t(ut.name)}</option>`).join('')}
+                    </select>
+                </div>
+            </div>
+        `;
+    } else if (type === 'edit-tenant') {
+        const tenant = state.tenants.find(ten => ten.id === target);
+        currentEditId = target;
+        title.textContent = t('edit');
+        
+        const currentApt = state.apartments.find(a => a.id === tenant.apartmentId);
+        const aptOptions = state.apartments
+            .filter(a => a.id === tenant.apartmentId || !state.tenants.some(ten => ten.apartmentId === a.id)) // Current room OR vacant rooms
+            .map(a => {
+                const p = state.properties.find(prop => prop.id === a.propertyId);
+                return `<option value="${a.id}" ${a.id === tenant.apartmentId ? 'selected' : ''}>${p ? p.name : ''} - ${a.unitNumber} (${t(a.type)})</option>`;
+            }).join('');
+
+        const tenantPayments = state.payments.filter(p => p.tenantId === target);
+        const totalPaid = tenantPayments.reduce((sum, p) => sum + p.amount, 0);
+        
+        form.innerHTML = `
+            <div style="display: flex; flex-direction: column; gap: 1rem;">
+                <div class="stat-card glass" style="padding: 1rem; border: 1px solid var(--success-glow);">
+                    <div style="font-size: 0.75rem; color: var(--text-muted);">Total Revenue from Tenant</div>
+                    <div style="font-size: 1.25rem; font-weight: bold; color: var(--success);">${totalPaid.toLocaleString()} ${state.settings.currency}</div>
+                </div>
+                <div>
+                    <label style="display:block; margin-bottom: 0.5rem;">Tenant Name</label>
+                    <input type="text" id="tenant-name" class="search-box" style="width:100%" value="${tenant.name}" required>
+                </div>
+                <div>
+                    <label style="display:block; margin-bottom: 0.5rem;">Email Address <span style="font-size:0.75rem; color:var(--text-muted);">(for digital receipts)</span></label>
+                    <input type="email" id="tenant-email" class="search-box" style="width:100%" value="${tenant.email || ''}" placeholder="tenant@email.com">
+                </div>
+                <div>
+                    <label style="display:block; margin-bottom: 0.5rem;">Assigned Unit / Room</label>
+                    <select id="tenant-apt-edit" class="search-box" style="width:100%; color: var(--text-main); background: var(--bg-sidebar);">
+                        <option value="">Unassigned / Move Out</option>
+                        ${aptOptions}
+                    </select>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                    <div>
+                        <label style="display:block; margin-bottom: 0.5rem;">Monthly Rent</label>
+                        <input type="number" id="tenant-rent" class="search-box" style="width:100%" value="${tenant.rentAmount}" required>
+                    </div>
+                    <div>
+                        <label style="display:block; margin-bottom: 0.5rem;">Due Date (Day)</label>
+                        <input type="number" id="tenant-due-day" min="1" max="28" class="search-box" style="width:100%" value="${tenant.dueDateDay}" required>
+                    </div>
+                </div>
+                <div>
+                    <label style="margin-bottom: 0.5rem; display:block;">Payment History (Months Covered)</label>
+                    <div style="display:flex; flex-wrap: wrap; gap: 0.5rem;">
+                        ${tenantPayments.length > 0 
+                            ? tenantPayments.map(pay => `<span class="status-pill paid" style="font-size: 0.7rem;">${pay.monthPaid}</span>`).join('') 
+                            : '<span style="color:var(--text-muted); font-size:0.8rem;">No history yet.</span>'}
+                    </div>
+                </div>
+            </div>
+        `;
+    } else if (type === 'tenant') {
+        title.textContent = t('add_tenant');
+        
+        const vacantApts = state.apartments.filter(a => !state.tenants.some(ten => ten.apartmentId === a.id));
+        const aptOptions = state.properties.map(p => {
+            const apts = vacantApts.filter(a => a.propertyId === p.id);
+            if (apts.length === 0) return '';
+            return `<optgroup label="${p.name}">
+                ${apts.map(a => `<option value="${a.id}">${a.unitNumber} (${t(a.type)})</option>`).join('')}
+            </optgroup>`;
+        }).join('');
+            
+        form.innerHTML = `
+            <div style="display: flex; flex-direction: column; gap: 1rem;">
+                <div>
+                    <label style="display:block; margin-bottom: 0.5rem;">Tenant Name</label>
+                    <input type="text" id="tenant-name" class="search-box" style="width:100%" required>
+                </div>
+                <div>
+                    <label style="display:block; margin-bottom: 0.5rem;">Email Address <span style="font-size:0.75rem; color:var(--text-muted);">(for digital receipts)</span></label>
+                    <input type="email" id="tenant-email" class="search-box" style="width:100%" placeholder="tenant@email.com">
+                </div>
+                <div>
+                    <label style="display:block; margin-bottom: 0.5rem;">Select Available Unit</label>
+                    <select id="tenant-apt" class="search-box" style="width:100%; color: var(--text-main); background: var(--bg-sidebar);">
+                        <option value="" disabled selected>-- Select a Unit --</option>
+                        ${aptOptions || '<option disabled>No available units found. Create one first!</option>'}
+                    </select>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                    <div>
+                        <label style="display:block; margin-bottom: 0.5rem;">Monthly Rent ($)</label>
+                        <input type="number" id="tenant-rent" class="search-box" style="width:100%" required>
+                    </div>
+                    <div>
+                        <label style="display:block; margin-bottom: 0.5rem; color: var(--text-muted);">Due Date (Day)</label>
+                        <input type="number" id="tenant-due-day" min="1" max="28" class="search-box" style="width:100%" placeholder="1-28" required>
+                    </div>
+                </div>
+            </div>
+        `;
+    } else if (type === 'contract') {
+        title.textContent = t('add_contract');
+        const tenantsOptions = state.tenants.map(ten => `<option value="${ten.id}">${ten.name}</option>`).join('');
+        form.innerHTML = `
+            <div style="display: flex; flex-direction: column; gap: 1rem;">
+                <div>
+                    <label data-t="tenant">${t('tenant')}</label>
+                    <select id="contract-tenant" class="search-box" style="width:100%">${tenantsOptions}</select>
+                </div>
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem;">
+                    <div>
+                        <label data-t="start_date">${t('start_date')}</label>
+                        <input type="date" id="contract-start" class="search-box" style="width:100%">
+                    </div>
+                    <div>
+                        <label data-t="end_date">${t('end_date')}</label>
+                        <input type="date" id="contract-end" class="search-box" style="width:100%">
+                    </div>
+                </div>
+                <div>
+                   <label>Terms / Notes</label>
+                   <textarea id="contract-terms" class="search-box" style="width:100%; height:100px; color:white;"></textarea>
+                </div>
+            </div>
+        `;
+    }
+}
+
+// --- Initialization ---
+
+document.addEventListener('DOMContentLoaded', async () => {
+    // Load data from DB or Cache
+    await loadState();
+
+    // Nav Click Handlers
+    document.querySelectorAll('.nav-item').forEach(item => {
+        item.addEventListener('click', (e) => {
+            e.preventDefault();
+            const view = item.getAttribute('data-view');
+            if (view) switchView(view);
+        });
+    });
+
+    // Modal Close
+    const closeModal = () => document.getElementById('modal-container').classList.remove('active');
+    document.getElementById('close-modal').addEventListener('click', closeModal);
+    document.getElementById('cancel-btn').addEventListener('click', closeModal);
+
+    // Add Buttons
+    const addPropBtn = document.getElementById('add-property-btn');
+    const addTenantBtn = document.getElementById('add-tenant-btn');
+
+    if (addPropBtn) {
+        addPropBtn.addEventListener('click', () => {
+            console.log("Opening Add Property modal...");
+            showModal('property');
+        });
+    }
+
+    if (addTenantBtn) {
+        addTenantBtn.addEventListener('click', () => {
+            console.log("Opening Add Tenant modal...");
+            showModal('tenant');
+        });
+    }
+
+    const addContractBtn = document.getElementById('add-contract-btn');
+    if (addContractBtn) {
+        addContractBtn.addEventListener('click', () => {
+            showModal('contract');
+        });
+    }
+
+    // Form Save
+    document.getElementById('save-btn').addEventListener('click', async () => {
+        const container = document.getElementById('modal-container');
+        const mode = container.getAttribute('data-mode');
+
+        if (mode === 'property') {
+            const name = document.getElementById('prop-name').value;
+            const address = document.getElementById('prop-address').value;
+            if (name) {
+                const newProp = { id: Date.now().toString(), name, address };
+                state.properties.push(newProp);
+                await saveState('property', newProp);
+                container.classList.remove('active');
+                switchView('properties'); 
+            }
+        } else if (mode === 'apartment') {
+            const unitNumber = document.getElementById('apt-number').value;
+            const type = document.getElementById('apt-type').value;
+            if (unitNumber && currentEditId) {
+                const newApt = { id: Date.now().toString(), propertyId: currentEditId, unitNumber, type };
+                state.apartments.push(newApt);
+                await saveState('apartment', newApt);
+                container.classList.remove('active');
+                renderProperties();
+            }
+        } else if (mode === 'edit-property') {
+            const name = document.getElementById('prop-name').value;
+            const address = document.getElementById('prop-address').value;
+            if (name && currentEditId) {
+                if (confirm(`Save changes for ${name}?`)) {
+                    const index = state.properties.findIndex(p => p.id === currentEditId);
+                    if (index !== -1) {
+                        state.properties[index] = { ...state.properties[index], name, address };
+                        await saveState('edit-property', state.properties[index]);
+                        container.classList.remove('active');
+                        renderProperties();
+                    }
+                }
+            }
+        } else if (mode === 'tenant') {
+            const name = document.getElementById('tenant-name').value.trim();
+            const email = document.getElementById('tenant-email').value.trim();
+            const apartmentId = document.getElementById('tenant-apt').value;
+            const rentVar = document.getElementById('tenant-rent').value;
+            const dueVar = document.getElementById('tenant-due-day').value;
+            
+            if (!name) return alert("Please enter the tenant's name.");
+            if (!apartmentId || apartmentId.includes('No available units')) return alert("Please create and select a Unit first.");
+            if (!rentVar) return alert("Please enter the monthly rent amount.");
+            if (!dueVar) return alert("Please specify the rent due day (1-28).");
+
+            const rentAmount = parseInt(rentVar);
+            const dueDateDay = parseInt(dueVar);
+            
+            const newTenant = {
+                id: Date.now().toString(),
+                name,
+                email,
+                apartmentId: String(apartmentId),
+                rentAmount,
+                dueDateDay,
+                lastPaidMonth: ''
+            };
+            state.tenants.push(newTenant);
+            await saveState('tenant', newTenant);
+            container.classList.remove('active');
+            switchView('tenants');
+        } else if (mode === 'edit-tenant') {
+            const name = document.getElementById('tenant-name').value.trim();
+            const email = document.getElementById('tenant-email').value.trim();
+            const apartmentId = document.getElementById('tenant-apt-edit').value || null;
+            const rentVar = document.getElementById('tenant-rent').value;
+            const dueVar = document.getElementById('tenant-due-day').value;
+            
+            if (name && rentVar && dueVar && currentEditId) {
+                if (confirm(`Save updated details for ${name}${apartmentId ? '' : ' and UNASSIGN room'}?`)) {
+                    const index = state.tenants.findIndex(t => t.id === currentEditId);
+                    if (index !== -1) {
+                        state.tenants[index] = { 
+                            ...state.tenants[index], 
+                            name,
+                            email,
+                            apartmentId: apartmentId ? String(apartmentId) : null, 
+                            rentAmount: parseInt(rentVar), 
+                            dueDateDay: parseInt(dueVar) 
+                        };
+                        await saveState('edit-tenant', state.tenants[index]);
+                        container.classList.remove('active');
+                        updateDashboard();
+                    }
+                }
+            }
+        } else if (mode === 'edit-payment') {
+            const amount = parseInt(document.getElementById('pay-amount').value);
+            const date = document.getElementById('pay-date').value;
+            const monthPaid = document.getElementById('pay-month').value;
+            const payId = container.getAttribute('data-target');
+            
+            if (amount && payId) {
+                const index = state.payments.findIndex(p => String(p.id) === String(payId));
+                if (index !== -1) {
+                    state.payments[index] = { ...state.payments[index], amount, date, monthPaid };
+                    await fetch(`${API_URL}/payments/${payId}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ amount, date, monthPaid })
+                    });
+                     // Check if it's the latest payment and update tenant if needed
+                    const tenantObj = state.tenants.find(t => String(t.id) === String(state.payments[index].tenantId));
+                    if (tenantObj) {
+                         // Find latest based on state (simplified: newest in state.payments)
+                         const remainingPays = state.payments.filter(p => String(p.tenantId) === String(tenantObj.id));
+                         tenantObj.lastPaidMonth = remainingPays.length > 0 ? remainingPays[0].monthPaid : '';
+                         await fetch(`${API_URL}/tenants/${tenantObj.id}/pay`, {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ lastPaidMonth: tenantObj.lastPaidMonth })
+                         });
+                    }
+                    container.classList.remove('active');
+                    updateDashboard();
+                }
+            }
+        } else if (mode === 'receive-payment-grid') {
+            const tenantId = container.getAttribute('data-target');
+            const tenant = state.tenants.find(t => String(t.id) === String(tenantId));
+            if (!tenant) return;
+            
+            const checkedMonths = Array.from(document.querySelectorAll('input[name="selected-months"]:checked:not(:disabled)'))
+                .map(cb => cb.value);
+            
+            if (checkedMonths.length === 0) return alert("Please select at least one month to collect rent.");
+            
+            const payDate = document.getElementById('pay-date-manual').value;
+            const rent = tenant.rentAmount;
+            
+            // Sort selected months chronologically to set correct lastPaidMonth
+            checkedMonths.sort((a,b) => a.localeCompare(b));
+            
+            for (const monthCovered of checkedMonths) {
+                const newPayment = {
+                    id: `${Date.now()}-${monthCovered}`,
+                    tenantId: tenantId,
+                    amount: rent,
+                    date: payDate,
+                    monthPaid: monthCovered
+                };
+                
+                state.payments.unshift(newPayment);
+                await fetch(`${API_URL}/payments`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(newPayment)
+                });
+                
+                // Update cached tenant state (optional but good for reactivity)
+                tenant.lastPaidMonth = checkedMonths[checkedMonths.length - 1];
+            }
+            
+            // Update final tenant status in DB
+            await fetch(`${API_URL}/tenants/${tenantId}/pay`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ lastPaidMonth: tenant.lastPaidMonth })
+            });
+
+            container.classList.remove('active');
+            updateDashboard();
+            alert(`✅ Recorded payments for ${checkedMonths.length} months for ${tenant.name}.`);
+            if (tenantId && startDate) {
+                const newContract = { id: Date.now().toString(), tenantId, startDate, endDate, terms, status: 'Active' };
+                state.contracts.push(newContract);
+                await saveState('contract', newContract);
+                container.classList.remove('active');
+                renderContracts();
+            }
+        } else if (mode === 'add-utility') {
+            const tenantId = document.getElementById('util-tenant').value;
+            const type = document.getElementById('util-type').value;
+            const month = document.getElementById('util-month').value;
+            const lastReading = parseFloat(document.getElementById('util-last').value) || 0;
+            const currentReading = parseFloat(document.getElementById('util-current').value) || 0;
+            const amount = parseFloat(document.getElementById('util-amount').value) || 0;
+            const date = document.getElementById('util-date').value;
+            
+            if (!tenantId) return alert("Please select a tenant.");
+            if (!amount) return alert("Please enter the utility amount.");
+
+            const tenant = state.tenants.find(t => String(t.id) === String(tenantId));
+            if (tenant) {
+                const newUtil = {
+                    id: Date.now().toString(),
+                    apartmentId: tenant.apartmentId,
+                    tenantId: tenantId,
+                    type,
+                    lastReading,
+                    currentReading,
+                    amount,
+                    date,
+                    status: 'Unpaid',
+                    month
+                };
+
+                state.utilities.unshift(newUtil);
+                await fetch(`${API_URL}/utilities`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(newUtil)
+                });
+
+                container.classList.remove('active');
+                renderUtilities();
+                alert(`✅ Utility reading for ${tenant.name} recorded successfully.`);
+            }
+        }
+    });
+
+    // Settings Save
+    const saveSettingsBtn = document.getElementById('save-settings-btn');
+    if (saveSettingsBtn) {
+        saveSettingsBtn.addEventListener('click', async () => {
+            const currency = document.getElementById('setting-currency').value;
+            const lang = document.getElementById('setting-lang').value;
+            state.settings.currency = currency;
+            state.settings.lang = lang;
+            
+            try {
+                await fetch(`${API_URL}/settings`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ key: 'currency', value: currency })
+                });
+                await fetch(`${API_URL}/settings`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ key: 'lang', value: lang })
+                });
+
+                const successMsg = document.getElementById('settings-success');
+                successMsg.style.display = 'block';
+                setTimeout(() => successMsg.style.display = 'none', 3000);
+                updateDashboard();
+                applyTranslations();
+            } catch (e) {
+                alert("Failed to save settings.");
+            }
+        });
+    }
+
+    // Load SMTP settings into the form
+    async function loadSmtpSettings() {
+        try {
+            const res = await fetch(`${API_URL}/smtp-settings`);
+            const smtp = await res.json();
+            if (document.getElementById('smtp-host')) {
+                document.getElementById('smtp-host').value = smtp.host || '';
+                document.getElementById('smtp-port').value = smtp.port || '587';
+                document.getElementById('smtp-user').value = smtp.user || '';
+                document.getElementById('smtp-from').value = smtp.from || '';
+                // Don't pre-fill password for security — show placeholder if set
+                document.getElementById('smtp-pass').placeholder = smtp.pass ? '••••••• (saved)' : '••••••••••••';
+            }
+        } catch(e) { /* settings view may not be mounted yet */ }
+    }
+    loadSmtpSettings();
+
+    // Save SMTP Settings
+    const saveSmtpBtn = document.getElementById('save-smtp-btn');
+    if (saveSmtpBtn) {
+        saveSmtpBtn.addEventListener('click', async () => {
+            const statusEl = document.getElementById('smtp-status');
+            const payload = {
+                host: document.getElementById('smtp-host').value.trim(),
+                port: document.getElementById('smtp-port').value.trim(),
+                user: document.getElementById('smtp-user').value.trim(),
+                pass: document.getElementById('smtp-pass').value.trim(),
+                from: document.getElementById('smtp-from').value.trim()
+            };
+            if (!payload.host || !payload.user) {
+                statusEl.style.display = 'block';
+                statusEl.style.color = 'var(--error)';
+                statusEl.textContent = '⚠️ Host and Login Email are required.';
+                return;
+            }
+            // Don't overwrite saved password if field is empty
+            if (!payload.pass) delete payload.pass;
+            try {
+                await fetch(`${API_URL}/smtp-settings`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                statusEl.style.display = 'block';
+                statusEl.style.color = 'var(--success)';
+                statusEl.textContent = '✅ SMTP settings saved successfully!';
+                if (payload.pass) document.getElementById('smtp-pass').placeholder = '••••••• (saved)';
+                document.getElementById('smtp-pass').value = '';
+                setTimeout(() => statusEl.style.display = 'none', 4000);
+            } catch(e) {
+                statusEl.style.display = 'block';
+                statusEl.style.color = 'var(--error)';
+                statusEl.textContent = '❌ Failed to save SMTP settings.';
+            }
+        });
+    }
+
+    // Test SMTP connection by sending a test email to the configured address
+    const testSmtpBtn = document.getElementById('test-smtp-btn');
+    if (testSmtpBtn) {
+        testSmtpBtn.addEventListener('click', async () => {
+            const statusEl = document.getElementById('smtp-status');
+            const user = document.getElementById('smtp-user').value.trim();
+            if (!user) {
+                statusEl.style.display = 'block';
+                statusEl.style.color = 'var(--error)';
+                statusEl.textContent = '⚠️ Save SMTP settings first, then test.';
+                return;
+            }
+            statusEl.style.display = 'block';
+            statusEl.style.color = 'var(--text-muted)';
+            statusEl.textContent = '📤 Sending test email…';
+            try {
+                const res = await fetch(`${API_URL}/send-receipt`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        to: user,
+                        subject: '✅ Property Manager Admin SMTP Test — Connection Successful',
+                        body: 'This is a test email from Property Manager Admin.\n\nYour SMTP configuration is working correctly.\n\n— Property Manager Admin'
+                    })
+                });
+                const data = await res.json();
+                if (data.status === 'success') {
+                    statusEl.style.color = 'var(--success)';
+                    statusEl.textContent = `✅ Test email sent to ${user}! Check your inbox.`;
+                } else {
+                    statusEl.style.color = 'var(--error)';
+                    statusEl.textContent = `❌ Error: ${data.message}`;
+                }
+            } catch(e) {
+                statusEl.style.color = 'var(--error)';
+                statusEl.textContent = '❌ Could not reach server.';
+            }
+        });
+    }
+
+    // Global Search Filter
+    const searchBox = document.getElementById('global-search');
+    if (searchBox) {
+        searchBox.oninput = (e) => {
+            const val = e.target.value;
+            // Filter whatever list is currently active
+            renderRecentTenants(val);
+            renderTenants(val);
+            renderProperties(val);
+        };
+    }
+
+    // Initial Render
+    if (state.properties.length === 0 && state.tenants.length === 0) {
+        // Offer to seed data or show empty state
+        console.log("Empty state. Use window.seedDemoData() to populate.");
+    }
+    
+    switchView('dashboard');
+    updateDashboard();
+});
+
+function renderUnitTypesSettings() {
+    const container = document.getElementById('unit-types-manager');
+    if (!container) return;
+    
+    container.innerHTML = `
+        <h3 style="margin-bottom: 1.5rem;" data-t="unit_types_title">${t('unit_types_title')}</h3>
+        <div style="display:flex; gap:0.5rem; margin-bottom:1.5rem;">
+            <input type="text" id="new-unit-type-name" class="search-box" style="flex:1; color: white;" placeholder="${t('cat_placeholder')}">
+            <button class="btn btn-primary" onclick="window.addUnitType()" style="white-space:nowrap;">
+                <i data-lucide="plus"></i> ${t('add_type')}
+            </button>
+        </div>
+        <div id="unit-types-list" style="display:grid; gap:0.5rem;">
+            ${state.unit_types.map(ut => `
+                <div class="glass" style="padding:0.75rem; border-radius:12px; display:flex; justify-content:space-between; align-items:center;">
+                    <div style="display:flex; align-items:center; gap:0.5rem;">
+                       <i data-lucide="tag" style="width:14px; color:var(--primary);"></i>
+                       <span style="font-weight:600; color: white;">${ut.name}</span>
+                       <span style="font-size:0.75rem; color:var(--text-muted);">(${t(ut.name)})</span>
+                    </div>
+                    <button class="btn-icon" onclick="window.deleteUnitType('${ut.id}')" style="color:var(--error);">
+                        <i data-lucide="trash-2" style="width:14px;"></i>
+                    </button>
+                </div>
+            `).join('')}
+        </div>
+    `;
+    lucide.createIcons();
+}
+
+window.addUnitType = async function() {
+    const name = document.getElementById('new-unit-type-name').value.trim();
+    if (!name) return;
+    
+    const id = Date.now().toString();
+    const newType = { id, name };
+    
+    try {
+        await fetch(`${API_URL}/unit-types`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(newType)
+        });
+        state.unit_types.push(newType);
+        renderUnitTypesSettings();
+    } catch (e) {
+        alert("Failed to add category.");
+    }
+}
+
+window.deleteUnitType = async function(id) {
+    if (!confirm("Delete this category? units using this type will remain but the category will be removed from future selection.")) return;
+    
+    try {
+        await fetch(`${API_URL}/unit-types/${id}`, {
+            method: 'DELETE'
+        });
+        state.unit_types = state.unit_types.filter(ut => ut.id !== id);
+        renderUnitTypesSettings();
+    } catch (e) {
+        alert("Failed to delete category.");
+    }
+}
+
+// Contracts Logic
+function renderContracts() {
+    const list = document.getElementById('contracts-list');
+    if (!list) return;
+    list.innerHTML = '';
+    
+    state.contracts.forEach(c => {
+        const tenant = state.tenants.find(t => t.id === c.tenantId);
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>${tenant ? tenant.name : 'Unknown'}</td>
+            <td>${c.startDate}</td>
+            <td>${c.endDate || 'Rolling'}</td>
+            <td><span class="status-pill ${c.status === 'Active' ? 'paid' : 'overdue'}">${t(c.status.toLowerCase())}</span></td>
+            <td>
+                <button class="btn-icon" onclick="window.deleteContract('${c.id}')"><i data-lucide="trash-2"></i></button>
+            </td>
+        `;
+        list.appendChild(row);
+    });
+    lucide.createIcons();
+}
+
+window.deleteContract = async (id) => {
+    if (confirm("Permanently delete this contract record?")) {
+        try {
+            await fetch(`${API_URL}/contracts/${id}`, { method: 'DELETE' });
+            state.contracts = state.contracts.filter(c => c.id !== id);
+            renderContracts();
+        } catch (e) { console.error("Delete failed."); }
+    }
+};
+
+// Helper renders for subviews
+function renderProperties(filter = '') {
+    const list = document.getElementById('property-list');
+    if (!list) return;
+    list.innerHTML = '';
+    
+    const filteredProps = state.properties.filter(p => p.name.toLowerCase().includes(filter.toLowerCase()));
+    
+    filteredProps.forEach(p => {
+        const propertyApts = state.apartments.filter(a => String(a.propertyId) === String(p.id));
+        const card = document.createElement('div');
+        card.className = 'stat-card animate-slide-in';
+        card.style.height = 'auto';
+        card.style.cursor = 'default';
+        
+        let unitListHTML = propertyApts.map(a => {
+            const t_obj = state.tenants.find(tenant => tenant.apartmentId === a.id);
+            return `
+           <div style="display:flex; justify-content:space-between; align-items:center; padding: 0.75rem 0; border-top: 1px solid var(--border-light);">
+                <div style="display:flex; align-items:center; gap:0.5rem;">
+                   <i data-lucide="${a.type === 'Studio' ? 'home' : 'door-closed'}" style="width:14px; color:var(--text-muted);"></i>
+                   <span style="font-size:0.875rem; font-weight:600;">${a.unitNumber}</span>
+                   <span style="font-size:0.8rem; color:var(--text-muted);">(${t(a.type)})</span>
+                   ${t_obj ? `<span style="font-size:0.875rem; color:var(--text-main); margin-left:8px;"> • ${t_obj.name}</span>` : `<span style="font-size:0.8rem; color:var(--success); margin-left:8px;"> • ${t('vacant')}</span>`}
+                </div>
+                ${t_obj ? `<span class="status-pill ${calculateRentStatus(t_obj).class}" style="font-size:0.7rem; padding: 0.15rem 0.5rem;">${calculateRentStatus(t_obj).status}</span>` : ''}
+            </div>
+            `;
+        }).join('') || `<div style="color:var(--text-muted); font-size:0.8rem; margin-top:1rem;">No apartments found.</div>`;
+
+        card.innerHTML = `
+            <div class="stat-header">
+                <div>
+                  <div class="stat-label">${t('property_label')}</div>
+                  <div class="stat-value" style="font-size: 1.25rem;">${p.name}</div>
+                </div>
+                <div style="display:flex; gap:0.5rem;">
+                   <button class="btn-icon" onclick="editProperty('${p.id}')" title="${t('edit')}"><i data-lucide="edit-3" style="width:16px;"></i></button>
+                   <button class="btn-icon" onclick="deleteProperty('${p.id}')" title="${t('delete')}" style="color:var(--error);"><i data-lucide="trash-2" style="width:16px;"></i></button>
+                </div>
+            </div>
+            <div style="font-size: 0.875rem; color: var(--text-muted); margin-bottom: 1rem;">
+                <i data-lucide="map-pin" style="width:12px; vertical-align:middle;"></i> ${p.address}
+            </div>
+            
+            <button class="btn btn-primary" onclick="addApartment('${p.id}')" style="width:100%; margin-bottom: 1.5rem; justify-content:center; gap:0.5rem;">
+                <i data-lucide="plus-circle" style="width:16px;"></i> ${t('add_unit')}
+            </button>
+
+            <div class="unit-list">
+                <h4 style="font-size:0.75rem; color:var(--text-muted); text-transform:uppercase; margin-bottom:0.5rem;">${t('inventory')} (${propertyApts.length})</h4>
+                ${unitListHTML}
+            </div>
+        `;
+        list.appendChild(card);
+    });
+    lucide.createIcons();
+}
+
+function renderTenants(filter = '') {
+    const list = document.getElementById('tenants-registry-list');
+    if (!list) return;
+    list.innerHTML = '';
+    
+    const filteredTenants = state.tenants.filter(t => t.name.toLowerCase().includes(filter.toLowerCase()));
+    
+    filteredTenants.forEach(tenantObj => {
+        const apartment = state.apartments.find(a => String(a.id) === String(tenantObj.apartmentId));
+        const property = apartment ? state.properties.find(p => String(p.id) === String(apartment.propertyId)) : null;
+        const card = document.createElement('div');
+        card.className = 'stat-card animate-slide-in';
+        const rentStatus = calculateRentStatus(tenantObj);
+
+        card.innerHTML = `
+             <div class="stat-header">
+                <div style="display:flex; align-items:center; gap: 0.5rem;">
+                    <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=${tenantObj.name}" class="avatar">
+                    <span class="stat-label">${tenantObj.name}</span>
+                </div>
+                <div style="display:flex; gap:0.5rem; align-items:center;">
+                    <span class="status-pill ${rentStatus.class}" style="font-size:0.7rem;">${rentStatus.status}</span>
+                    <button class="btn-icon" onclick="editTenant('${tenantObj.id}')" title="Transfer / Edit"><i data-lucide="edit" style="width:14px;"></i></button>
+                    <button class="btn-icon" onclick="deleteTenant('${tenantObj.id}')" title="Check Out (Unassign Room)" style="color:var(--warning);"><i data-lucide="door-open" style="width:14px;"></i></button>
+                    <button class="btn-icon" onclick="permanentlyDeleteTenant('${tenantObj.id}')" title="Permanently Delete Record" style="color:var(--error);"><i data-lucide="trash-2" style="width:14px;"></i></button>
+                </div>
+            </div>
+            <div class="stat-value" style="font-size: 1.125rem;">${tenantObj.rentAmount.toLocaleString()} ${state.settings.currency} / mo</div>
+            <div style="font-size: 0.875rem; color: var(--text-muted); mb-1">${property ? property.name : t('unassigned')} - ${apartment ? apartment.unitNumber : t('no_room')}</div>
+            
+            <div style="margin-top: 1rem; padding: 0.75rem 0; border-top: 1px solid var(--border-light); border-bottom: 1px solid var(--border-light);">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem; font-size: 0.75rem;">
+                    <span style="color: var(--text-muted);">${t('currently_due')}:</span>
+                    <span style="font-weight: bold; color: ${rentStatus.status === t('paid') ? 'var(--success)' : 'var(--error)'};">
+                        ${rentStatus.status === t('paid') ? '0' : tenantObj.rentAmount.toLocaleString()} ${state.settings.currency}
+                    </span>
+                </div>
+                <div style="font-size: 1rem; color: var(--text-muted); margin-bottom: 0.25rem;">${t('recent_history')}:</div>
+                <div style="display: flex; gap: 0.25rem;">
+                    ${state.payments
+                        .filter(p => String(p.tenantId) === String(tenantObj.id))
+                        .sort((a, b) => a.monthPaid.localeCompare(b.monthPaid))
+                        .slice(-3)
+                        .map(p => `
+                        <span class="status-pill paid" style="font-size: 0.6rem; padding: 1px 4px; border-radius: 4px;">${formatMonth(p.monthPaid)}</span>
+                    `).join('') || `<span style="font-size: 0.6rem; color: var(--text-muted);">${t('no_room')}</span>`}
+                </div>
+            </div>
+
+            <div style="margin-top: 0.75rem; display: flex; justify-content: space-between; align-items: center;">
+                <div style="font-size: 0.7rem; color: var(--text-muted);">${t('total_revenue')}:</div>
+                <div style="font-size: 0.85rem; font-weight: bold; color: var(--success);">${state.payments.filter(p => p.tenantId === tenantObj.id).reduce((sum, p) => sum + p.amount, 0).toLocaleString()} ${state.settings.currency}</div>
+            </div>
+        `;
+        list.appendChild(card);
+    });
+    lucide.createIcons();
+}
+
+function renderPayments(filter = '') {
+    const container = document.getElementById('payments-panels-container');
+    if (!container) return;
+    container.innerHTML = '';
+    
+    // Ledger Header & Entry Point
+    const header = document.createElement('div');
+    header.className = "animate-fade-in";
+    header.style.cssText = "display: flex; justify-content: space-between; align-items: center; margin-bottom: 2.5rem; padding: 0.5rem 0.75rem; background: #FFFFFF; border-radius: 24px; border: 1px solid var(--border-light); box-shadow: var(--card-shadow);";
+    header.innerHTML = `
+        <div style="display:flex; align-items:center; gap: 1rem;">
+            <div style="width: 48px; height: 48px; border-radius: 14px; background: linear-gradient(135deg, #4F46E5, #3B82F6); display: flex; align-items: center; justify-content: center; color: #FFFFFF; box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);">
+                <i data-lucide="receipt" style="width: 24px;"></i>
+            </div>
+            <div>
+                <h2 style="color: var(--text-main); font-weight: 800; font-family: 'Outfit'; margin: 0; letter-spacing: -0.02em;">Payments Ledger</h2>
+                <p style="color: var(--text-muted); font-size: 0.8rem; margin: 0; font-weight: 500;">Track and verify rent collections across your entire portfolio.</p>
+            </div>
+        </div>
+        <button class="btn-primary" onclick="window.openGlobalPaymentModal()" id="btn-gl-pay" style="display: flex; align-items: center; gap: 0.6rem; padding: 0.75rem 1.75rem; border-radius: 50px; background: linear-gradient(to right, #4F46E5, #3B82F6); border: none; font-weight: 700; font-family: 'Outfit'; font-size: 0.95rem; letter-spacing: 0.01em; box-shadow: 0 10px 20px -5px rgba(59, 130, 246, 0.4); transition: all 0.3s ease; cursor: pointer;">
+            <i data-lucide="plus-circle" style="width: 20px;"></i>
+            <span>Register Payment</span>
+        </button>
+    `;
+    
+    // Modern button hover effect injection
+    const btn = header.querySelector('#btn-gl-pay');
+    btn.onmouseover = () => { btn.style.transform = 'translateY(-2px) scale(1.02)'; btn.style.boxShadow = '0 12px 24px -5px rgba(59, 130, 246, 0.5)'; };
+    btn.onmouseout = () => { btn.style.transform = 'none'; btn.style.boxShadow = '0 10px 20px -5px rgba(59, 130, 246, 0.4)'; };
+    
+    container.appendChild(header);
+    
+    const filteredPayments = state.payments.filter(pay => {
+        const tenant = state.tenants.find(t => String(t.id) === String(pay.tenantId));
+        return tenant && tenant.name.toLowerCase().includes(filter.toLowerCase());
+    });
+
+    if (state.payments.length === 0) {
+        container.insertAdjacentHTML('beforeend', `<div class="stat-card" style="text-align:center; padding: 4rem 2rem; color: var(--text-muted);">
+            <i data-lucide="inbox" style="width: 48px; height: 48px; opacity: 0.2; margin-bottom: 1rem;"></i>
+            <p>No payment history recorded for this portfolio yet.</p>
+        </div>`);
+        lucide.createIcons();
+        return;
+    }
+
+    // Panels for each property
+    state.properties.forEach(prop => {
+        const propPayments = filteredPayments.filter(pay => {
+            const tenant = state.tenants.find(t => String(t.id) === String(pay.tenantId));
+            const apartment = tenant ? state.apartments.find(a => String(a.id) === String(tenant.apartmentId)) : null;
+            return apartment && String(apartment.propertyId) === String(prop.id);
+        });
+
+        if (propPayments.length > 0) {
+            const total = propPayments.reduce((sum, p) => sum + p.amount, 0);
+            const panel = document.createElement('div');
+            panel.className = 'animate-slide-in';
+            panel.style.cssText = "background: #FFFFFF; border: 1px solid var(--border-light); border-radius: 20px; overflow: hidden; margin-bottom: 1rem; box-shadow: var(--card-shadow);";
+            
+            panel.innerHTML = `
+                <div class="panel-trigger" onclick="this.nextElementSibling.classList.toggle('hidden'); this.querySelector('.chevron-icon').classList.toggle('rotate')" style="padding: 1.25rem; cursor: pointer; display: flex; justify-content: space-between; align-items: center; transition: background 0.2s;">
+                    <div style="display: flex; align-items: center; gap: 1rem;">
+                        <div style="width: 44px; height: 44px; border-radius: 12px; background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.2); display: flex; align-items: center; justify-content: center; color: var(--primary);">
+                            <i data-lucide="building-2" style="width: 22px;"></i>
+                        </div>
+                        <div>
+                            <div style="font-weight: bold; font-size: 1.05rem; color: var(--text-main);">${prop.name}</div>
+                            <div style="font-size: 0.75rem; color: var(--text-muted);"><i data-lucide="map-pin" style="width:10px; margin-right:4px;"></i>${prop.address}</div>
+                        </div>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 2rem;">
+                         <div style="text-align: right;">
+                            <div style="font-size: 0.65rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 2px;">${t('total_revenue')}</div>
+                            <div style="font-weight: bold; color: var(--success); font-size: 1.1rem;">${total.toLocaleString()} ${state.settings.currency}</div>
+                        </div>
+                        <i data-lucide="chevron-down" class="chevron-icon" style="width: 20px; color: var(--secondary); transition: transform 0.3s ease;"></i>
+                    </div>
+                </div>
+                <div class="panel-body hidden" style="padding: 0 1.25rem 1.25rem 1.25rem; border-top: 1px solid var(--border-light);">
+                    <table class="data-table" style="width: 100%; border-collapse: separate; border-spacing: 0;">
+                        <thead>
+                            <tr>
+                                <th style="border-bottom: 1px solid var(--border-light); padding: 1rem 0;">Tenant</th>
+                                <th style="border-bottom: 1px solid var(--border-light);">Month Covered</th>
+                                <th style="border-bottom: 1px solid var(--border-light);">Payment Date</th>
+                                <th style="border-bottom: 1px solid var(--border-light);">Amount</th>
+                                <th style="border-bottom: 1px solid var(--border-light); text-align:right;">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${(() => {
+                                const grouped = propPayments.reduce((acc, p) => {
+                                    const key = `${p.tenantId}-${p.date}`;
+                                    if (!acc[key]) {
+                                        acc[key] = { ...p, monthList: [p.monthPaid], totalAmount: p.amount };
+                                    } else {
+                                        acc[key].monthList.push(p.monthPaid);
+                                        acc[key].totalAmount += p.amount;
+                                    }
+                                    return acc;
+                                }, {});
+                                
+                                return Object.values(grouped).sort((a,b) => b.date.localeCompare(a.date)).map(p => {
+                                    const tenant = state.tenants.find(t => String(t.id) === String(p.tenantId));
+                                    const monthDisplay = p.monthList.map(m => formatMonth(m)).reverse().join(', ');
+                                    return `
+                                        <tr class="payment-row">
+                                            <td style="font-weight: 600; color:var(--text-main);">${tenant ? tenant.name : 'Unknown User'}</td>
+                                            <td><span class="status-pill" style="font-size: 0.75rem; background: #F5F7FA; color:var(--secondary);">${monthDisplay}</span></td>
+                                            <td style="font-size: 0.85rem; color: var(--text-muted);">${p.date}</td>
+                                            <td style="font-weight: bold; color: var(--success);">${p.totalAmount.toLocaleString()} ${state.settings.currency}</td>
+                                            <td style="text-align:right;">
+                                                <div style="display:flex; gap:0.5rem; justify-content:flex-end;">
+                                                    <button class="btn-icon" onclick="window.generateReceipt('${p.id}')" title="Receipt (Latest Month)" style="color:var(--primary);"><i data-lucide="printer" style="width:14px;"></i></button>
+                                                    <button class="btn-icon" onclick="window.editPayment('${p.id}')" title="Edit Entry"><i data-lucide="edit-3" style="width:14px;"></i></button>
+                                                    <button class="btn-icon" onclick="window.deletePayment('${p.id}')" title="Delete Entry" style="color:var(--error);"><i data-lucide="trash-2" style="width:14px;"></i></button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    `;
+                                }).join('');
+                            })()}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+            container.appendChild(panel);
+        }
+    });
+
+    // Unassigned Payments
+    const unassigned = filteredPayments.filter(pay => {
+        const tenant = state.tenants.find(t => String(t.id) === String(pay.tenantId));
+        const apartment = tenant ? state.apartments.find(a => String(a.id) === String(tenant.apartmentId)) : null;
+        return !apartment || !apartment.propertyId;
+    });
+
+    if (unassigned.length > 0) {
+        const total = unassigned.reduce((sum, p) => sum + p.amount, 0);
+        const panel = document.createElement('div');
+        panel.className = 'animate-slide-in';
+        panel.style.cssText = "background: #FFFFFF; border: 1px dashed var(--border-light); border-radius: 20px; overflow: hidden; margin-top: 2rem; box-shadow: var(--card-shadow);";
+        
+        panel.innerHTML = `
+            <div class="panel-trigger" onclick="this.nextElementSibling.classList.toggle('hidden'); this.querySelector('.chevron-icon').classList.toggle('rotate')" style="padding: 1.25rem; cursor: pointer; display: flex; justify-content: space-between; align-items: center;">
+                <div style="display: flex; align-items: center; gap: 0.75rem;">
+                    <i data-lucide="help-circle" style="width: 18px; color: var(--secondary);"></i>
+                    <span style="font-weight: bold; color: var(--secondary);">${t('unassigned')}</span>
+                </div>
+                 <div style="display: flex; align-items: center; gap: 1rem;">
+                    <div style="font-weight: bold; color: var(--text-main); font-size: 1rem;">${total.toLocaleString()} ${state.settings.currency}</div>
+                    <i data-lucide="chevron-down" class="chevron-icon" style="width: 18px; color: var(--secondary); transition: transform 0.3s ease;"></i>
+                 </div>
+            </div>
+            <div class="panel-body hidden" style="padding: 1.25rem; border-top: 1px solid var(--border-light);">
+                <table class="data-table" style="width:100%;">
+                    <thead>
+                        <tr>
+                            <th style="border-bottom:1px solid var(--border-light); padding:1rem 0;">Tenant</th>
+                            <th style="border-bottom:1px solid var(--border-light);">Month Covered</th>
+                            <th style="border-bottom:1px solid var(--border-light);">Payment Date</th>
+                            <th style="border-bottom:1px solid var(--border-light);">Amount</th>
+                            <th style="border-bottom:1px solid var(--border-light); text-align:right;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${(() => {
+                            const grouped = unassigned.reduce((acc, p) => {
+                                const key = `${p.tenantId}-${p.date}`;
+                                if (!acc[key]) {
+                                    acc[key] = { ...p, monthList: [p.monthPaid], totalAmount: p.amount };
+                                } else {
+                                    acc[key].monthList.push(p.monthPaid);
+                                    acc[key].totalAmount += p.amount;
+                                }
+                                return acc;
+                            }, {});
+                            
+                            return Object.values(grouped).sort((a,b) => b.date.localeCompare(a.date)).map(p => {
+                                const tenant = state.tenants.find(t => String(t.id) === String(p.tenantId));
+                                const monthDisplay = p.monthList.map(m => formatMonth(m)).reverse().join(', ');
+                                return `
+                                    <tr class="payment-row">
+                                        <td style="font-weight:600; color:var(--text-main);">${tenant ? tenant.name : 'Unknown User'}</td>
+                                        <td><span class="status-pill" style="font-size: 0.75rem; background: #F5F7FA; color:var(--secondary);">${monthDisplay}</span></td>
+                                        <td style="font-size: 0.85rem; color: var(--text-muted);">${p.date}</td>
+                                        <td style="color:var(--success); font-weight:bold;">${p.totalAmount.toLocaleString()} ${state.settings.currency}</td>
+                                        <td style="text-align:right;">
+                                             <div style="display:flex; gap:0.5rem; justify-content:flex-end;">
+                                                <button class="btn-icon" onclick="window.generateReceipt('${p.id}')" title="Receipt" style="color:var(--primary);"><i data-lucide="printer" style="width:14px;"></i></button>
+                                                <button class="btn-icon" onclick="window.editPayment('${p.id}')" title="Edit"><i data-lucide="edit-3" style="width:14px;"></i></button>
+                                                <button class="btn-icon" onclick="window.deletePayment('${p.id}')" title="Delete" style="color:var(--error);"><i data-lucide="trash-2" style="width:14px;"></i></button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                `;
+                            }).join('');
+                        })()}
+                    </tbody>
+                </table>
+            </div>
+        `;
+        container.appendChild(panel);
+    }
+    
+    lucide.createIcons();
+}
+
+/**
+ * --- Utilities Management ---
+ */
+
+function renderUtilities() {
+    const container = document.getElementById('utilities-panels-container');
+    if (!container) return;
+    container.innerHTML = '';
+
+    if (state.utilities.length === 0) {
+        container.innerHTML = `<div class="stat-card" style="text-align:center; padding: 4rem 2rem; color: var(--text-muted);">
+            <i data-lucide="zap-off" style="width: 48px; height: 48px; opacity: 0.2; margin-bottom: 1rem;"></i>
+            <p>No utility service readings recorded yet.</p>
+        </div>`;
+        lucide.createIcons();
+        return;
+    }
+
+    // Group utilities by Property
+    state.properties.forEach(prop => {
+        const propUtils = state.utilities.filter(u => {
+            const apartment = state.apartments.find(a => String(a.id) === String(u.apartmentId));
+            return apartment && String(apartment.propertyId) === String(prop.id);
+        });
+
+        if (propUtils.length > 0) {
+            const panel = document.createElement('div');
+            panel.className = 'stat-card animate-slide-in';
+            panel.style.padding = '0';
+            panel.style.overflow = 'hidden';
+            
+            panel.innerHTML = `
+                <div style="padding: 1.25rem; background: #F9FAFB; border-bottom: 1px solid var(--border-light); display: flex; justify-content: space-between; align-items: center;">
+                    <div style="display:flex; align-items:center; gap:0.75rem;">
+                        <i data-lucide="building-2" style="color:var(--primary); width:20px;"></i>
+                        <span style="font-weight: 800; font-family: 'Outfit'; color: var(--text-main); font-size:1rem;">${prop.name}</span>
+                    </div>
+                    <span style="font-size: 0.7rem; color: var(--text-muted); font-weight: 600;">SERVICE CONSUMPTION AUDIT</span>
+                </div>
+                <div style="padding: 1.25rem;">
+                    <table class="data-table" style="width:100%;">
+                        <thead>
+                            <tr style="text-align:left; font-size: 0.75rem; text-transform: uppercase; color: var(--text-muted);">
+                                <th style="padding-bottom: 1rem;">Tenant / Unit</th>
+                                <th>Type</th>
+                                <th>Interval Reading</th>
+                                <th>Billing</th>
+                                <th>Status</th>
+                                <th style="text-align:right;">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${propUtils.map(u => {
+                                const tenant = state.tenants.find(t => String(t.id) === String(u.tenantId));
+                                const apt = state.apartments.find(a => String(a.id) === String(u.apartmentId));
+                                const typeIcon = u.type === 'Electricity' ? 'zap' : u.type === 'Water' ? 'droplet' : 'flame';
+                                const statusClass = u.status === 'Paid' ? 'paid' : 'overdue';
+                                
+                                return `
+                                    <tr style="border-top: 1px solid #f1f1f1;">
+                                        <td style="padding: 1rem 0;">
+                                            <div style="font-weight: 700; color:var(--text-main); font-size:0.9rem;">${tenant ? tenant.name : 'N/A'}</div>
+                                            <div style="font-size:0.7rem; color:var(--text-muted);">${apt ? apt.unitNumber : 'N/A'}</div>
+                                        </td>
+                                        <td>
+                                            <div style="display:flex; align-items:center; gap:0.4rem; font-size:0.85rem; font-weight:600;">
+                                                <i data-lucide="${typeIcon}" style="width:14px; color:var(--secondary);"></i>
+                                                ${u.type}
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <div style="font-size:0.85rem;">${u.lastReading} → ${u.currentReading}</div>
+                                            <div style="font-size:0.7rem; color:var(--text-muted); font-weight:500;">Month: ${formatMonth(u.month)}</div>
+                                        </td>
+                                        <td>
+                                            <div style="font-weight: 800; color:var(--text-main);">${u.amount.toLocaleString()} ${state.settings.currency}</div>
+                                            <div style="font-size:0.7rem; color:var(--text-muted);">${u.date}</div>
+                                        </td>
+                                        <td><span class="status-pill ${statusClass}" style="font-size:0.65rem;">${u.status}</span></td>
+                                        <td style="text-align:right;">
+                                            <div style="display:flex; gap:0.4rem; justify-content:flex-end;">
+                                                ${u.status === 'Unpaid' ? `<button class="btn-icon" onclick="window.payUtility('${u.id}')" title="Mark as Paid" style="color:var(--success);"><i data-lucide="check-circle" style="width:16px;"></i></button>` : ''}
+                                                <button class="btn-icon" onclick="window.sendUtilityReceiptEmail('${u.id}')" title="Email Receipt" style="color:#7C3AED;"><i data-lucide="mail" style="width:16px;"></i></button>
+                                                <button class="btn-icon" onclick="window.deleteUtility('${u.id}')" title="Remove Entry" style="color:var(--error);"><i data-lucide="trash-2" style="width:16px;"></i></button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                `;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+            container.appendChild(panel);
+        }
+    });
+
+    lucide.createIcons();
+}
+
+window.openUtilityModal = () => {
+    const modal = document.getElementById('modal-container');
+    const form = document.getElementById('app-form');
+    const title = document.getElementById('modal-title');
+    
+    modal.classList.add('active');
+    modal.setAttribute('data-mode', 'add-utility');
+    
+    title.textContent = "🔌 New Service Consumption Entry";
+    
+    const tenantsWithRooms = state.tenants.filter(t => t.apartmentId);
+    
+    form.innerHTML = `
+        <div style="display: flex; flex-direction: column; gap: 1.25rem;">
+            <div>
+                <label>Target Portfolio Member</label>
+                <select id="util-tenant" class="search-box" style="width:100%" required>
+                    ${tenantsWithRooms.map(t => `<option value="${t.id}">${t.name} (Unit: ${state.apartments.find(a => a.id === t.apartmentId).unitNumber})</option>`).join('')}
+                </select>
+            </div>
+            
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem;">
+                <div>
+                    <label>Utility Category</label>
+                    <select id="util-type" class="search-box" style="width:100%">
+                        <option>Electricity</option>
+                        <option>Water</option>
+                        <option>Gas</option>
+                        <option>Waste Management</option>
+                    </select>
+                </div>
+                <div>
+                   <label>Billing Month</label>
+                   <input type="text" id="util-month" class="search-box" value="${new Date().toISOString().slice(0, 7)}" placeholder="YYYY-MM">
+                </div>
+            </div>
+
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem;">
+                <div>
+                    <label>Previous Reading</label>
+                    <input type="number" id="util-last" class="search-box" placeholder="0.00" value="0">
+                </div>
+                <div>
+                    <label>Current Reading</label>
+                    <input type="number" id="util-current" class="search-box" placeholder="0.00" value="0">
+                </div>
+            </div>
+
+            <div>
+                <label>Amount (Total Bill)</label>
+                <input type="number" id="util-amount" class="search-box" style="width:100%" placeholder="0.00" required>
+            </div>
+
+            <div>
+                <label>Reading / Billing Date</label>
+                <input type="text" id="util-date" class="search-box" style="width:100%" value="${new Date().toLocaleDateString()}">
+            </div>
+        </div>
+    `;
+};
+
+window.payUtility = async (id) => {
+    try {
+        await fetch(`${API_URL}/utilities/${id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: 'Paid' })
+        });
+        const util = state.utilities.find(u => String(u.id) === String(id));
+        if (util) util.status = 'Paid';
+        renderUtilities();
+    } catch (e) {
+        console.error("Utility payment failed");
+    }
+};
+
+window.deleteUtility = async (id) => {
+    if (!confirm("Are you sure you want to remove this utility entry?")) return;
+    try {
+        await fetch(`${API_URL}/utilities/${id}`, { method: 'DELETE' });
+        state.utilities = state.utilities.filter(u => String(u.id) !== String(id));
+        renderUtilities();
+    } catch (e) {
+        console.error("Utility deletion failed");
+    }
+};

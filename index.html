@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Property Manager Admin</title>
+    <meta name="description" content="Manage tenant rents, properties, and get automated rent due alarms with the Aura Property Manager.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar">
+            <div class="logo">
+                <div style="width: 32px; height: 32px; flex-shrink: 0; background: var(--primary); border-radius: 8px; display: flex; align-items: center; justify-content: center; color: white; font-weight: 900; font-size: 1.1rem;">A</div>
+                <span class="logo-text">Property Manager Admin</span>
+            </div>
+            <nav class="nav-menu">
+                <a href="#" class="nav-item active" data-view="dashboard">
+                    <i data-lucide="layout-dashboard"></i>
+                    <span data-t="dashboard">Dashboard</span>
+                </a>
+                <a href="#" class="nav-item" data-view="properties">
+                    <i data-lucide="building-2"></i>
+                    <span data-t="properties">Properties</span>
+                </a>
+                <a href="#" class="nav-item" data-view="tenants">
+                    <i data-lucide="users"></i>
+                    <span data-t="tenants">Tenants</span>
+                </a>
+                <a href="#" class="nav-item" data-view="payments">
+                    <i data-lucide="credit-card"></i>
+                    <span data-t="payments">Payments</span>
+                </a>
+                <a href="#" class="nav-item" data-view="utilities">
+                    <i data-lucide="zap"></i>
+                    <span data-t="utilities">Utilities</span>
+                </a>
+                <a href="#" class="nav-item" data-view="contracts">
+                    <i data-lucide="file-text"></i>
+                    <span data-t="contracts">Contracts</span>
+                </a>
+            </nav>
+            <div class="sidebar-footer">
+                <a href="#" class="nav-item" data-view="settings">
+                    <i data-lucide="settings"></i>
+                    <span data-t="settings">Settings</span>
+                </a>
+            </div>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="main-content">
+            <header class="top-bar">
+                <h1 id="view-title" data-t="dashboard">Overview Dashboard</h1>
+                <div class="top-bar-actions">
+                    <div class="search-box">
+                        <i data-lucide="search"></i>
+                        <input type="text" placeholder="Search for something" id="global-search">
+                    </div>
+                    <button class="btn btn-secondary" onclick="window.seedDemoData()" style="padding: 0.7rem; border-radius: 50%; width: 45px; height: 45px; display: flex; align-items: center; justify-content: center;">
+                        <i data-lucide="database"></i>
+                    </button>
+                    <button class="btn-icon" title="Notifications" id="notifications-btn" style="background: #F5F7FA; width: 45px; height: 45px; border-radius: 50%; display: flex; align-items: center; justify-content: center;">
+                        <i data-lucide="bell" style="color: var(--secondary);"></i>
+                        <span class="notification-dot hidden" style="top: 12px; right: 12px; width: 7px; height: 7px;"></span>
+                    </button>
+                    <div class="user-profile">
+                        <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Olivia" alt="User Profile" class="avatar" style="width: 45px; height: 45px; border-radius: 50%;">
+                    </div>
+                </div>
+            </header>
+
+            <section id="dashboard-view" class="view">
+                <div class="stats-grid">
+                    <div class="stat-card animate-slide-in">
+                        <div style="display: flex; align-items: center; gap: 1rem;">
+                            <div style="width: 60px; height: 60px; border-radius: 50%; background: #FFF5D9; display: flex; align-items: center; justify-content: center; color: #FFBB38;">
+                                <i data-lucide="users" style="width: 25px; height: 25px;"></i>
+                            </div>
+                            <div>
+                                <div class="stat-label" data-t="active_tenants">Active Tenants</div>
+                                <div class="stat-value" id="stat-active-tenants">0</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="stat-card animate-slide-in">
+                        <div style="display: flex; align-items: center; gap: 1rem;">
+                            <div style="width: 60px; height: 60px; border-radius: 50%; background: #E7EDFF; display: flex; align-items: center; justify-content: center; color: #396AFF;">
+                                <i data-lucide="banknote" style="width: 25px; height: 25px;"></i>
+                            </div>
+                            <div>
+                                <div class="stat-label" data-t="collected_rent">Collected Rent</div>
+                                <div class="stat-value" id="stat-collected-rent">$0.00</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="stat-card animate-slide-in">
+                        <div style="display: flex; align-items: center; gap: 1rem;">
+                            <div style="width: 60px; height: 60px; border-radius: 50%; background: #FFE0EB; display: flex; align-items: center; justify-content: center; color: #FF82AC;">
+                                <i data-lucide="alert-circle" style="width: 25px; height: 25px;"></i>
+                            </div>
+                            <div>
+                                <div class="stat-label" data-t="rent_due">Rent Due</div>
+                                <div class="stat-value" id="stat-rent-due">$0.00</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="content-row">
+                    <div class="data-table-container animate-fade-in">
+                        <div class="table-header">
+                            <h2 style="color: var(--text-main); font-weight: 700;">Recent Transactions</h2>
+                        </div>
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th data-t="tenant">Tenant Name</th>
+                                    <th data-t="unit">Property/Unit</th>
+                                    <th data-t="month">Month Covered</th>
+                                    <th data-t="date_paid">Date Paid</th>
+                                    <th data-t="amount">Rent Amount</th>
+                                    <th data-t="status">Status</th>
+                                    <th data-t="actions">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="recent-tenants-list">
+                                <!-- Dynamic content -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Other views will be rendered here dynamically or toggled -->
+             <section id="properties-view" class="view hidden">
+                <div class="view-header">
+                    <h2 data-t="properties">Managed Properties</h2>
+                    <button class="btn btn-primary" id="add-property-btn">
+                        <i data-lucide="plus"></i> <span data-t="add_property">Add Property</span>
+                    </button>
+                </div>
+                <div class="property-grid" id="property-list">
+                    <!-- Property cards here -->
+                </div>
+             </section>
+
+             <section id="tenants-view" class="view hidden">
+                <div class="view-header">
+                    <h2 data-t="tenants">Tenants Registry</h2>
+                    <button class="btn btn-primary" id="add-tenant-btn">
+                        <i data-lucide="user-plus"></i> <span data-t="add_tenant">Add Tenant</span>
+                    </button>
+                </div>
+                <div class="tenants-grid" id="tenants-registry-list">
+                    <!-- Tenant registry cards -->
+                </div>
+             </section>
+
+             <section id="contracts-view" class="view hidden">
+                <div class="view-header">
+                    <h2 data-t="contracts">Lease Contracts</h2>
+                    <button class="btn btn-primary" id="add-contract-btn">
+                        <i data-lucide="plus"></i> <span data-t="add_contract">New Contract</span>
+                    </button>
+                </div>
+                <div class="stat-card" style="margin-top: 2rem;">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th data-t="tenant">Tenant</th>
+                                <th data-t="start_date">Start Date</th>
+                                <th data-t="end_date">End Date</th>
+                                <th data-t="status">Status</th>
+                                <th data-t="actions">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="contracts-list">
+                            <!-- Contracts rows injected here -->
+                        </tbody>
+                    </table>
+                </div>
+             </section>
+
+             <section id="settings-view" class="view hidden">
+                <div class="view-header">
+                    <h2 data-t="settings">Application Settings</h2>
+                </div>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 2rem; align-items: stretch; width: 100%;">
+                    <div class="stat-card">
+                    <h3 style="margin-bottom: 1.5rem;" data-t="settings">Regional Settings</h3>
+                    
+                    <div style="margin-bottom: 1.5rem;">
+                        <label style="display:block; margin-bottom: 0.5rem; color: var(--text-muted);" data-t="lang_sel">Application Language</label>
+                        <select id="setting-lang" class="search-box" style="width: 100%; border: 1px solid var(--border-light); background: #fff; border-radius: 10px;">
+                            <option value="en">English (UK/US)</option>
+                            <option value="fr">Français (France/Afrique)</option>
+                        </select>
+                    </div>
+
+                    <div style="margin-bottom: 1.5rem;">
+                        <label style="display:block; margin-bottom: 0.5rem; color: var(--text-muted);" data-t="currency_sel">Currency Symbol</label>
+                        <select id="setting-currency" class="search-box" style="width: 100%; border: 1px solid var(--border-light); background: #fff; border-radius: 10px;">
+                            <option value="$">$ (USD/CAD/AUD)</option>
+                            <option value="€">€ (EUR)</option>
+                            <option value="£">£ (GBP)</option>
+                            <option value="FCFA">FCFA (BEAC/BCEAO)</option>
+                            <option value="Fr">Fr (CHF)</option>
+                            <option value="¥">¥ (JPY/CNY)</option>
+                            <option value="₦">₦ (NGN)</option>
+                            <option value="KSh">KSh (KES)</option>
+                        </select>
+                    </div>
+                    <div style="margin-top: auto;">
+                        <button class="btn btn-primary" id="save-settings-btn" style="width: 100%;" data-t="save">Save Settings</button>
+                        <div id="settings-success" style="color: var(--success); font-size: 0.8rem; margin-top: 1rem; text-align: center; display: none;">
+                            <i data-lucide="check-circle" style="width:14px; vertical-align:middle;"></i> Settings saved successfully!
+                        </div>
+                    </div>
+                </div>
+
+                <div id="unit-types-manager" class="stat-card">
+                    <!-- Categories manager injected here -->
+                </div>
+
+                <!-- SMTP Email Configuration -->
+                <div class="stat-card">
+                    <div style="display:flex; align-items:center; gap:0.75rem; margin-bottom:1.5rem;">
+                        <div style="width:40px; height:40px; border-radius:12px; background:linear-gradient(135deg,#4F46E5,#7C3AED); display:flex; align-items:center; justify-content:center; color:#fff; flex-shrink:0;">
+                            <i data-lucide="mail" style="width:20px;"></i>
+                        </div>
+                        <div>
+                            <h3 style="margin:0; font-family:'Outfit'; font-weight:800; font-size:1rem;">Email & SMTP Configuration</h3>
+                            <p style="margin:0; font-size:0.75rem; color:var(--text-muted);">Configure outgoing email for receipt delivery</p>
+                        </div>
+                    </div>
+
+                    <div style="display:grid; grid-template-columns:1fr 120px; gap:1rem; margin-bottom:1rem;">
+                        <div>
+                            <label style="display:block; margin-bottom:0.4rem; font-size:0.8rem; color:var(--text-muted);">SMTP Host</label>
+                            <input type="text" id="smtp-host" class="search-box" style="width:100%;" placeholder="smtp.gmail.com">
+                        </div>
+                        <div>
+                            <label style="display:block; margin-bottom:0.4rem; font-size:0.8rem; color:var(--text-muted);">Port</label>
+                            <input type="number" id="smtp-port" class="search-box" style="width:100%;" placeholder="587" value="587">
+                        </div>
+                    </div>
+                    <div style="margin-bottom:1rem;">
+                        <label style="display:block; margin-bottom:0.4rem; font-size:0.8rem; color:var(--text-muted);">Login / Email Address</label>
+                        <input type="email" id="smtp-user" class="search-box" style="width:100%;" placeholder="your@email.com">
+                    </div>
+                    <div style="margin-bottom:1rem;">
+                        <label style="display:block; margin-bottom:0.4rem; font-size:0.8rem; color:var(--text-muted);">Password / App Password</label>
+                        <input type="password" id="smtp-pass" class="search-box" style="width:100%;" placeholder="••••••••••••">
+                    </div>
+                    <div style="margin-bottom:1.5rem;">
+                        <label style="display:block; margin-bottom:0.4rem; font-size:0.8rem; color:var(--text-muted);">Sender Display Name</label>
+                        <input type="text" id="smtp-from" class="search-box" style="width:100%;" placeholder="Property Manager Admin">
+                    </div>
+
+                    <div style="margin-top: auto;">
+                        <div style="display:flex; gap:0.75rem;">
+                            <button class="btn btn-primary" id="save-smtp-btn" style="flex:1;">
+                                <i data-lucide="save" style="width:15px;"></i> Save SMTP Settings
+                            </button>
+                            <button class="btn btn-secondary" id="test-smtp-btn" style="flex:1;">
+                                <i data-lucide="send" style="width:15px;"></i> Send Test Email
+                            </button>
+                        </div>
+                        <div id="smtp-status" style="margin-top:1rem; font-size:0.8rem; display:none;"></div>
+                    </div>
+                </div>
+                </div>
+             </section>
+
+             <section id="payments-view" class="view hidden">
+                 <div class="view-header">
+                     <h2 data-t="payments">Payment Ledger History</h2>
+                 </div>
+                 <div id="payments-panels-container" style="display: flex; flex-direction: column; gap: 1.5rem;">
+                     <!-- Property Panels will be injected here -->
+                 </div>
+             </section>
+
+             <section id="utilities-view" class="view hidden">
+                 <div class="view-header">
+                     <h2 id="utilities-header">Service Consumption & Utilities</h2>
+                     <button class="btn btn-primary" id="add-utility-btn" onclick="window.openUtilityModal()">
+                         <i data-lucide="zap"></i> <span>Record Service Reading</span>
+                     </button>
+                 </div>
+                 <div id="utilities-panels-container" style="display: flex; flex-direction: column; gap: 1.5rem;">
+                     <!-- Utility panels will be injected here -->
+                 </div>
+             </section>
+        </main>
+    </div>
+
+    <div id="modal-container" class="modal-overlay">
+        <div class="modal animate-pop-in">
+            <div class="modal-header">
+                <h3 id="modal-title">Add New</h3>
+                <button class="btn-close" id="close-modal"><i data-lucide="x"></i></button>
+            </div>
+            <div class="modal-body">
+                <form id="app-form" onsubmit="event.preventDefault();">
+                    <!-- Dynamic form content -->
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="cancel-btn">Cancel</button>
+                <button class="btn btn-primary" id="save-btn">Save Changes</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modular Application Logic -->
+    <script src="js/state.js"></script>
+    <script src="js/rent-engine.js"></script>
+    <script src="js/view-routing.js"></script>
+    <script src="js/render.js"></script>
+    <script src="js/actions.js"></script>
+    <script src="js/receipts.js"></script>
+    <script src="js/modals.js"></script>
+    <script src="js/events.js"></script>
+    <script>
+        // Initialize Lucide Icons
+        console.log("Initializing Icons...");
+        try {
+            lucide.createIcons();
+        } catch(e) {
+            console.warn("Lucide icons failed to load. Check your internet connection.");
+        }
+    </script>
+</body>
+</html>
