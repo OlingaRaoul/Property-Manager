@@ -1,0 +1,40 @@
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { StateProvider } from './context/StateContext';
+import Sidebar from './components/Sidebar';
+import Header from './components/Header';
+import Dashboard from './pages/Dashboard';
+import Properties from './pages/Properties';
+import Tenants from './pages/Tenants';
+import Payments from './pages/Payments';
+import Utilities from './pages/Utilities';
+import Settings from './pages/Settings';
+import Contracts from './pages/Contracts';
+import './index.css';
+
+function App() {
+  return (
+    <StateProvider>
+      <Router>
+        <div className="app-container">
+          <Sidebar />
+          <main className="main-content">
+            <Header />
+            <div className="container" style={{ paddingTop: '1rem' }}>
+              <Routes>
+                <Route path="/" element={<Dashboard />} />
+                <Route path="/properties" element={<Properties />} />
+                <Route path="/tenants" element={<Tenants />} />
+                <Route path="/payments" element={<Payments />} />
+                <Route path="/utilities" element={<Utilities />} />
+                <Route path="/contracts" element={<Contracts />} />
+                <Route path="/settings" element={<Settings />} />
+              </Routes>
+            </div>
+          </main>
+        </div>
+      </Router>
+    </StateProvider>
+  );
+}
+
+export default App;

@@ -1,97 +1,111 @@
-# Property Manager Admin🏢
+# Property Manager Pro 🏢
 
-A comprehensive, state-of-the-art property management suite built to simplify the operations of modern real estate portfolios. Property Manager Admin handles everything from tracking units and tenants to recording rent ledgers, distributing digital PDF receipts, and monitoring overdue payments effortlessly.
+[![MERN Stack](https://img.shields.io/badge/Stack-MERN-blue.svg)](https://mongodb.com)
+[![React](https://img.shields.io/badge/Frontend-React%20%2B%20Vite-61DAFB.svg)](https://reactjs.org)
+[![Node.js](https://img.shields.io/badge/Backend-Node.js%20%2B%20Express-339933.svg)](https://nodejs.org)
+
+A premium, state-of-the-art property management suite migrated from legacy monolithic structures to a modern **MERN stack**. Designed with the **BankDash** aesthetic, it provides a seamless experience for managing properties, tenants, and full financial lifecycles.
 
 ---
 
 ## ✨ Key Features
 
-- **Property & Tenant Logistics:**
-  - Create and manage unlimited properties and sub-units.
-  - Dynamically assign and unassign tenants to active units.
-  - Track lease details and rental variations seamlessly.
-- **Financial Ledger Engine:**
-  - Integrated billing logic that automatically distinguishes between pre-payments, overdue intervals, and settled accounts based on precise calendar dates.
-  - Centralized portfolio dashboard displaying instant revenue analytics and overdue arrears.
-- **Smart Digital Receipts & Utilities:**
-  - Instant server-side generation of elegant `.pdf` rent and utility receipts.
-  - Native integration with standard SMTP providers, enabling single-click email dispatch to your tenants with their receipts securely attached.
-  - Tracking system for utilities (water, electricity) across properties.
-- **Global & Extensible Configurations:**
-  - Real-time locale swapping (English/Français).
-  - Dynamic currency configurations handling a global array of operational symbols.
-  - Granular management configurations, modularly decoupled into focused Javascript components.
-  
+### 📊 Portfolio Dashboard
+- **Instant Insights**: Real-time visualization of revenue, billed utilities, and outstanding arrears.
+- **KPI Summary**: Quick-glance cards for Total Readings, Total Billed, and Outstanding balances.
+
+### 👥 Tenant & Unit Registry
+- **Modern Typography**: Integrated **Sora** and **Outfit** fonts for a geometric, premium look.
+- **Dynamic Leasing**: Manage properties and units with easy tenant assignment and unassignment.
+
+### 💰 Advanced Payment Ledger
+- **Multi-Month Selection**: A 19-month rolling grid (6 past, current, 12 future) for flexible billing.
+- **Advance Payments**: Support for future rent payments with unique visual highlighting.
+- **Smart Due Dates**: Derived directly from active contracts, ensuring precision in "Paid" vs "Due" status.
+- **Professional Receipts**: One-click **Print Receipt** feature that generates a clean, standalone HTML receipt in a new window for perfect browser printing (A5 optimized).
+
+### 📜 Intelligent Contracts
+- **Automated Due Logic**: Set an "agreed day" for payments. The system automatically caps the due date to the last day of shorter months (e.g., Feb 28th if the agreed day is 31st).
+- **Full CRUD**: Detailed contract management with live due-date previews.
+
+### ⚡ Utility Consumption Audit
+- **Multi-Service Tracking**: Record readings for Electricity (Zap), Water (Droplet), and Gas (Flame).
+- **Live Calculator**: Auto-computes `units consumed × rate = amount` instantly during data entry.
+- **Bidirectional Toggles**: Easily mark utilities as Paid or revert them to Unpaid with a single click.
+
 ---
 
 ## 🛠️ Technology Stack
 
-The architecture relies on a highly performant and secure stack that limits heavy dependencies:
+### Frontend
+- **React.js (Vite)**: For a high-performance, single-page application experience.
+- **Design System**: Custom Vanilla CSS inspired by **BankDash** (Premium Blue: `#2D60FF`).
+- **Icons**: [Lucide-React](https://lucide.dev/) for consistent, beautiful iconography.
+- **Typography**: Sora (Headers) and Outfit (Body) via Google Fonts.
 
-* **Frontend:**
-  * Clean **Vanilla HTML/CSS/JS** paired with Lucide Icons for rapid execution and unparalleled browser compatibility without build-step clutter.
-  * Modular UI dynamically hydrated by responsive JavaScript files logic `(js/*.js)`.
-* **Backend:**
-  * **Node.js** running an **Express** web server engine.
-  * Rapid data persistence via local **better-sqlite3** bindings, acting as an extremely robust lightweight database (`aura.db`).
-  * **Nodemailer** + **PDFKit** to transform raw receipt streams and distribute files effortlessly.
+### Backend
+- **Node.js & Express**: Scalable RESTful API architecture.
+- **MongoDB & Mongoose**: Flexible document storage with a robust schema for tenants, payments, and contracts.
+- **Mock Fallback**: Integrated database connection detection that falls back to a JSON-based mock database if MongoDB is unreachable, ensuring zero downtime during development.
 
 ---
 
 ## 🚀 Installation & Setup
 
-Want to run Property Manager Admin on a local server or deploy?
+### 1. Prerequisites
+- Node.js (v16+)
+- MongoDB (Running locally or via Atlas)
 
-**1. Clone the repository**
+### 2. Clone the Repository
 ```bash
 git clone https://github.com/OlingaRaoul/Property-Manager.git
 cd Property-Manager
 ```
 
-**2. Install runtime dependencies**
-The backend relies on specifically mapped packages to render PDFs and proxy connections:
+### 3. Backend Setup
 ```bash
+cd backend
 npm install
+npm start
 ```
+*The API will be available at `http://localhost:3000`.*
 
-**3. Launch the Server Environment**
-Start the central Aura application wrapper:
+### 4. Frontend Setup
 ```bash
-node server.js
+cd frontend
+npm install
+npm run dev
 ```
-*The server will securely boot to handle the API and database on port 3000.*
-
-**4. Open Dashboard in Browser**
-Access the fully realized interface by heading directly to:
-👉 [http://localhost:3000](http://localhost:3000)
-
-*(Note: To safeguard CORS policies, ensure you access the app over localhost rather than statically double-clicking `index.html`).*
+*The Dashboard will be accessible at `http://localhost:5173`.*
 
 ---
 
 ## 📂 Project Structure
 
 ```bash
-├── package.json        # Dependencies (Express, SQLite3, Nodemailer, PDFKit)
-├── server.js           # Core backend endpoints & data manipulation engine
-├── index.html          # Primary Single-Page-Application View structure
-├── style.css           # CSS Variables, Design System & Grid layout logic
-├── .gitignore          # Security rules preventing upload of dynamic local data
-└── js/                 # Modularized Application Logic
-    ├── state.js          # Core storage and locale state engine
-    ├── actions.js        # Global dispatch window configurations
-    ├── events.js         # Broad structural DOM Content Handlers 
-    ├── modals.js         # Dialog creation and transition routing
-    ├── receipts.js       # Transaction interception and receipt payload prep
-    ├── rent-engine.js    # Arrears metrics and billing horizon mathematics
-    ├── view-routing.js   # Side-bar view switching configuration
-    └── render.js         # Massive UI/UX rendering engine (Stats, Charts)
+├── backend/
+│   ├── server.js          # Express API & MongoDB/Mock Logic
+│   ├── mock_db.json       # Fallback storage for offline development
+│   └── package.json       # Backend dependencies
+├── frontend/
+│   ├── src/
+│   │   ├── pages/         # Dashboard, Tenants, Payments, Contracts, Utilities
+│   │   ├── context/       # StateContext for global MERN data hydration
+│   │   ├── utils.js       # Formatting and calculation helpers
+│   │   └── App.jsx        # Routing and Layout
+│   ├── index.html         # Google Fonts & Root entry
+│   └── package.json       # Vite & React configurations
+└── README.md              # Project Documentation
 ```
 
 ---
 
-## 🔐 Security & SMTP Guidelines
+## 🔐 Data Security
+- **Local Persistence**: All data is stored in your MongoDB instance.
+- **Mock Mode**: When in mock mode, data is saved to `backend/mock_db.json` (ensure this is ignored in production).
+- **Computer-Generated Receipts**: Receipts are generated client-side for privacy and speed, requiring no server-side signature.
 
-When interacting with the Email Receipt functionality located inside the **Configure SMTP** dashboard module:
-1. We recommended you utilize **App Passwords** (often generated statically from your Google or Microsoft Provider) rather than primary personal passwords to guarantee authorization bounds context.
-2. The `aura.db` file is fully ignored from public syncing natively via `.gitignore`, permanently restricting any risk of leaking sensitive tenant configurations or saved SMTP hashes upstream to GitHub.
+---
+
+## 📄 License
+This project is licensed under the MIT License. Built with ❤️ by the Property Manager Pro Team.

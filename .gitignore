@@ -1,6 +1,11 @@
 node_modules/
+backend/node_modules/
+backend/mock_db.json
+frontend/node_modules/
+frontend/dist/
 aura.db
 aura.db-shm
 aura.db-wal
 .env
 .DS_Store
+*.local
