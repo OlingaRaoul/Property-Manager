@@ -15,6 +15,10 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+app.get('/', (req, res) => {
+    res.json({ message: 'Property Manager Pro API is live 🚀', status: isConnected() ? 'connected' : 'mock-mode' });
+});
+
 const MOCK_DB_PATH = path.join(__dirname, 'mock_db.json');
 
 // Memory storage for mock mode
@@ -48,7 +52,8 @@ mongoose.connect(process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/property_
 }).then(() => {
     console.log('✅ Connected to MongoDB Backend Database');
 }).catch(err => {
-    console.warn('⚠️ MongoDB Connection Failed. Backend will use Mock JSON Mode.');
+    console.error('❌ MongoDB Connection ERROR:', err.message);
+    console.warn('⚠️ Falling back to Mock JSON Mode.');
 });
 
 const isConnected = () => mongoose.connection.readyState === 1;
