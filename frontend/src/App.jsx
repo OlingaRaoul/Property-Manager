@@ -27,7 +27,7 @@ function App() {
           <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
           <main className="main-content">
             <Header onMenuClick={toggleSidebar} />
-            <div className="container" style={{ paddingTop: '1rem' }}>
+            <div className="container">
               <Routes>
                 <Route path="/" element={<Dashboard />} />
                 <Route path="/properties" element={<Properties />} />
