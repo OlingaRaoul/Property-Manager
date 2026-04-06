@@ -1,11 +1,11 @@
 import { useAppState } from '../context/StateContext';
 import { Users, Building, Wallet, AlertCircle } from 'lucide-react';
 
-const StatCard = ({ title, value, subtext, icon: Icon, colorClass, bgClass }) => (
-    <div className="stat-card" style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '1.5rem', padding: '1.75rem' }}>
+const StatCard = ({ title, value, icon: Icon, colorClass, bgClass }) => (
+    <div className="stat-card" style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '1rem', padding: '1.25rem' }}>
         <div className="stat-icon-bg" style={{ 
-            width: '60px', 
-            height: '60px', 
+            width: '45px', 
+            height: '45px', 
             borderRadius: '50%', 
             background: `var(--bd-${bgClass}-soft)`, 
             color: `var(--bd-${colorClass})`,
@@ -14,11 +14,11 @@ const StatCard = ({ title, value, subtext, icon: Icon, colorClass, bgClass }) =>
             justifyContent: 'center',
             flexShrink: 0
         }}>
-            <Icon size={26} />
+            <Icon size={20} />
         </div>
         <div>
-            <div className="stat-label" style={{ color: '#718EBF', fontSize: '0.85rem', fontWeight: '500', marginBottom: '0.4rem' }}>{title}</div>
-            <div className="stat-value" style={{ fontSize: '1.6rem', fontWeight: '800', color: '#343C6A' }}>{value}</div>
+            <div className="stat-label" style={{ color: '#718EBF', fontSize: '0.75rem', fontWeight: '500', marginBottom: '0.2rem', letterSpacing: '0.5px' }}>{title}</div>
+            <div className="stat-value" style={{ fontSize: '1.3rem', fontWeight: '800', color: '#343C6A' }}>{value}</div>
         </div>
     </div>
 );
