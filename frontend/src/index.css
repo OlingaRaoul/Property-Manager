@@ -321,7 +321,22 @@ body {
 
     .view-header > div {
         width: 100%;
-        justify-content: space-between;
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 1rem !important;
+    }
+
+    .search-box {
+        width: 100% !important;
+    }
+
+    .search-box input {
+        width: 100% !important;
+    }
+
+    .btn {
+        width: 100% !important;
+        justify-content: center !important;
     }
 
     .main-content {
