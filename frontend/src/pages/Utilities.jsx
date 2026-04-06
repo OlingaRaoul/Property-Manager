@@ -211,14 +211,14 @@ const Utilities = () => {
     });
 
     return (
-        <div className="animate-fade-in">
+        <div className="view-container animate-fade-in" style={{ paddingTop: '1.25rem' }}>
             {/* ── Header ── */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '2.5rem' }}>
-                <div>
-                    <h2 style={{ fontSize: '2rem', fontWeight: '800', color: '#343C6A', margin: 0, fontFamily: '"Sora","Outfit",sans-serif', letterSpacing: '-0.5px' }}>
-                        Utilities
+            <div className="view-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2.5rem', flexWrap: 'wrap', gap: '1.5rem' }}>
+                <div style={{ flex: '1', minWidth: '280px' }}>
+                    <h2 style={{ fontSize: '1.25rem', fontWeight: '800', color: '#343C6A', margin: 0, fontFamily: '"Sora", "Outfit", sans-serif', letterSpacing: '-0.5px' }}>
+                        Utilities Tracking
                     </h2>
-                    <p style={{ color: '#718EBF', fontSize: '0.9rem', margin: '0.35rem 0 0', fontWeight: '500' }}>
+                    <p style={{ color: '#718EBF', fontSize: '0.75rem', margin: '0.25rem 0 0', fontWeight: '500' }}>
                         Track electricity, water and gas consumption per unit
                     </p>
                 </div>
