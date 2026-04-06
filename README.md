@@ -8,6 +8,11 @@ A premium, state-of-the-art property management suite migrated from legacy monol
 
 ---
 
+### 🚀 Live Demo
+### 👉 [**View Property Manager Pro Live**](https://property-manager-xi-pearl.vercel.app/)
+
+---
+
 ## ✨ Key Features
 
 ### 📊 Portfolio Dashboard
@@ -104,6 +109,11 @@ npm run dev
 - **Local Persistence**: All data is stored in your MongoDB instance.
 - **Mock Mode**: When in mock mode, data is saved to `backend/mock_db.json` (ensure this is ignored in production).
 - **Computer-Generated Receipts**: Receipts are generated client-side for privacy and speed, requiring no server-side signature.
+
+## ☁️ Cloud Deployment
+- **Frontend**: Hosted on **Vercel** ([Live Link](https://property-manager-xi-pearl.vercel.app/))
+- **Backend API**: Hosted on **Render** (Auto-deploys on every commit)
+- **Database**: **MongoDB Atlas** (Shared M0 Cluster)
 
 ---
 
