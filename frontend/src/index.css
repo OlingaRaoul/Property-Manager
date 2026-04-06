@@ -162,12 +162,23 @@ body {
     transition: all 0.2s;
 }
 
-.mobile-menu-btn:active {
-    background: var(--border-light);
-    transform: scale(0.95);
+.close-sidebar-btn {
+    display: none;
+    position: absolute;
+    right: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    color: var(--text-main);
+    cursor: pointer;
 }
 
 @media (max-width: 1024px) {
+    .close-sidebar-btn {
+        display: block;
+    }
+    
     :root {
         --sidebar-width: 260px;
     }

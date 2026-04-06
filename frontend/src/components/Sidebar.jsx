@@ -1,12 +1,16 @@
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Building2, Users, CreditCard, Settings, Zap, FileText } from 'lucide-react';
+import { LayoutDashboard, Building2, Users, CreditCard, Settings, Zap, FileText, X } from 'lucide-react';
 
 const Sidebar = ({ isOpen, onClose }) => {
   return (
     <aside className={`sidebar ${isOpen ? 'open' : ''}`}>
-      <div className="logo">
-        <div style={{ width: '32px', height: '32px', flexShrink: 0, background: 'var(--primary)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 900, fontSize: '1.1rem' }}>A</div>
-        <span className="logo-text">Property Manager Admin</span>
+      <div className="logo" style={{ position: 'relative' }}>
+          <div style={{ width: '32px', height: '32px', flexShrink: 0, background: 'var(--primary)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 900, fontSize: '1.1rem' }}>A</div>
+          <span className="logo-text">Property Manager Admin</span>
+          
+          <button className="close-sidebar-btn" onClick={onClose}>
+            <X size={24} />
+          </button>
       </div>
 
       <nav className="nav-menu">
