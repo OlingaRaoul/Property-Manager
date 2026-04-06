@@ -139,30 +139,29 @@ const Tenants = () => {
     );
 
     return (
-        <div className="animate-fade-in">
-            {/* ── Header ── */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '2.5rem' }}>
-                {/* Left: title + button stacked */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                    <h2 style={{
-                        fontSize: '2rem',
-                        fontWeight: '800',
-                        color: '#343C6A',
-                        margin: 0,
+        <div className="view-container animate-fade-in" style={{ paddingTop: '1.25rem' }}>
+            <div className="view-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2.5rem', flexWrap: 'wrap', gap: '1.5rem' }}>
+                {/* Left: title + add button */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', flexWrap: 'wrap', width: '100%', justifyContent: 'space-between' }}>
+                    <h2 style={{ 
+                        fontSize: '1.25rem', 
+                        fontWeight: '800', 
+                        color: '#343C6A', 
+                        margin: 0, 
                         fontFamily: '"Sora", "Outfit", sans-serif',
                         letterSpacing: '-0.5px',
                         lineHeight: 1.1,
                     }}>
                         Tenant Registry
                     </h2>
-                    <button className="btn" style={btnBlue(false)} onClick={openCreate}>
-                        <UserPlus size={18} /> Add Tenant
-                    </button>
-                </div>
-
-                {/* Right: search only */}
-                <div className="search-box">
-                    <input type="text" placeholder="Search by name or email..." value={search} onChange={e => setSearch(e.target.value)} />
+                    <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                        <button className="btn" style={btnBlue(false)} onClick={openCreate}>
+                            <UserPlus size={18} /> Add Tenant
+                        </button>
+                        <div className="search-box">
+                            <input type="text" placeholder="Search..." value={search} onChange={e => setSearch(e.target.value)} />
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -172,7 +171,7 @@ const Tenants = () => {
                     No tenants found. Click <strong>Add Tenant</strong> to get started.
                 </div>
             )}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '2rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1.5rem' }}>
                 {filteredTenants.map(tenantObj => {
                     const apartment = state.apartments.find(a => String(a.id) === String(tenantObj.apartmentId));
                     const property  = apartment ? state.properties.find(p => String(p.id) === String(apartment.propertyId)) : null;

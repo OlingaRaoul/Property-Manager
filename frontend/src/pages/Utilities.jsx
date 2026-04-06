@@ -227,20 +227,20 @@ const Utilities = () => {
                 </button>
             </div>
 
-            {/* ── Stats strip ── */}
-            <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(3,1fr)', marginBottom: '2rem' }}>
+            {/* ── Stats ── */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '1rem', marginBottom: '2.5rem' }}>
                 {[
                     { icon: BarChart3,   label: 'Total Readings',   value: totalReadings,                                                      color: '#2D60FF', bg: '#EEF2FF' },
                     { icon: DollarSign,  label: 'Total Billed',     value: `${totalBilled.toLocaleString()} ${state.settings.currency}`,       color: '#15803D', bg: '#DCFCE7' },
                     { icon: Clock,       label: 'Outstanding',      value: `${totalUnpaid.toLocaleString()} ${state.settings.currency}`,       color: '#B91C1C', bg: '#FEE2E2' },
                 ].map((s, i) => (
-                    <div key={i} className="stat-card" style={{ display: 'flex', alignItems: 'center', gap: '1rem', padding: '1.5rem' }}>
-                        <div style={{ width: '48px', height: '48px', borderRadius: '14px', background: s.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                            <s.icon size={22} color={s.color} />
+                    <div key={i} className="stat-card" style={{ display: 'flex', alignItems: 'center', gap: '1rem', padding: '1rem' }}>
+                        <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: s.bg, color: s.color, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <s.icon size={18} />
                         </div>
                         <div>
-                            <div style={{ fontSize: '0.75rem', color: '#718EBF', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{s.label}</div>
-                            <div style={{ fontSize: '1.4rem', fontWeight: '800', color: '#343C6A', fontFamily: 'Outfit' }}>{s.value}</div>
+                            <div style={{ fontSize: '0.65rem', color: '#718EBF', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{s.label}</div>
+                            <div style={{ fontSize: '1.1rem', fontWeight: '800', color: '#343C6A', fontFamily: 'Outfit' }}>{s.value}</div>
                         </div>
                     </div>
                 ))}
@@ -248,26 +248,29 @@ const Utilities = () => {
 
             {/* ── Filters ── */}
             <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
-                <div className="search-box" style={{ flex: 1, minWidth: '200px' }}>
-                    <input type="text" placeholder="Search by tenant or unit..." value={search} onChange={e => setSearch(e.target.value)} />
+                <div className="search-box" style={{ flex: '1 1 100%', minWidth: '100%', marginBottom: '0.5rem' }}>
+                    <input type="text" placeholder="Search by tenant or unit..." value={search} onChange={e => setSearch(e.target.value)} style={{ width: '100%' }} />
                 </div>
-                {['All', ...UTILITY_TYPES.map(t => t.value)].map(t => (
-                    <button key={t} onClick={() => setFilterType(t)} style={{
-                        padding: '0.5rem 1.1rem', borderRadius: '40px', fontWeight: '600', fontSize: '0.82rem',
-                        cursor: 'pointer', border: 'none',
-                        background: filterType === t ? '#2D60FF' : '#F5F7FA',
-                        color:      filterType === t ? '#fff'    : '#718EBF',
-                    }}>{t}</button>
-                ))}
-                <div style={{ width: '1px', height: '24px', background: '#E6EFF5' }} />
-                {['All', 'Unpaid', 'Paid'].map(s => (
-                    <button key={s} onClick={() => setFilterStatus(s)} style={{
-                        padding: '0.5rem 1.1rem', borderRadius: '40px', fontWeight: '600', fontSize: '0.82rem',
-                        cursor: 'pointer', border: 'none',
-                        background: filterStatus === s ? (s === 'Paid' ? '#15803D' : s === 'Unpaid' ? '#B91C1C' : '#343C6A') : '#F5F7FA',
-                        color:      filterStatus === s ? '#fff' : '#718EBF',
-                    }}>{s}</button>
-                ))}
+                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', width: '100%' }}>
+                    {['All', ...UTILITY_TYPES.map(t => t.value)].map(t => (
+                        <button key={t} onClick={() => setFilterType(t)} style={{
+                            padding: '0.5rem 1rem', borderRadius: '40px', fontWeight: '600', fontSize: '0.75rem',
+                            cursor: 'pointer', border: 'none',
+                            background: filterType === t ? '#2D60FF' : '#F5F7FA',
+                            color:      filterType === t ? '#fff'    : '#718EBF',
+                        }}>{t}</button>
+                    ))}
+                </div>
+                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', width: '100%', marginTop: '0.5rem' }}>
+                    {['All', 'Unpaid', 'Paid'].map(s => (
+                        <button key={s} onClick={() => setFilterStatus(s)} style={{
+                            padding: '0.5rem 1rem', borderRadius: '40px', fontWeight: '600', fontSize: '0.75rem',
+                            cursor: 'pointer', border: 'none',
+                            background: filterStatus === s ? (s === 'Paid' ? '#15803D' : s === 'Unpaid' ? '#B91C1C' : '#343C6A') : '#F5F7FA',
+                            color:      filterStatus === s ? '#fff' : '#718EBF',
+                        }}>{s}</button>
+                    ))}
+                </div>
             </div>
 
             {/* ── Empty state ── */}

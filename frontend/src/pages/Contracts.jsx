@@ -218,14 +218,14 @@ const Contracts = () => {
         .reduce((s, c) => s + (c.deposit || 0), 0);
 
     return (
-        <div className="animate-fade-in">
+        <div className="view-container animate-fade-in" style={{ paddingTop: '1.25rem' }}>
             {/* ── Header ── */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '2.5rem' }}>
-                <div>
-                    <h2 style={{ fontSize: '2rem', fontWeight: '800', color: '#343C6A', margin: 0, fontFamily: '"Sora", "Outfit", sans-serif', letterSpacing: '-0.5px' }}>
-                        Contracts
+            <div className="view-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2.5rem', flexWrap: 'wrap', gap: '1.5rem' }}>
+                <div style={{ flex: '1', minWidth: '280px' }}>
+                    <h2 style={{ fontSize: '1.25rem', fontWeight: '800', color: '#343C6A', margin: 0, fontFamily: '"Sora", "Outfit", sans-serif', letterSpacing: '-0.5px' }}>
+                        Lease Contracts
                     </h2>
-                    <p style={{ color: '#718EBF', fontSize: '0.9rem', margin: '0.35rem 0 0', fontWeight: '500' }}>
+                    <p style={{ color: '#718EBF', fontSize: '0.75rem', margin: '0.25rem 0 0', fontWeight: '500' }}>
                         Manage rental agreements and track payment obligations
                     </p>
                 </div>
@@ -235,19 +235,19 @@ const Contracts = () => {
             </div>
 
             {/* ── Stats strip ── */}
-            <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)', marginBottom: '2rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '1rem', marginBottom: '2.5rem' }}>
                 {[
                     { label: 'Active Contracts', value: activeCount, color: '#15803D', bg: '#DCFCE7' },
                     { label: 'Expired / Terminated', value: expiredCount, color: '#B91C1C', bg: '#FEE2E2' },
                     { label: 'Total Deposits Held', value: `${totalDeposit.toLocaleString()} ${state.settings.currency}`, color: '#2D60FF', bg: '#EFF6FF' },
                 ].map((s, i) => (
-                    <div key={i} className="stat-card" style={{ display: 'flex', alignItems: 'center', gap: '1rem', padding: '1.5rem' }}>
-                        <div style={{ width: '48px', height: '48px', borderRadius: '14px', background: s.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                            <FileText size={22} color={s.color} />
+                    <div key={i} className="stat-card" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '1rem' }}>
+                        <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: s.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                            <FileText size={18} color={s.color} />
                         </div>
                         <div>
-                            <div style={{ fontSize: '0.78rem', color: '#718EBF', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{s.label}</div>
-                            <div style={{ fontSize: '1.5rem', fontWeight: '800', color: '#343C6A', fontFamily: 'Outfit' }}>{s.value}</div>
+                            <div style={{ fontSize: '0.6rem', color: '#718EBF', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{s.label}</div>
+                            <div style={{ fontSize: '1.1rem', fontWeight: '800', color: '#343C6A', fontFamily: 'Outfit' }}>{s.value}</div>
                         </div>
                     </div>
                 ))}
