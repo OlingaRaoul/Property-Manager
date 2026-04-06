@@ -339,15 +339,15 @@ const Payments = () => {
     };
 
     return (
-        <div className="animate-fade-in">
+        <div className="animate-fade-in view-container" style={{ paddingTop: '1.25rem' }}>
             {/* ── Header ── */}
-            <div className="view-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2.5rem' }}>
+            <div className="view-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2.5rem', flexWrap: 'wrap', gap: '1.5rem' }}>
                 <h2 style={{ fontSize: '1.25rem', fontWeight: '800', color: '#343C6A', margin: 0, fontFamily: 'Outfit' }}>Payment Ledger History</h2>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
                     <div className="search-box">
                         <input type="text" placeholder="Filter by tenant..." value={search} onChange={e => setSearch(e.target.value)} />
                     </div>
-                    <button className="btn" style={btnBlue(false)} onClick={openModal}>
+                    <button className="btn" style={{ ...btnBlue(false), whiteSpace: 'nowrap' }} onClick={openModal}>
                         <PlusCircle size={18} /> Register Payment
                     </button>
                 </div>

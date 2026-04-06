@@ -35,7 +35,7 @@ const Dashboard = () => {
     const totalDue = overdueCount * 1400; // Mock calculation based on screenshot
 
     return (
-        <div className="animate-fade-in" style={{ padding: '0 1rem' }}>
+        <div className="view-container" style={{ paddingTop: '1.25rem' }}>
             <div className="stats-grid" style={{ gap: '1.5rem', marginBottom: '2.5rem' }}>
                 <StatCard 
                     title="ACTIVE TENANTS" 

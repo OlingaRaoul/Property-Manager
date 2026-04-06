@@ -308,6 +308,22 @@ body {
         transform: translateX(0);
     }
     
+    .view-container {
+        padding: 0 1.25rem 2rem !important;
+    }
+
+    .view-header {
+        flex-direction: column !important;
+        align-items: flex-start !important;
+        gap: 1.25rem !important;
+        margin-bottom: 2rem !important;
+    }
+
+    .view-header > div {
+        width: 100%;
+        justify-content: space-between;
+    }
+
     .main-content {
         margin-left: 0 !important;
         padding: 0 !important;
