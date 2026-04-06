@@ -243,6 +243,10 @@ body {
 }
 
 @media (max-width: 768px) {
+    .hide-mobile {
+        display: none !important;
+    }
+
     .top-bar-actions .search-box {
         display: none !important;
     }
