@@ -341,7 +341,7 @@ body {
         top: 0.5rem;
         z-index: 900;
         margin: 0.25rem 0.65rem !important;
-        padding: calc(0.75rem + env(safe-area-inset-top, 0px)) 1rem 0.75rem !important;
+        padding: calc(0.75rem + env(safe-area-inset-top, 0px)) 0.75rem 0.75rem !important;
         height: auto;
         min-height: calc(80px + env(safe-area-inset-top, 0px));
         background-color: var(--bg-sidebar);
