@@ -220,35 +220,78 @@ app.delete('/api/utilities/:id', async (req, res) => {
     try { await Utility.findOneAndDelete({ id: req.params.id }); res.json({ status: 'success' }); } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// Utility Seed endpoint
-app.post('/api/seed', async (req, res) => {
+// Enhanced Seed endpoint - Visit this in your browser to reset/populate data
+app.get('/api/seed', async (req, res) => {
     const demo = {
         properties: [
-            { id: 'p1', name: 'Westside Towers', address: '123 Main St' },
-            { id: 'p2', name: 'Azure Heights', address: '45 Skyway' }
+            { id: 'p1', name: 'Westside Towers', address: '123 Main St, Nairobi' },
+            { id: 'p2', name: 'Azure Heights', address: '45 Skyway, Kigali' },
+            { id: 'p3', name: 'Riverside Villas', address: '78 River Rd, Mombasa' }
         ],
         apartments: [
             { id: 'a1', propertyId: 'p1', unitNumber: 'Apt 304', type: 'Studio' },
-            { id: 'a2', propertyId: 'p1', unitNumber: 'Apt 102', type: 'Room' }
+            { id: 'a2', propertyId: 'p1', unitNumber: 'Apt 102', type: 'Room' },
+            { id: 'a3', propertyId: 'p2', unitNumber: 'Unit 12', type: 'Shop' },
+            { id: 'a4', propertyId: 'p2', unitNumber: 'Unit 15', type: 'Office' },
+            { id: 'a5', propertyId: 'p3', unitNumber: 'Villa 1', type: 'House' }
         ],
         tenants: [
-            { id: 't1', name: 'Sarah Chen', apartmentId: 'a1', rentAmount: 2850, dueDateDay: 1, lastPaidMonth: '2026-04' }
+            { id: 't1', name: 'Sarah Chen', email: 'sarah@example.com', phone: '+254 700 111222', apartmentId: 'a1', rentAmount: 2500, balance: 0 },
+            { id: 't2', name: 'John Kamau', email: 'john@example.com', phone: '+254 722 333444', apartmentId: 'a2', rentAmount: 1800, balance: 0 },
+            { id: 't3', name: 'Fatima Ahmed', email: 'fatima@example.com', phone: '+250 788 555666', apartmentId: 'a3', rentAmount: 9500, balance: 0 },
+            { id: 't4', name: 'Robert Smith', email: 'robert@example.com', phone: '+254 755 999888', apartmentId: 'a5', rentAmount: 12000, balance: 0 }
+        ],
+        contracts: [
+            { id: 'c1', tenantId: 't1', rentAmount: 2500, depositAmount: 2500, startDate: '2025-01-01', endDate: '2026-01-01', agreedPaymentDay: 5, status: 'Active' },
+            { id: 'c2', tenantId: 't2', rentAmount: 1800, depositAmount: 1800, startDate: '2025-02-15', endDate: '2026-02-15', agreedPaymentDay: 1, status: 'Active' },
+            { id: 'c3', tenantId: 't3', rentAmount: 9500, depositAmount: 9500, startDate: '2025-03-01', endDate: '2026-03-01', agreedPaymentDay: 30, status: 'Active' }
+        ],
+        payments: [
+            { id: 'pay1', tenantId: 't1', apartmentId: 'a1', amount: 2500, monthPaid: '2026-03', date: '2026-03-05', type: 'Rent' },
+            { id: 'pay2', tenantId: 't1', apartmentId: 'a1', amount: 2500, monthPaid: '2026-04', date: '2026-04-02', type: 'Rent' },
+        ],
+        utilities: [
+            { id: 'u1', apartmentId: 'a1', tenantId: 't1', type: 'Electricity', month: '2026-03', date: '2026-03-31', lastReading: 1200, currentReading: 1350, unitsConsumed: 150, ratePerUnit: 12, amount: 1800, status: 'Paid' },
+            { id: 'u2', apartmentId: 'a1', tenantId: 't1', type: 'Water', month: '2026-03', date: '2026-03-31', lastReading: 450, currentReading: 465, unitsConsumed: 15, ratePerUnit: 45, amount: 675, status: 'Unpaid' }
+        ],
+        settings: [
+            { id: 's1', currency: 'KES', lang: 'en', notificationThresholdDays: 5 }
         ]
     };
-    if (!isConnected()) {
-        mockData = { ...mockData, ...demo };
-        saveMock();
-        return res.json({ message: 'Seeded successfully (Mock Mode)' });
-    }
+
     try {
-        await Property.deleteMany({});
-        await Apartment.deleteMany({});
-        await Tenant.deleteMany({});
-        await Property.insertMany(demo.properties);
-        await Apartment.insertMany(demo.apartments);
-        await Tenant.insertMany(demo.tenants);
-        res.json({ message: 'Seeded successfully (Mongo Mode)' });
-    } catch (e) { res.status(500).json({ error: e.message }); }
+        if (!isConnected()) {
+            mockData = { ...mockData, ...demo };
+            saveMock();
+            return res.json({ message: 'Seeded successfully (Mock Mode)', data: demo });
+        }
+
+        // Complete database reset
+        await Promise.all([
+            Property.deleteMany({}),
+            Apartment.deleteMany({}),
+            Tenant.deleteMany({}),
+            Contract.deleteMany({}),
+            Payment.deleteMany({}),
+            Utility.deleteMany({}),
+            Setting.deleteMany({})
+        ]);
+
+        await Promise.all([
+            Property.insertMany(demo.properties),
+            Apartment.insertMany(demo.apartments),
+            Tenant.insertMany(demo.tenants),
+            Contract.insertMany(demo.contracts),
+            Payment.insertMany(demo.payments),
+            Utility.insertMany(demo.utilities),
+            Setting.insertMany(demo.settings)
+        ]);
+
+        res.json({ status: 'success', message: 'MERN Cloud Database seeded successfully!', data: demo });
+    } catch (e) { 
+        console.error('Seed Error:', e);
+        res.status(500).json({ error: e.message }); 
+    }
 });
 
 // SMTP Settings and Send Receipt
