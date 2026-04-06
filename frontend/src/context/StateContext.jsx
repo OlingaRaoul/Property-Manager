@@ -14,7 +14,7 @@ export const StateProvider = ({ children }) => {
         unit_types: [],
         contracts: [],
         utilities: [],
-        settings: { currency: '$', lang: 'en', notificationThresholdDays: 3 }
+        settings: { currency: 'FCFA', lang: 'en', notificationThresholdDays: 3 }
     });
     const [loading, setLoading] = useState(true);
 
