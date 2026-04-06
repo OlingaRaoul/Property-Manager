@@ -1,9 +1,9 @@
 import React from 'react';
 import { useLocation } from 'react-router-dom';
 import { useAppState } from '../context/StateContext';
-import { Bell, Shield, Search } from 'lucide-react';
+import { Bell, Shield, Search, Menu } from 'lucide-react';
 
-const Header = () => {
+const Header = ({ onMenuClick }) => {
     const location = useLocation();
     const { state } = useAppState();
 
@@ -16,7 +16,12 @@ const Header = () => {
 
     return (
         <header className="top-bar">
-            <h1>{getTitle()}</h1>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                <button className="mobile-menu-btn" onClick={onMenuClick}>
+                    <Menu size={24} />
+                </button>
+                <h1>{getTitle()}</h1>
+            </div>
             <div className="top-bar-actions">
                 <div className="search-box">
                     <Search size={18} />

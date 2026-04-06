@@ -1,3 +1,4 @@
+import React, { useState } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { StateProvider } from './context/StateContext';
 import Sidebar from './components/Sidebar';
@@ -12,13 +13,20 @@ import Contracts from './pages/Contracts';
 import './index.css';
 
 function App() {
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const toggleSidebar = () => setSidebarOpen(!sidebarOpen);
+
   return (
     <StateProvider>
       <Router>
         <div className="app-container">
-          <Sidebar />
+          <div 
+            className={`sidebar-overlay ${sidebarOpen ? 'active' : ''}`} 
+            onClick={() => setSidebarOpen(false)} 
+          />
+          <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
           <main className="main-content">
-            <Header />
+            <Header onMenuClick={toggleSidebar} />
             <div className="container" style={{ paddingTop: '1rem' }}>
               <Routes>
                 <Route path="/" element={<Dashboard />} />
