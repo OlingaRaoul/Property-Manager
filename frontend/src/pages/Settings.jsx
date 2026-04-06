@@ -41,7 +41,7 @@ const Settings = () => {
     };
 
     return (
-        <div className="animate-fade-in">
+        <div className="view-container animate-fade-in" style={{ paddingTop: '1.25rem' }}>
             <div className="view-header" style={{ marginBottom: '2.5rem' }}>
                 <h2 style={{ fontSize: '1.25rem', fontWeight: '800', color: '#343C6A', margin: 0, fontFamily: 'Outfit' }}>Application Settings</h2>
             </div>
