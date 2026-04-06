@@ -828,22 +828,16 @@ body {
 
 .animate-pop-in { animation: popIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
 
-/* Responsive adjustments */
-@media (max-width: 1024px) {
-    .sidebar {
-        width: 100px;
-        padding: 2rem 0.75rem;
-    }
-    .logo-text, .nav-item span { display: none; }
-    .nav-item { justify-content: center; }
-}
-
-@media (max-width: 768px) {
-    .app-container { flex-direction: column; }
-    .sidebar { width: 100%; height: auto; border-right: none; border-bottom: 1px solid var(--border-light); padding: 1rem; }
-    .nav-menu { flex-direction: row; justify-content: space-around; }
-    .logo { margin-bottom: 0; }
-    .main-content { padding: 1.5rem; }
+/* Modern Utility Classes */
+.loader {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 200px;
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--primary);
+    gap: 1rem;
 }
 
 /* Loader */
