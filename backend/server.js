@@ -255,7 +255,9 @@ app.get('/api/seed', async (req, res) => {
             { id: 'u2', apartmentId: 'a1', tenantId: 't1', type: 'Water', month: '2026-03', date: '2026-03-31', lastReading: 450, currentReading: 465, unitsConsumed: 15, ratePerUnit: 45, amount: 675, status: 'Unpaid' }
         ],
         settings: [
-            { id: 's1', currency: 'KES', lang: 'en', notificationThresholdDays: 5 }
+            { key: 'currency', value: 'KES' },
+            { key: 'lang', value: 'en' },
+            { key: 'notificationThresholdDays', value: '5' }
         ]
     };
 

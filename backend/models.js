@@ -20,19 +20,26 @@ const TenantSchema = new mongoose.Schema({
     id: { type: String, required: true, unique: true },
     name: { type: String, required: true },
     email: { type: String, default: "" },
+    phone: { type: String, default: "" },
     apartmentId: { type: String, ref: 'Apartment' },
     rentAmount: { type: Number, default: 0 },
     dueDateDay: { type: Number, default: 1 },
-    lastPaidMonth: { type: String, default: "" }
+    lastPaidMonth: { type: String, default: "" },
+    balance: { type: Number, default: 0 }
 });
 
 // Payment Schema
 const PaymentSchema = new mongoose.Schema({
     id: { type: String, required: true, unique: true },
     tenantId: { type: String, ref: 'Tenant' },
+    apartmentId: { type: String, ref: 'Apartment' },
     amount: { type: Number, default: 0 },
     date: { type: String },
-    monthPaid: { type: String }
+    monthPaid: { type: String },
+    monthList: [{ type: String }],
+    totalAmount: { type: Number },
+    type: { type: String, default: 'Rent' },
+    note: { type: String }
 });
 
 // UnitType Schema
@@ -47,8 +54,11 @@ const ContractSchema = new mongoose.Schema({
     tenantId: { type: String, ref: 'Tenant' },
     startDate: { type: String },
     endDate: { type: String },
+    rentAmount: { type: Number },
+    depositAmount: { type: Number },
+    agreedPaymentDay: { type: Number },
     terms: { type: String },
-    status: { type: String }
+    status: { type: String, default: 'Active' }
 });
 
 // Utility Schema
@@ -59,10 +69,13 @@ const UtilitySchema = new mongoose.Schema({
     type: { type: String, required: true },
     lastReading: { type: Number, default: 0 },
     currentReading: { type: Number, default: 0 },
+    unitsConsumed: { type: Number, default: 0 },
+    ratePerUnit: { type: Number, default: 0 },
     amount: { type: Number, default: 0 },
     date: { type: String },
     status: { type: String, default: 'Unpaid' },
-    month: { type: String }
+    month: { type: String },
+    note: { type: String }
 });
 
 // Setting Schema
