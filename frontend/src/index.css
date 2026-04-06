@@ -233,9 +233,14 @@ body {
     }
 
     .top-bar {
+        position: sticky;
+        top: 0;
+        z-index: 900;
         padding: calc(0.75rem + env(safe-area-inset-top, 0px)) 1rem 0.75rem !important;
         height: auto;
         min-height: calc(80px + env(safe-area-inset-top, 0px));
+        background-color: var(--bg-sidebar);
+        border-bottom: 1px solid var(--border-light);
     }
 
     .sidebar {
