@@ -297,9 +297,9 @@ const Utilities = () => {
                     <div key={prop.id} className="animate-slide-in" style={{ background: '#fff', border: '1px solid #E6EFF5', borderRadius: '20px', overflow: 'hidden', marginBottom: '1.25rem', boxShadow: 'var(--card-shadow)' }}>
                         {/* Property header */}
                         <div onClick={() => setExpandedProps(prev => ({ ...prev, [prop.id]: !isExpanded }))}
-                            style={{ padding: '1.25rem 1.5rem', background: '#F9FAFB', borderBottom: '1px solid #E6EFF5', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
-                                <div style={{ width: '42px', height: '42px', borderRadius: '12px', background: '#EEF2FF', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            style={{ padding: '1.25rem 1.5rem', background: '#F9FAFB', borderBottom: '1px solid #E6EFF5', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', flexWrap: 'wrap', gap: '1rem' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', flex: '1', minWidth: '200px' }}>
+                                <div style={{ width: '42px', height: '42px', borderRadius: '12px', background: '#EEF2FF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                                     <Building2 size={20} color="#2D60FF" />
                                 </div>
                                 <div>
@@ -309,96 +309,95 @@ const Utilities = () => {
                                     </div>
                                 </div>
                             </div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '2rem' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                                 <div style={{ textAlign: 'right' }}>
-                                    <div style={{ fontSize: '0.65rem', color: '#718EBF', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Billed this period</div>
-                                    <div style={{ fontWeight: '800', color: '#343C6A', fontSize: '1rem' }}>{totalBilled.toLocaleString()} {state.settings.currency}</div>
+                                    <div style={{ fontSize: '0.6rem', color: '#718EBF', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Billed</div>
+                                    <div style={{ fontWeight: '800', color: '#343C6A', fontSize: '0.9rem' }}>{totalBilled.toLocaleString()} {state.settings.currency}</div>
                                 </div>
                                 {unpaidCount > 0 && (
-                                    <span style={{ fontSize: '0.72rem', fontWeight: '700', padding: '0.25rem 0.75rem', borderRadius: '40px', background: '#FEE2E2', color: '#B91C1C' }}>
+                                    <span style={{ fontSize: '0.65rem', fontWeight: '800', padding: '0.25rem 0.75rem', borderRadius: '40px', background: '#FEE2E2', color: '#B91C1C', textTransform: 'uppercase' }}>
                                         {unpaidCount} unpaid
                                     </span>
                                 )}
-                                <ChevronDown size={18} color="#718EBF" style={{ transition: 'transform 0.25s', transform: isExpanded ? 'rotate(180deg)' : 'none' }} />
+                                <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: '#fff', border: '1px solid #E6EFF5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                    <ChevronDown size={16} color="#718EBF" style={{ transition: 'transform 0.25s', transform: isExpanded ? 'rotate(180deg)' : 'none' }} />
+                                </div>
                             </div>
                         </div>
 
-                        {/* Table */}
+                        {/* Card List (Replaces Table for better mobile UX) */}
                         {isExpanded && (
-                            <div style={{ padding: '0 1.5rem 1.5rem' }}>
-                                <table className="data-table" style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>
-                                    <thead>
-                                        <tr style={{ fontSize: '0.72rem', textTransform: 'uppercase', color: '#718EBF' }}>
-                                            <th style={{ padding: '1rem 0', borderBottom: '1px solid #E6EFF5', textAlign: 'left' }}>Tenant / Unit</th>
-                                            <th style={{ borderBottom: '1px solid #E6EFF5', textAlign: 'left' }}>Type</th>
-                                            <th style={{ borderBottom: '1px solid #E6EFF5', textAlign: 'left' }}>Period</th>
-                                            <th style={{ borderBottom: '1px solid #E6EFF5', textAlign: 'left' }}>Reading</th>
-                                            <th style={{ borderBottom: '1px solid #E6EFF5', textAlign: 'left' }}>Amount</th>
-                                            <th style={{ borderBottom: '1px solid #E6EFF5', textAlign: 'left' }}>Status</th>
-                                            <th style={{ borderBottom: '1px solid #E6EFF5', textAlign: 'right' }}>Actions</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {propUtils.sort((a, b) => b.date.localeCompare(a.date)).map(u => {
-                                            const tenant = state.tenants.find(t => String(t.id) === String(u.tenantId));
-                                            const apt    = state.apartments.find(a => String(a.id) === String(u.apartmentId));
-                                            const meta   = typesMeta(u.type);
-                                            const sMeta  = STATUS_META[u.status] || STATUS_META.Unpaid;
-                                            const Icon   = meta.icon;
+                            <div style={{ padding: '0 1.25rem 1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                                {propUtils.sort((a, b) => b.date.localeCompare(a.date)).map(u => {
+                                    const tenant = state.tenants.find(t => String(t.id) === String(u.tenantId));
+                                    const apt    = state.apartments.find(a => String(a.id) === String(u.apartmentId));
+                                    const typeMeta = typesMeta(u.type);
+                                    const statusMeta = STATUS_META[u.status] || STATUS_META.Unpaid;
+                                    const Icon    = typeMeta.icon;
 
-                                            return (
-                                                <tr key={u.id} className="payment-row">
-                                                    <td style={{ padding: '1rem 0' }}>
-                                                        <div style={{ fontWeight: '700', color: '#343C6A', fontSize: '0.88rem' }}>{tenant?.name || 'Unknown'}</div>
-                                                        <div style={{ fontSize: '0.72rem', color: '#718EBF' }}>{apt?.unitNumber || '—'}</div>
-                                                    </td>
-                                                    <td>
-                                                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', background: meta.bg, color: meta.color, borderRadius: '6px', padding: '4px 10px', fontSize: '0.8rem', fontWeight: '700' }}>
-                                                            <Icon size={12} /> {u.type}
-                                                        </div>
-                                                    </td>
-                                                    <td>
-                                                        <div style={{ fontSize: '0.82rem', fontWeight: '600', color: '#343C6A' }}>{formatMonth(u.month, lang)}</div>
-                                                        <div style={{ fontSize: '0.7rem', color: '#718EBF' }}>{u.date}</div>
-                                                    </td>
-                                                    <td>
-                                                        <div style={{ fontSize: '0.82rem', color: '#343C6A' }}>
-                                                            {u.lastReading} <span style={{ color: '#718EBF' }}>→</span> {u.currentReading}
-                                                        </div>
-                                                        <div style={{ fontSize: '0.7rem', color: '#718EBF' }}>{u.unitsConsumed ?? (u.currentReading - u.lastReading)} units</div>
-                                                    </td>
-                                                    <td>
-                                                        <div style={{ fontWeight: '800', color: '#343C6A', fontSize: '0.92rem' }}>{(u.amount || 0).toLocaleString()} {state.settings.currency}</div>
-                                                        {u.ratePerUnit && <div style={{ fontSize: '0.7rem', color: '#718EBF' }}>@ {u.ratePerUnit}/unit</div>}
-                                                    </td>
-                                                    <td>
-                                                        <span style={{ fontSize: '0.72rem', fontWeight: '700', padding: '0.3rem 0.85rem', borderRadius: '40px', background: sMeta.bg, color: sMeta.color }}>
-                                                            {sMeta.label}
-                                                        </span>
-                                                    </td>
-                                                    <td style={{ textAlign: 'right' }}>
-                                                        <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'flex-end' }}>
-                                                            <button 
-                                                                title={u.status === 'Unpaid' ? "Mark as Paid" : "Unmark as Paid"} 
-                                                                onClick={() => toggleStatus(u)}
-                                                                style={{ background: 'none', border: 'none', cursor: 'pointer', color: u.status === 'Unpaid' ? '#15803D' : '#718EBF', padding: '4px' }}>
-                                                                {u.status === 'Unpaid' ? <CheckCircle2 size={17} /> : <Undo2 size={17} />}
-                                                            </button>
-                                                            <button title="Edit" onClick={() => openEdit(u)}
-                                                                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#718EBF', padding: '4px' }}>
-                                                                <Edit3 size={15} />
-                                                            </button>
-                                                            <button title="Delete" onClick={() => setDeleteTarget(u)}
-                                                                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#FF4B4A', padding: '4px' }}>
-                                                                <Trash2 size={15} />
-                                                            </button>
-                                                        </div>
-                                                    </td>
-                                                </tr>
-                                            );
-                                        })}
-                                    </tbody>
-                                </table>
+                                    return (
+                                        <div key={u.id} className="animate-slide-in" style={{ 
+                                            background: '#F9FAFB', 
+                                            borderRadius: '16px', 
+                                            padding: '1.25rem', 
+                                            border: '1px solid #E6EFF5',
+                                            display: 'flex',
+                                            flexDirection: 'column',
+                                            gap: '1rem'
+                                        }}>
+                                            {/* Card Top: Tenant & Type */}
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                                <div style={{ display: 'flex', gap: '0.85rem', alignItems: 'center' }}>
+                                                    <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: typeMeta.bg, color: typeMeta.color, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                                        <Icon size={20} />
+                                                    </div>
+                                                    <div>
+                                                        <div style={{ fontWeight: '800', color: '#343C6A', fontSize: '0.95rem' }}>{tenant?.name || 'Unknown'}</div>
+                                                        <div style={{ fontSize: '0.75rem', color: '#718EBF' }}>Unit {apt?.unitNumber || '—'} • {typeMeta.label}</div>
+                                                    </div>
+                                                </div>
+                                                <span style={{ fontSize: '0.65rem', fontWeight: '800', padding: '0.35rem 0.85rem', borderRadius: '40px', background: statusMeta.bg, color: statusMeta.color, textTransform: 'uppercase' }}>
+                                                    {statusMeta.label}
+                                                </span>
+                                            </div>
+
+                                            {/* Card Middle: Reading & Amount */}
+                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', padding: '1rem', background: '#fff', borderRadius: '12px', border: '1px solid #E6EFF5' }}>
+                                                <div>
+                                                    <div style={{ fontSize: '0.65rem', color: '#718EBF', fontWeight: '700', textTransform: 'uppercase', marginBottom: '4px' }}>Consumption</div>
+                                                    <div style={{ fontSize: '0.85rem', fontWeight: '700', color: '#343C6A' }}>
+                                                        {u.lastReading} <span style={{ color: '#BDC3C7', margin: '0 4px' }}>→</span> {u.currentReading}
+                                                    </div>
+                                                    <div style={{ fontSize: '0.7rem', color: '#718EBF', marginTop: '2px' }}>{u.unitsConsumed ?? (u.currentReading - u.lastReading)} units total</div>
+                                                </div>
+                                                <div>
+                                                    <div style={{ fontSize: '0.65rem', color: '#718EBF', fontWeight: '700', textTransform: 'uppercase', marginBottom: '4px' }}>Total Amount</div>
+                                                    <div style={{ fontSize: '1rem', fontWeight: '900', color: '#2D60FF' }}>
+                                                        {(u.amount || 0).toLocaleString()} {state.settings.currency}
+                                                    </div>
+                                                    <div style={{ fontSize: '0.7rem', color: '#718EBF', marginTop: '2px' }}>Reading Date: {u.date}</div>
+                                                </div>
+                                            </div>
+
+                                            {/* Card Bottom: Actions */}
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '0.5rem' }}>
+                                                <div style={{ fontSize: '0.75rem', fontWeight: '600', color: '#718EBF' }}>
+                                                    Period: {formatMonth(u.month, lang)}
+                                                </div>
+                                                <div style={{ display: 'flex', gap: '0.75rem' }}>
+                                                    <button 
+                                                        title={u.status === 'Unpaid' ? "Mark as Paid" : "Unmark as Paid"} 
+                                                        onClick={() => toggleStatus(u)}
+                                                        style={{ background: u.status === 'Unpaid' ? '#DCFCE7' : '#F1F5F9', border: 'none', cursor: 'pointer', color: u.status === 'Unpaid' ? '#15803D' : '#718EBF', padding: '8px', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.75rem', fontWeight: '700' }}>
+                                                        {u.status === 'Unpaid' ? <><CheckCircle2 size={16} /> Pay</> : <><Undo2 size={16} /> Undo</>}
+                                                    </button>
+                                                    <button onClick={() => openEdit(u)} style={{ background: '#F5F7FA', border: 'none', color: '#718EBF', padding: '8px', borderRadius: '8px' }}><Edit3 size={16} /></button>
+                                                    <button onClick={() => setDeleteTarget(u)} style={{ background: '#FEE2E2', border: 'none', color: '#FF4B4A', padding: '8px', borderRadius: '8px' }}><Trash2 size={16} /></button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
                             </div>
                         )}
                     </div>
