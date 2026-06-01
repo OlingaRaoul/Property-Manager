@@ -299,7 +299,7 @@ const Contracts = () => {
                                 {/* Left: tenant + property info */}
                                 <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
                                     <div style={{ width: '52px', height: '52px', borderRadius: '50%', overflow: 'hidden', border: '2px solid #E7EDFF', flexShrink: 0 }}>
-                                        <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${tenant?.name || 'default'}`} style={{ width: '100%', height: '100%' }} alt="" />
+                                        <img src={`https://robohash.org/${tenant?.name ? encodeURIComponent(tenant.name) : 'default'}?set=set4`} style={{ width: '100%', height: '100%', background: '#F5F7FA' }} alt="" />
                                     </div>
                                     <div>
                                         <div style={{ fontWeight: '800', fontSize: '1.05rem', color: '#343C6A' }}>{tenant?.name || 'Unknown Tenant'}</div>

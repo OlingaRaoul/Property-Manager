@@ -1,19 +1,22 @@
 import { NavLink } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import { LayoutDashboard, Building2, Users, CreditCard, Settings, Zap, FileText, X } from 'lucide-react';
 
 const Sidebar = ({ isOpen, onClose }) => {
+  const { user, logout } = useAuth();
+
   return (
     <aside className={`sidebar ${isOpen ? 'open' : ''}`}>
       <div className="sidebar-profile">
-          <button className="close-sidebar-btn" onClick={onClose} style={{ top: '10px', right: '10px' }}>
+          <button className="close-sidebar-btn" onClick={onClose}>
             <X size={20} />
           </button>
           <div className="profile-avatar">
-            <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Bardia" alt="Profile" />
+            <img src={`https://robohash.org/${user ? encodeURIComponent(user.name) : 'User'}?set=set4`} style={{ background: '#F5F7FA' }} alt="Profile" />
           </div>
           <div className="profile-info">
-            <h3>Bardia Adibi</h3>
-            <p>bardiaadibi@gmail.com</p>
+            <h3>{user ? user.name : 'Property Manager'}</h3>
+            <p style={{ wordBreak: 'break-all' }}>{user ? user.email : 'manager@domain.com'}</p>
           </div>
       </div>
 
@@ -50,7 +53,7 @@ const Sidebar = ({ isOpen, onClose }) => {
       </nav>
 
       <div className="sidebar-footer" style={{ padding: '1.5rem' }}>
-        <button className="btn-signout">Sign out</button>
+        <button className="btn-signout" onClick={logout}>Sign out</button>
       </div>
     </aside>
   );

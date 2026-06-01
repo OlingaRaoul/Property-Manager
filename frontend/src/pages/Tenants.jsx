@@ -183,7 +183,7 @@ const Tenants = () => {
                             <div className="stat-header">
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                                     <div style={{ width: '48px', height: '48px', borderRadius: '50%', overflow: 'hidden', border: '2px solid #E7EDFF', flexShrink: 0 }}>
-                                        <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${tenantObj.name}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="Avatar" />
+                                        <img src={`https://robohash.org/${encodeURIComponent(tenantObj.name)}?set=set4`} style={{ width: '100%', height: '100%', objectFit: 'cover', background: '#F5F7FA' }} alt="Avatar" />
                                     </div>
                                     <div>
                                         <div style={{ fontWeight: '700', color: '#343C6A', fontSize: '1rem' }}>{tenantObj.name}</div>

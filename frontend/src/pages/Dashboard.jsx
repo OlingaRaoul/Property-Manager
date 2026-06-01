@@ -85,7 +85,7 @@ const Dashboard = () => {
                             return (
                                 <tr key={pay.id}>
                                     <td style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', borderTop: 'none' }}>
-                                        <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${tenant ? tenant.name : 'User'}`} style={{ width: '28px', height: '28px', borderRadius: '50%' }} alt="T" />
+                                        <img src={`https://robohash.org/${tenant ? encodeURIComponent(tenant.name) : 'User'}?set=set4`} style={{ width: '28px', height: '28px', borderRadius: '50%', background: '#F5F7FA' }} alt="T" />
                                         <span style={{ fontWeight: '500' }}>{tenant ? tenant.name : 'Unknown User'}</span>
                                     </td>
                                     <td className="hide-mobile">

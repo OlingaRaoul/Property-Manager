@@ -1,11 +1,13 @@
 import React from 'react';
 import { useLocation } from 'react-router-dom';
 import { useAppState } from '../context/StateContext';
+import { useAuth } from '../context/AuthContext';
 import { Bell, Shield, Search, Menu } from 'lucide-react';
 
 const Header = ({ onMenuClick }) => {
     const location = useLocation();
     const { state } = useAppState();
+    const { user } = useAuth();
 
     const getTitle = () => {
         const path = location.pathname;
@@ -34,7 +36,7 @@ const Header = ({ onMenuClick }) => {
                     <Bell size={20} color="#718EBF" />
                 </button>
                 <div className="user-profile">
-                    <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Olivia" alt="Profile" style={{ width: '45px', height: '45px', borderRadius: '50%', border: '2px solid white' }} />
+                    <img src={`https://robohash.org/${user ? encodeURIComponent(user.name) : 'Olivia'}?set=set4`} alt="Profile" style={{ width: '45px', height: '45px', borderRadius: '50%', border: '2px solid white', background: '#F5F7FA' }} />
                 </div>
             </div>
         </header>

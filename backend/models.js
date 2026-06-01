@@ -1,10 +1,20 @@
 const mongoose = require('mongoose');
 
+// User Schema
+const UserSchema = new mongoose.Schema({
+    id: { type: String, required: true, unique: true },
+    name: { type: String, required: true },
+    email: { type: String, required: true, unique: true, lowercase: true },
+    password: { type: String, required: true },
+    createdAt: { type: Date, default: Date.now }
+});
+
 // Property Schema
 const PropertySchema = new mongoose.Schema({
     id: { type: String, required: true, unique: true },
     name: { type: String, required: true },
-    address: { type: String }
+    address: { type: String },
+    userId: { type: String, ref: 'User' } // optional to support legacy databases
 });
 
 // Apartment Schema
@@ -80,11 +90,14 @@ const UtilitySchema = new mongoose.Schema({
 
 // Setting Schema
 const SettingSchema = new mongoose.Schema({
-    key: { type: String, required: true, unique: true },
-    value: { type: String }
+    key: { type: String, required: true },
+    value: { type: String },
+    userId: { type: String, ref: 'User' } // optional to support global settings fallback
 });
+SettingSchema.index({ key: 1, userId: 1 }, { unique: true });
 
 module.exports = {
+    User: mongoose.model('User', UserSchema),
     Property: mongoose.model('Property', PropertySchema),
     Apartment: mongoose.model('Apartment', ApartmentSchema),
     Tenant: mongoose.model('Tenant', TenantSchema),

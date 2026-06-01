@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import { StateProvider } from './context/StateContext';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
@@ -10,15 +11,19 @@ import Payments from './pages/Payments';
 import Utilities from './pages/Utilities';
 import Settings from './pages/Settings';
 import Contracts from './pages/Contracts';
+import Login from './pages/Login';
+import Signup from './pages/Signup';
+import ProtectedRoute from './components/ProtectedRoute';
 import './index.css';
 
-function App() {
+function AppContent() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const toggleSidebar = () => setSidebarOpen(!sidebarOpen);
+  const { token } = useAuth();
 
   return (
-    <StateProvider>
-      <Router>
+    <Router>
+      {token ? (
         <div className="app-container">
           <div 
             className={`sidebar-overlay ${sidebarOpen ? 'active' : ''}`} 
@@ -29,19 +34,36 @@ function App() {
             <Header onMenuClick={toggleSidebar} />
             <div className="container">
               <Routes>
-                <Route path="/" element={<Dashboard />} />
-                <Route path="/properties" element={<Properties />} />
-                <Route path="/tenants" element={<Tenants />} />
-                <Route path="/payments" element={<Payments />} />
-                <Route path="/utilities" element={<Utilities />} />
-                <Route path="/contracts" element={<Contracts />} />
-                <Route path="/settings" element={<Settings />} />
+                <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+                <Route path="/properties" element={<ProtectedRoute><Properties /></ProtectedRoute>} />
+                <Route path="/tenants" element={<ProtectedRoute><Tenants /></ProtectedRoute>} />
+                <Route path="/payments" element={<ProtectedRoute><Payments /></ProtectedRoute>} />
+                <Route path="/utilities" element={<ProtectedRoute><Utilities /></ProtectedRoute>} />
+                <Route path="/contracts" element={<ProtectedRoute><Contracts /></ProtectedRoute>} />
+                <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+                <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
             </div>
           </main>
         </div>
-      </Router>
-    </StateProvider>
+      ) : (
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route path="/signup" element={<Signup />} />
+          <Route path="*" element={<Navigate to="/login" replace />} />
+        </Routes>
+      )}
+    </Router>
+  );
+}
+
+function App() {
+  return (
+    <AuthProvider>
+      <StateProvider>
+        <AppContent />
+      </StateProvider>
+    </AuthProvider>
   );
 }
 
