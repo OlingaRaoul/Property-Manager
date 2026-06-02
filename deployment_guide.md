@@ -168,20 +168,32 @@ We have configured an automated CD pipeline using GitHub Actions (defined in [de
 
 To enable this, configure the following secrets in your GitHub repository:
 
-### 1. Generate SSH Keys (If not done)
-If you don't already use an SSH key to access your droplet, generate one on your local machine or droplet:
-```bash
-ssh-keygen -t ed25519 -C "github-actions-deploy"
-```
-Add the public key (contents of `~/.ssh/id_ed25519.pub`) to your droplet's `/root/.ssh/authorized_keys` file.
+### 1. Authorize SSH Keys
+An SSH key pair consists of a **Public Key** and a **Private Key**. 
+
+*   **Public Key (Lock)**: Install this on your DigitalOcean droplet.
+    *   Find the public key (e.g., `~/.ssh/property_manager.pub`).
+    *   Copy it (on Mac, run `pbcopy < ~/.ssh/property_manager.pub`).
+    *   Log into your droplet, open `nano ~/.ssh/authorized_keys`, and paste the key on a new line.
+    *   **CRITICAL**: Secure droplet permissions so SSH doesn't reject the key:
+        ```bash
+        chmod 700 ~/.ssh
+        chmod 600 ~/.ssh/authorized_keys
+        ```
+
+*   **Private Key (Key)**: Provide this to GitHub Actions.
+    *   Find the private key file (e.g., `~/.ssh/property_manager` — the one without `.pub`).
+    *   Copy it (on Mac, run `pbcopy < ~/.ssh/property_manager`).
+    *   **CRITICAL**: Make sure to copy the entire file, including the `-----BEGIN OPENSSH PRIVATE KEY-----` and `-----END OPENSSH PRIVATE KEY-----` header and footer lines.
 
 ### 2. Configure GitHub Secrets
 Go to your GitHub repository -> **Settings** -> **Secrets and variables** -> **Actions** -> Click **New repository secret** and add the following:
 
 *   **`SSH_HOST`**: The public IP address of your DigitalOcean droplet.
-*   **`SSH_USER`**: Your login username (e.g. `root`).
-*   **`SSH_PRIVATE_KEY`**: The full content of your private SSH key (contents of `~/.ssh/id_ed25519` or your private key file).
+*   **`SSH_USER`**: Your login username (e.g., `root`).
+*   **`SSH_PRIVATE_KEY`**: The full content of your private SSH key (contents of `~/.ssh/property_manager`).
 
 Once these secrets are saved, any push to `main` will automatically trigger a deployment. You can track progress under the **Actions** tab on your GitHub repository page.
+
 
 
