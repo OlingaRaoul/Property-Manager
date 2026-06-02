@@ -8,8 +8,11 @@ const fs = require('fs');
 const path = require('path');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const { OAuth2Client } = require('google-auth-library');
 
 dotenv.config();
+
+const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 const { User, Property, Apartment, Tenant, Payment, UnitType, Contract, Utility, Setting } = require('./models');
 
@@ -176,6 +179,104 @@ app.post('/api/auth/signup', async (req, res) => {
         }
     } catch (err) {
         res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/auth/google', async (req, res) => {
+    const { token } = req.body;
+    if (!token) {
+        return res.status(400).json({ error: 'Google credential token is required.' });
+    }
+    
+    try {
+        let payload;
+        // Verify Google token
+        try {
+            const ticket = await googleClient.verifyIdToken({
+                idToken: token,
+                audience: process.env.GOOGLE_CLIENT_ID
+            });
+            payload = ticket.getPayload();
+        } catch (verifyError) {
+            // Dev override: if GOOGLE_CLIENT_ID is missing and we are in mock mode,
+            // we decode the JWT token without verification to extract mock fields for local validation.
+            if (!process.env.GOOGLE_CLIENT_ID && !isConnected()) {
+                const parts = token.split('.');
+                if (parts.length === 3) {
+                    payload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf-8'));
+                } else {
+                    throw verifyError;
+                }
+            } else {
+                throw verifyError;
+            }
+        }
+
+        const { email, name, sub } = payload;
+        if (!email) {
+            return res.status(400).json({ error: 'Google profile must share email address.' });
+        }
+        
+        const lowercaseEmail = email.toLowerCase().trim();
+        let user = null;
+
+        if (!isConnected()) {
+            // Mock Mode User Lookup / Registration
+            user = mockData.users.find(u => u.email === lowercaseEmail);
+            if (!user) {
+                const id = `u${Date.now()}`;
+                user = { id, name, email: lowercaseEmail, googleId: sub };
+                mockData.users.push(user);
+                
+                // Seed default settings in mock
+                mockData.settings[`currency_${id}`] = 'FCFA';
+                mockData.settings[`lang_${id}`] = 'en';
+                mockData.settings[`notificationThresholdDays_${id}`] = 3;
+                saveMock();
+
+                // Legacy migration fallback
+                if (mockData.users.length === 1) {
+                    await migrateLegacyData(id);
+                }
+            }
+        } else {
+            // MongoDB User Lookup / Registration
+            user = await User.findOne({ email: lowercaseEmail });
+            if (!user) {
+                const id = `u${Date.now()}`;
+                user = await User.create({ 
+                    id, 
+                    name, 
+                    email: lowercaseEmail, 
+                    password: await bcrypt.hash(Math.random().toString(36), 10), // random password fallback
+                    googleId: sub 
+                });
+                
+                // Seed default settings for the user
+                await Setting.insertMany([
+                    { key: 'currency', value: 'FCFA', userId: user.id },
+                    { key: 'lang', value: 'en', userId: user.id },
+                    { key: 'notificationThresholdDays', value: '3', userId: user.id }
+                ]);
+
+                const userCount = await User.countDocuments();
+                if (userCount === 1) {
+                    await migrateLegacyData(user.id);
+                }
+            }
+        }
+
+        // Generate application session JWT
+        const sessionToken = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '7d' });
+        res.json({ 
+            status: 'success', 
+            token: sessionToken, 
+            user: { id: user.id, name: user.name, email: user.email } 
+        });
+
+    } catch (e) {
+        console.error("Google authentication error:", e.message);
+        res.status(401).json({ error: `Google login failed: ${e.message}` });
     }
 });
 

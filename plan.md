@@ -244,9 +244,27 @@ gantt
     Secure Seeding & API Validation : 2026-06-25, 2d
 ```
 
-### Next Immediate Action Items:
+### Next Immediate Action Items (Completed):
 1. Update `backend/server.js` and `backend/models.js` to support SMTP and Unit Category endpoints.
 2. Update `frontend/src/pages/Settings.jsx` to bind handlers for adding/deleting categories and saving SMTP.
 3. Update `frontend/src/pages/Payments.jsx` to wire up the payment deletion flow.
 4. Prepare multi-user schemas and authorization routes for implementation after core features are stable.
+
+---
+
+## 🔐 5. Google Sign-In Integration (OAuth 2.0)
+
+To provide a convenient, modern sign-in method, we will integrate Google Sign-In as an alternative to email/password authentication.
+
+### Key Components:
+1. **Frontend Client Integration**:
+   * Include the official Google Identity Services client script in `index.html`.
+   * Add standard styled Google Sign-In buttons to both `Login.jsx` and `Signup.jsx`.
+   * Pass Google JWT credentials to the backend.
+2. **Backend Verification Endpoint (`POST /api/auth/google`)**:
+   * Install `google-auth-library` on the backend.
+   * Securely verify incoming identity tokens using Google's public certificates.
+   * Handle user lookup or auto-creation (including seeding default settings for new Google accounts).
+   * Return application JWT session tokens.
+
 

@@ -1,10 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Building2, Mail, Lock, User, Loader2, ArrowRight } from 'lucide-react';
 
 const Signup = () => {
-    const { signup } = useAuth();
+    const { signup, loginWithGoogle } = useAuth();
     const navigate = useNavigate();
 
     const [name, setName] = useState('');
@@ -12,6 +12,43 @@ const Signup = () => {
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
+
+    const handleGoogleCredentialResponse = async (response) => {
+        setLoading(true);
+        setError('');
+        try {
+            await loginWithGoogle(response.credential);
+            navigate('/');
+        } catch (err) {
+            setError(err.response?.data?.error || 'Google Authentication failed.');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        const initGoogle = () => {
+            if (window.google) {
+                window.google.accounts.id.initialize({
+                    client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID || "333165219985-nsqkdf621pmsa93q621v.apps.googleusercontent.com",
+                    callback: handleGoogleCredentialResponse
+                });
+                window.google.accounts.id.renderButton(
+                    document.getElementById("google-signin-btn"),
+                    { theme: "filled_blue", size: "large", width: "100%", shape: "pill" }
+                );
+            }
+        };
+        
+        if (window.google) {
+            initGoogle();
+        } else {
+            const script = document.querySelector('script[src="https://accounts.google.com/gsi/client"]');
+            if (script) {
+                script.addEventListener('load', initGoogle);
+            }
+        }
+    }, [loginWithGoogle]);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -239,6 +276,15 @@ const Signup = () => {
                         )}
                     </button>
                 </form>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '1.5rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                        <hr style={{ flex: 1, border: 'none', borderTop: '1px solid rgba(255,255,255,0.1)' }} />
+                        <span style={{ fontSize: '0.8rem', color: '#94A3B8', fontWeight: 600 }}>OR</span>
+                        <hr style={{ flex: 1, border: 'none', borderTop: '1px solid rgba(255,255,255,0.1)' }} />
+                    </div>
+                    <div id="google-signin-btn" style={{ display: 'flex', justifyContent: 'center' }}></div>
+                </div>
 
                 {/* Footer Switcher */}
                 <div style={{ textAlign: 'center', marginTop: '1.75rem', fontSize: '0.85rem', color: '#94A3B8' }}>

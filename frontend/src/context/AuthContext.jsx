@@ -67,6 +67,16 @@ export const AuthProvider = ({ children }) => {
         return data.user;
     };
 
+    const loginWithGoogle = async (googleCredential) => {
+        const { data } = await axios.post(`${API_URL}/auth/google`, { token: googleCredential });
+        localStorage.setItem('token', data.token);
+        localStorage.setItem('user', JSON.stringify(data.user));
+        setToken(data.token);
+        setUser(data.user);
+        axios.defaults.headers.common['Authorization'] = `Bearer ${data.token}`;
+        return data.user;
+    };
+
     const logout = () => {
         localStorage.removeItem('token');
         localStorage.removeItem('user');
@@ -76,7 +86,7 @@ export const AuthProvider = ({ children }) => {
     };
 
     return (
-        <AuthContext.Provider value={{ user, token, authLoading, login, signup, logout, API_URL }}>
+        <AuthContext.Provider value={{ user, token, authLoading, login, signup, loginWithGoogle, logout, API_URL }}>
             {children}
         </AuthContext.Provider>
     );
