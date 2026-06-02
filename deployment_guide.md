@@ -125,3 +125,38 @@ Run Certbot to generate the SSL certificate and automatically update the Nginx c
 sudo certbot --nginx -d app.yourdomain.com
 ```
 Follow the interactive prompts to enable redirecting HTTP to HTTPS. Your app will now be secure at `https://app.yourdomain.com/`.
+
+---
+
+## 🛠️ Troubleshooting
+
+### 1. Build Process Killed (`signal: killed` / Out of Memory)
+On lower-RAM DigitalOcean Droplets (512MB - 1GB RAM), compile processes like `npm install` or Vite's `npm run build` can exhaust the system's memory, causing the Linux kernel to terminate the build process (`signal: killed`).
+
+To resolve this, create a **Swap File** to provide virtual memory on disk:
+
+```bash
+# Allocate a 2GB swap file
+sudo fallocate -l 2G /swapfile
+
+# Lock file permissions
+sudo chmod 600 /swapfile
+
+# Set up the file as swap space
+sudo mkswap /swapfile
+
+# Activate the swap space
+sudo swapon /swapfile
+
+# Make the swap space permanent across system reboots
+echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+
+# Verify swap status (you should see ~2.0Gi of swap memory)
+free -h
+```
+
+Once active, run the build command again:
+```bash
+sudo docker compose up -d --build
+```
+
