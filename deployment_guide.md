@@ -6,29 +6,18 @@ This guide outlines how to configure, run, and secure **Property Manager Pro** o
 
 ## Step 1: Install Docker & Docker Compose (If not installed)
 
-On your Ubuntu-based DigitalOcean droplet, run the following commands to install Docker and the Docker Compose plugin:
+On your DigitalOcean droplet, the most reliable and automated way to install Docker (including the Compose plugin) is to use the official Docker installer script. Run the following commands:
 
 ```bash
-# Update package database
-sudo apt-get update
+# Remove any broken manually-added Docker apt sources
+sudo rm -f /etc/apt/sources.list.d/docker.list
 
-# Install prerequisites
-sudo apt-get install -y ca-certificates curl gnupg lsb-release
+# Download and run the official Docker installation script
+curl -fsSL https://get.docker.com -o get-docker.sh
+sudo sh get-docker.sh
 
-# Add Docker’s official GPG key
-sudo mkdir -p /etc/apt/keyrings
-curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-
-# Set up the stable repository
-echo \
-  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
-  $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-
-# Install Docker Engine & Compose
-sudo apt-get update
-sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-
-# Verify installation
+# Verify installations
+sudo docker --version
 sudo docker compose version
 ```
 
