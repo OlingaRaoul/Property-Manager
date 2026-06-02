@@ -141,6 +141,9 @@ app.post('/api/auth/signup', async (req, res) => {
             
             const newUser = { id, name, email: lowercaseEmail, password: hashedPassword };
             mockData.users.push(newUser);
+            mockData.settings[`currency_${id}`] = 'FCFA';
+            mockData.settings[`lang_${id}`] = 'en';
+            mockData.settings[`notificationThresholdDays_${id}`] = 3;
             saveMock();
 
             // Run migration if this is the first user ever registered
@@ -155,6 +158,13 @@ app.post('/api/auth/signup', async (req, res) => {
             if (exists) return res.status(400).json({ error: 'Email already registered.' });
 
             const newUser = await User.create({ id, name, email: lowercaseEmail, password: hashedPassword });
+            
+            // Seed default settings for the user
+            await Setting.insertMany([
+                { key: 'currency', value: 'FCFA', userId: newUser.id },
+                { key: 'lang', value: 'en', userId: newUser.id },
+                { key: 'notificationThresholdDays', value: '3', userId: newUser.id }
+            ]);
             
             const userCount = await User.countDocuments();
             if (userCount === 1) {
@@ -743,6 +753,25 @@ app.post('/api/smtp-settings', authMiddleware, async (req, res) => {
         );
         res.json({ status: 'success' });
     } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/test-smtp', authMiddleware, async (req, res) => {
+    const { host, port, user, pass } = req.body;
+    if (!host || !user || !pass) {
+        return res.status(400).json({ error: 'SMTP Host, User, and Password are required to test connection.' });
+    }
+    try {
+        const transporter = nodemailer.createTransport({
+            host,
+            port: Number(port) || 587,
+            secure: Number(port) === 465,
+            auth: { user, pass }
+        });
+        await transporter.verify();
+        res.json({ status: 'success', message: 'SMTP credentials verified successfully!' });
+    } catch (e) {
+        res.status(500).json({ error: `SMTP Connection test failed: ${e.message}` });
+    }
 });
 
 // ── Email and simulated receipt delivery ──────────────────────────────
