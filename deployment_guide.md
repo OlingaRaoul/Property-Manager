@@ -4,21 +4,28 @@ This guide outlines how to configure, run, and secure **Property Manager Pro** o
 
 ---
 
-## Step 1: Install Docker & Docker Compose (If not installed)
+## Step 1: Install & Start Docker (If not installed)
 
 On your DigitalOcean droplet, the most reliable and automated way to install Docker (including the Compose plugin) is to use the official Docker installer script. Run the following commands:
 
 ```bash
-# Remove any broken manually-added Docker apt sources
+# 1. Remove any broken manually-added Docker apt sources (if applicable)
 sudo rm -f /etc/apt/sources.list.d/docker.list
 
-# Download and run the official Docker installation script
+# 2. Download and run the official Docker installation script
 curl -fsSL https://get.docker.com -o get-docker.sh
 sudo sh get-docker.sh
 
-# Verify installations
+# 3. Start the Docker service daemon
+sudo systemctl start docker
+
+# 4. Enable Docker to start automatically on system boot
+sudo systemctl enable docker
+
+# 5. Verify installations and status
 sudo docker --version
 sudo docker compose version
+sudo systemctl status docker
 ```
 
 ---
