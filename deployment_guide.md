@@ -160,3 +160,28 @@ Once active, run the build command again:
 sudo docker compose up -d --build
 ```
 
+---
+
+## 🚀 Continuous Deployment (CI/CD) with GitHub Actions
+
+We have configured an automated CD pipeline using GitHub Actions (defined in [deploy.yml](file:///Users/olingajoseph/Documents/My%20projects/Property_manager/.github/workflows/deploy.yml)). Every time you push code to the `main` branch, it will SSH into your DigitalOcean droplet, pull the latest commits, and build/restart the containers automatically.
+
+To enable this, configure the following secrets in your GitHub repository:
+
+### 1. Generate SSH Keys (If not done)
+If you don't already use an SSH key to access your droplet, generate one on your local machine or droplet:
+```bash
+ssh-keygen -t ed25519 -C "github-actions-deploy"
+```
+Add the public key (contents of `~/.ssh/id_ed25519.pub`) to your droplet's `/root/.ssh/authorized_keys` file.
+
+### 2. Configure GitHub Secrets
+Go to your GitHub repository -> **Settings** -> **Secrets and variables** -> **Actions** -> Click **New repository secret** and add the following:
+
+*   **`SSH_HOST`**: The public IP address of your DigitalOcean droplet.
+*   **`SSH_USER`**: Your login username (e.g. `root`).
+*   **`SSH_PRIVATE_KEY`**: The full content of your private SSH key (contents of `~/.ssh/id_ed25519` or your private key file).
+
+Once these secrets are saved, any push to `main` will automatically trigger a deployment. You can track progress under the **Actions** tab on your GitHub repository page.
+
+
