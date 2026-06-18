@@ -123,23 +123,57 @@ export function formatMonth(monthStr, lang = 'en') {
     return t(monthKey, lang);
 }
 
+export function getMonthsDifference(startMonth, endMonth) {
+    if (!startMonth || !endMonth) return 0;
+    const [startY, startM] = startMonth.split('-').map(Number);
+    const [endY, endM] = endMonth.split('-').map(Number);
+    return (endY - startY) * 12 + (endM - startM);
+}
+
 export function calculateRentStatus(tenant, settings) {
     const today = new Date();
     const currentMonthStr = today.toISOString().slice(0, 7); // YYYY-MM
     const currentDay = today.getDate();
     const lang = settings.lang || 'en';
     
-    // Check if paid this month
-    if (tenant.lastPaidMonth === currentMonthStr) {
+    // Check if paid this month or future months
+    if (tenant.lastPaidMonth && tenant.lastPaidMonth >= currentMonthStr) {
         return { status: t('paid', lang), class: 'paid', message: t('paid', lang) };
     }
     
-    // Check if due or overdue
-    if (currentDay > tenant.dueDateDay) {
-        return { status: t('overdue', lang), class: 'overdue', message: t('overdue', lang) };
+    // Calculate how many months overdue
+    let overdueMonths = 0;
+    if (tenant.lastPaidMonth) {
+        overdueMonths = getMonthsDifference(tenant.lastPaidMonth, currentMonthStr);
+    } else if (currentDay > tenant.dueDateDay) {
+        overdueMonths = 1;
     }
     
-    // If within threshold before due date
+    // Check if covered by deposit
+    const depositPaidMonths = tenant.depositMonthsPaid || 0;
+    
+    if (overdueMonths > 0) {
+        if (overdueMonths <= depositPaidMonths) {
+            // Using deposit
+            const remaining = depositPaidMonths - overdueMonths;
+            return {
+                status: lang === 'fr' ? 'Dépôt utilisé' : 'Using Deposit',
+                class: 'due',
+                color: '#D97706', // Amber 600
+                message: lang === 'fr' ? `Dépôt utilisé (${remaining} mois restants)` : `Using deposit (${remaining} months left)`
+            };
+        } else {
+            // Overdue
+            const netOverdue = overdueMonths - depositPaidMonths;
+            return {
+                status: t('overdue', lang),
+                class: 'overdue',
+                message: lang === 'fr' ? `En retard (${netOverdue} mois impayés)` : `Overdue (${netOverdue} month(s) unpaid)`
+            };
+        }
+    }
+    
+    // If within threshold before due date for the upcoming month
     if (tenant.dueDateDay - currentDay <= (settings.notificationThresholdDays || 3)) {
         return { status: t('due_soon', lang), class: 'due', message: `${t('due_date', lang)} ${tenant.dueDateDay}` };
     }

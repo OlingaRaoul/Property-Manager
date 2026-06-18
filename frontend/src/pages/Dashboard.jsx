@@ -1,7 +1,8 @@
 import { useAppState } from '../context/StateContext';
-import { Users, Building, Wallet, AlertCircle } from 'lucide-react';
+import { Users, Building, Wallet, AlertCircle, Shield } from 'lucide-react';
+import { getMonthsDifference } from '../utils';
 
-const StatCard = ({ title, value, icon: Icon, colorClass, bgClass }) => (
+const StatCard = ({ title, value, icon: Icon, colorClass, bgClass, subtext }) => (
     <div className="stat-card" style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '1rem', padding: '1.25rem' }}>
         <div className="stat-icon-bg" style={{ 
             width: '45px', 
@@ -19,6 +20,7 @@ const StatCard = ({ title, value, icon: Icon, colorClass, bgClass }) => (
         <div>
             <div className="stat-label" style={{ color: '#718EBF', fontSize: '0.75rem', fontWeight: '500', marginBottom: '0.2rem', letterSpacing: '0.5px' }}>{title}</div>
             <div className="stat-value" style={{ fontSize: '1.3rem', fontWeight: '800', color: '#343C6A' }}>{value}</div>
+            {subtext && <div style={{ fontSize: '0.7rem', color: '#718EBF', marginTop: '0.1rem', fontWeight: '500' }}>{subtext}</div>}
         </div>
     </div>
 );
@@ -30,9 +32,44 @@ const Dashboard = () => {
 
     // Calculate metrics
     const activeTenantsCount = state.tenants.length;
-    const totalCollected = state.payments.reduce((sum, p) => sum + p.amount, 0);
-    const overdueCount = state.tenants.filter(t => !t.lastPaidMonth).length; 
-    const totalDue = overdueCount * 1400; // Mock calculation based on screenshot
+    
+    // Count only Rent payments
+    const totalCollectedRent = state.payments
+        .filter(p => p.type === 'Rent')
+        .reduce((sum, p) => sum + p.amount, 0);
+
+    // Count only Deposit payments
+    const totalCollectedDeposits = state.payments
+        .filter(p => p.type === 'Deposit')
+        .reduce((sum, p) => sum + p.amount, 0);
+
+    const totalDepositMonths = state.tenants.reduce((sum, t) => {
+        return sum + (t.depositMonthsPaid || 0);
+    }, 0);
+
+    const today = new Date();
+    const currentMonthStr = today.toISOString().slice(0, 7); // YYYY-MM
+    const currentDay = today.getDate();
+
+    let overdueCount = 0;
+    let totalDue = 0;
+
+    state.tenants.forEach(tenant => {
+        let overdueMonths = 0;
+        if (tenant.lastPaidMonth) {
+            overdueMonths = getMonthsDifference(tenant.lastPaidMonth, currentMonthStr);
+        } else if (currentDay > tenant.dueDateDay) {
+            overdueMonths = 1;
+        }
+
+        const depositPaidMonths = tenant.depositMonthsPaid || 0;
+
+        if (overdueMonths > depositPaidMonths) {
+            overdueCount++;
+            const netOverdue = overdueMonths - depositPaidMonths;
+            totalDue += netOverdue * (tenant.rentAmount || 0);
+        }
+    });
 
     return (
         <div className="view-container" style={{ paddingTop: '1.25rem' }}>
@@ -43,13 +80,23 @@ const Dashboard = () => {
                     icon={Users}
                     colorClass="yellow"
                     bgClass="yellow"
+                    subtext={`${state.apartments.filter(a => a.tenantId).length} Occupied Units`}
                 />
                 <StatCard 
                     title="COLLECTED RENT" 
-                    value={`${totalCollected.toLocaleString()} ${state.settings.currency}`}
+                    value={`${totalCollectedRent.toLocaleString()} ${state.settings.currency}`}
                     icon={Wallet}
                     colorClass="blue"
                     bgClass="blue"
+                    subtext={`${state.payments.filter(p => p.type === 'Rent').length} Rent Payments`}
+                />
+                <StatCard 
+                    title="COLLECTED DEPOSITS" 
+                    value={`${totalCollectedDeposits.toLocaleString()} ${state.settings.currency}`}
+                    icon={Shield}
+                    colorClass="green"
+                    bgClass="green"
+                    subtext={`${totalDepositMonths} Month${totalDepositMonths !== 1 ? 's' : ''} Covered`}
                 />
                  <StatCard 
                     title="TOTAL DUE" 
@@ -57,6 +104,7 @@ const Dashboard = () => {
                     icon={AlertCircle}
                     colorClass="pink"
                     bgClass="pink"
+                    subtext={`Overdue: ${overdueCount} Tenant${overdueCount !== 1 ? 's' : ''}`}
                 />
             </div>
             

@@ -44,7 +44,7 @@ let mockData = {
     ],
     contracts: [],
     utilities: [],
-    settings: { currency: '$', lang: 'en', notificationThresholdDays: 3 }
+    settings: { currency: 'CFA', lang: 'en', notificationThresholdDays: 3 }
 };
 
 if (fs.existsSync(MOCK_DB_PATH)) {
@@ -145,15 +145,12 @@ app.post('/api/auth/signup', async (req, res) => {
             
             const newUser = { id, name, email: lowercaseEmail, password: hashedPassword };
             mockData.users.push(newUser);
-            mockData.settings[`currency_${id}`] = 'FCFA';
+            mockData.settings[`currency_${id}`] = 'CFA';
             mockData.settings[`lang_${id}`] = 'en';
             mockData.settings[`notificationThresholdDays_${id}`] = 3;
             saveMock();
 
-            // Run migration if this is the first user ever registered
-            if (mockData.users.length === 1) {
-                await migrateLegacyData(id);
-            }
+            await migrateLegacyData(id);
 
             const token = jwt.sign({ userId: id }, JWT_SECRET, { expiresIn: '7d' });
             return res.status(201).json({ status: 'success', token, user: { id, name, email: lowercaseEmail } });
@@ -165,15 +162,12 @@ app.post('/api/auth/signup', async (req, res) => {
             
             // Seed default settings for the user
             await Setting.insertMany([
-                { key: 'currency', value: 'FCFA', userId: newUser.id },
+                { key: 'currency', value: 'CFA', userId: newUser.id },
                 { key: 'lang', value: 'en', userId: newUser.id },
                 { key: 'notificationThresholdDays', value: '3', userId: newUser.id }
             ]);
             
-            const userCount = await User.countDocuments();
-            if (userCount === 1) {
-                await migrateLegacyData(newUser.id);
-            }
+            await migrateLegacyData(newUser.id);
 
             const token = jwt.sign({ userId: id }, JWT_SECRET, { expiresIn: '7d' });
             return res.status(201).json({ status: 'success', token, user: { id, name, email: lowercaseEmail } });
@@ -230,15 +224,10 @@ app.post('/api/auth/google', async (req, res) => {
                 mockData.users.push(user);
                 
                 // Seed default settings in mock
-                mockData.settings[`currency_${id}`] = 'FCFA';
+                mockData.settings[`currency_${id}`] = 'CFA';
                 mockData.settings[`lang_${id}`] = 'en';
                 mockData.settings[`notificationThresholdDays_${id}`] = 3;
                 saveMock();
-
-                // Legacy migration fallback
-                if (mockData.users.length === 1) {
-                    await migrateLegacyData(id);
-                }
             }
         } else {
             // MongoDB User Lookup / Registration
@@ -255,17 +244,15 @@ app.post('/api/auth/google', async (req, res) => {
                 
                 // Seed default settings for the user
                 await Setting.insertMany([
-                    { key: 'currency', value: 'FCFA', userId: user.id },
+                    { key: 'currency', value: 'CFA', userId: user.id },
                     { key: 'lang', value: 'en', userId: user.id },
                     { key: 'notificationThresholdDays', value: '3', userId: user.id }
                 ]);
-
-                const userCount = await User.countDocuments();
-                if (userCount === 1) {
-                    await migrateLegacyData(user.id);
-                }
             }
         }
+
+        // Run migration for legacy data, if any
+        await migrateLegacyData(user.id);
 
         // Generate application session JWT
         const sessionToken = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '7d' });
@@ -295,6 +282,7 @@ app.post('/api/auth/login', async (req, res) => {
             const isMatch = await bcrypt.compare(password, user.password);
             if (!isMatch) return res.status(400).json({ error: 'Invalid email or password.' });
 
+            await migrateLegacyData(user.id);
             const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '7d' });
             return res.json({ status: 'success', token, user: { id: user.id, name: user.name, email: lowercaseEmail } });
         } else {
@@ -304,6 +292,7 @@ app.post('/api/auth/login', async (req, res) => {
             const isMatch = await bcrypt.compare(password, user.password);
             if (!isMatch) return res.status(400).json({ error: 'Invalid email or password.' });
 
+            await migrateLegacyData(user.id);
             const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '7d' });
             return res.json({ status: 'success', token, user: { id: user.id, name: user.name, email: lowercaseEmail } });
         }
@@ -479,7 +468,7 @@ app.get('/api/data', authMiddleware, async (req, res) => {
             const utilities = mockData.utilities.filter(u => aptIds.includes(u.apartmentId));
 
             const settings = {};
-            settings.currency = mockData.settings[`currency_${req.userId}`] || mockData.settings.currency || '$';
+            settings.currency = mockData.settings[`currency_${req.userId}`] || mockData.settings.currency || 'CFA';
             settings.lang = mockData.settings[`lang_${req.userId}`] || mockData.settings.lang || 'en';
             settings.notificationThresholdDays = mockData.settings[`notificationThresholdDays_${req.userId}`] || mockData.settings.notificationThresholdDays || 3;
 
@@ -508,7 +497,7 @@ app.get('/api/data', authMiddleware, async (req, res) => {
         
         const settings = {};
         settingsRows.forEach(row => settings[row.key] = row.value);
-        if (!settings.currency) settings.currency = '$';
+        if (!settings.currency) settings.currency = 'CFA';
         if (!settings.lang) settings.lang = 'en';
         if (!settings.notificationThresholdDays) settings.notificationThresholdDays = 3;
 
@@ -559,6 +548,21 @@ app.delete('/api/payments/:id', authMiddleware, async (req, res) => {
             const prop = apt ? mockData.properties.find(p => String(p.id) === String(apt.propertyId) && p.userId === req.userId) : null;
             if (!prop) return res.status(403).json({ error: 'Access denied.' });
 
+            if (tenant) {
+                if (payment.type === 'Deposit') {
+                    tenant.depositPaidAmount = Math.max(0, (tenant.depositPaidAmount || 0) - payment.amount);
+                    tenant.depositMonthsPaid = Math.max(0, (tenant.depositMonthsPaid || 0) - (payment.depositMonths || 0));
+                } else {
+                    const remainingRentPayments = mockData.payments.filter(p => 
+                        String(p.id) !== String(req.params.id) && 
+                        String(p.tenantId) === String(payment.tenantId) && 
+                        p.type !== 'Deposit'
+                    );
+                    const latestMonth = remainingRentPayments.map(p => p.monthPaid).sort().pop() || '';
+                    tenant.lastPaidMonth = latestMonth;
+                }
+            }
+
             mockData.payments = mockData.payments.filter(p => String(p.id) !== String(req.params.id));
             saveMock();
             return res.json({ status: 'success' });
@@ -567,11 +571,68 @@ app.delete('/api/payments/:id', authMiddleware, async (req, res) => {
         const payment = await Payment.findOne({ id: req.params.id });
         if (!payment) return res.status(404).json({ error: 'Payment not found.' });
         const tenant = await Tenant.findOne({ id: payment.tenantId });
-        const apt = tenant ? await Apartment.findOne({ id: tenant.apartmentId }) : null;
-        const prop = apt ? await Property.findOne({ id: apt.propertyId, userId: req.userId }) : null;
-        if (!prop) return res.status(403).json({ error: 'Access denied.' });
+        if (tenant) {
+            const apt = await Apartment.findOne({ id: tenant.apartmentId });
+            const prop = apt ? await Property.findOne({ id: apt.propertyId, userId: req.userId }) : null;
+            if (!prop) return res.status(403).json({ error: 'Access denied.' });
+
+            if (payment.type === 'Deposit') {
+                tenant.depositPaidAmount = Math.max(0, (tenant.depositPaidAmount || 0) - payment.amount);
+                tenant.depositMonthsPaid = Math.max(0, (tenant.depositMonthsPaid || 0) - (payment.depositMonths || 0));
+            } else {
+                const remainingRentPayments = await Payment.find({ 
+                    id: { $ne: req.params.id }, 
+                    tenantId: payment.tenantId, 
+                    type: { $ne: 'Deposit' } 
+                }).lean();
+                const latestMonth = remainingRentPayments.map(p => p.monthPaid).sort().pop() || '';
+                tenant.lastPaidMonth = latestMonth;
+            }
+            await tenant.save();
+        }
 
         await Payment.findOneAndDelete({ id: req.params.id });
+        res.json({ status: 'success' });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.put('/api/payments/:id', authMiddleware, async (req, res) => {
+    const { amount, date, note } = req.body;
+    try {
+        if (!isConnected()) {
+            const payment = mockData.payments.find(p => String(p.id) === String(req.params.id));
+            if (!payment) return res.status(404).json({ error: 'Payment not found.' });
+            
+            const tenant = mockData.tenants.find(t => String(t.id) === String(payment.tenantId));
+            const apt = tenant ? mockData.apartments.find(a => String(a.id) === String(tenant.apartmentId)) : null;
+            const prop = apt ? mockData.properties.find(p => String(p.id) === String(apt.propertyId) && p.userId === req.userId) : null;
+            if (!prop) return res.status(403).json({ error: 'Access denied.' });
+
+            payment.amount = Number(amount) || payment.amount;
+            payment.date = date || payment.date;
+            payment.note = note !== undefined ? note : payment.note;
+            saveMock();
+            return res.json({ status: 'success' });
+        }
+        
+        const payment = await Payment.findOne({ id: req.params.id });
+        if (!payment) return res.status(404).json({ error: 'Payment not found.' });
+        
+        const tenant = await Tenant.findOne({ id: payment.tenantId });
+        if (tenant) {
+            const apt = await Apartment.findOne({ id: tenant.apartmentId });
+            const prop = apt ? await Property.findOne({ id: apt.propertyId, userId: req.userId }) : null;
+            if (!prop) return res.status(403).json({ error: 'Access denied.' });
+        }
+
+        await Payment.findOneAndUpdate(
+            { id: req.params.id }, 
+            { 
+                amount: Number(amount) || undefined, 
+                date: date || undefined, 
+                note: note !== undefined ? note : undefined 
+            }
+        );
         res.json({ status: 'success' });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });

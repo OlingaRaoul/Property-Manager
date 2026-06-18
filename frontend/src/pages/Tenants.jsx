@@ -13,6 +13,7 @@ const EMPTY_FORM = {
     rentAmount: '',
     dueDateDay: '1',
     lastPaidMonth: '',
+    depositMonths: '0'
 };
 
 const btnBlue = (disabled) => ({
@@ -70,6 +71,7 @@ const Tenants = () => {
             rentAmount:    String(tenant.rentAmount || ''),
             dueDateDay:    String(tenant.dueDateDay || '1'),
             lastPaidMonth: tenant.lastPaidMonth || '',
+            depositMonths: String(tenant.depositMonths || '0')
         });
         setError('');
         setModal(tenant);
@@ -103,6 +105,9 @@ const Tenants = () => {
                 rentAmount:    Number(form.rentAmount),
                 dueDateDay:    Number(form.dueDateDay),
                 lastPaidMonth: form.lastPaidMonth || null,
+                depositMonths: Number(form.depositMonths || 0),
+                depositPaidAmount: modal === 'create' ? 0 : (modal.depositPaidAmount || 0),
+                depositMonthsPaid: modal === 'create' ? 0 : (modal.depositMonthsPaid || 0)
             };
 
             if (modal === 'create') {
@@ -206,6 +211,9 @@ const Tenants = () => {
                                 <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: '500' }}>
                                     {property ? property.name : 'Unassigned'} • {apartment ? apartment.unitNumber : 'No unit'}
                                 </div>
+                                <div style={{ fontSize: '0.8rem', color: '#718EBF', marginTop: '0.35rem', fontWeight: '600' }}>
+                                    Deposit: {tenantObj.depositMonthsPaid || 0} / {tenantObj.depositMonths || 0} Months Paid
+                                </div>
                                 {tenantObj.phone && <div style={{ fontSize: '0.8rem', color: '#718EBF', marginTop: '0.35rem' }}>📞 {tenantObj.phone}</div>}
                                 {tenantObj.email && <div style={{ fontSize: '0.8rem', color: '#718EBF' }}>✉️ {tenantObj.email}</div>}
                             </div>
@@ -226,12 +234,20 @@ const Tenants = () => {
                                 </div>
                             </div>
 
-                            {/* Total revenue */}
-                            <div style={{ marginTop: '0.5rem', background: 'var(--bg-body)', padding: '0.75rem 1rem', borderRadius: 'var(--radius-md)', display: 'flex', justifyContent: 'space-between' }}>
-                                <span style={{ fontSize: '0.75rem', fontWeight: '600', color: 'var(--text-muted)' }}>Total Revenue</span>
-                                <span style={{ fontSize: '0.85rem', fontWeight: '800', color: 'var(--primary)' }}>
-                                    {state.payments.filter(p => p.tenantId === tenantObj.id).reduce((s, p) => s + p.amount, 0).toLocaleString()} {state.settings.currency}
-                                </span>
+                            {/* Revenue Breakdown */}
+                            <div style={{ marginTop: '0.5rem', background: 'var(--bg-body)', padding: '0.75rem 1rem', borderRadius: 'var(--radius-md)', display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <span style={{ fontSize: '0.75rem', fontWeight: '600', color: 'var(--text-muted)' }}>Rent Paid</span>
+                                    <span style={{ fontSize: '0.85rem', fontWeight: '800', color: 'var(--primary)' }}>
+                                        {state.payments.filter(p => String(p.tenantId) === String(tenantObj.id) && p.type === 'Rent').reduce((s, p) => s + p.amount, 0).toLocaleString()} {state.settings.currency}
+                                    </span>
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--border-light)', paddingTop: '0.35rem' }}>
+                                    <span style={{ fontSize: '0.75rem', fontWeight: '600', color: 'var(--text-muted)' }}>Deposit Paid</span>
+                                    <span style={{ fontSize: '0.85rem', fontWeight: '800', color: 'var(--success)' }}>
+                                        {state.payments.filter(p => String(p.tenantId) === String(tenantObj.id) && p.type === 'Deposit').reduce((s, p) => s + p.amount, 0).toLocaleString()} {state.settings.currency}
+                                    </span>
+                                </div>
                             </div>
                         </div>
                     );
@@ -304,6 +320,12 @@ const Tenants = () => {
                                         <option key={d} value={d}>Day {d} of each month</option>
                                     ))}
                                 </select>
+                            </div>
+
+                            <div>
+                                <label>Deposit Months</label>
+                                <input type="number" min="0" placeholder="e.g. 2" value={form.depositMonths}
+                                    onChange={e => setForm(f => ({ ...f, depositMonths: e.target.value }))} style={inputStyle} />
                             </div>
 
                             <div style={{ gridColumn: '1/-1' }}>

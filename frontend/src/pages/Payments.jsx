@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import axios from 'axios';
 import { useAppState } from '../context/StateContext';
 import { formatMonth } from '../utils';
-import { Receipt, PlusCircle, Building2, ChevronDown, MapPin, Printer, Trash2, X, CheckCircle2, Lock, CalendarDays } from 'lucide-react';
+import { Receipt, PlusCircle, Building2, ChevronDown, MapPin, Printer, Trash2, X, CheckCircle2, Lock, CalendarDays, Edit } from 'lucide-react';
 
 
 const TODAY      = new Date().toISOString().split('T')[0];
@@ -69,6 +69,11 @@ const Payments = () => {
     const [saving, setSaving]         = useState(false);
     const [error, setError]           = useState('');
 
+    // ── Edit Payment Group Modal state ────────────────────────────────
+    const [editGroup, setEditGroup] = useState(null); // null | paymentGroupObj
+    const [paymentMode, setPaymentMode] = useState('Rent'); // 'Rent' | 'Deposit'
+    const [depositAmountMonths, setDepositAmountMonths] = useState(0);
+
     // ── Receipt state ─────────────────────────────────────────────────
     const [receipt, setReceipt] = useState(null);
 
@@ -81,9 +86,11 @@ const Payments = () => {
         const apt  = receiptData.tenant ? state.apartments.find(a => String(a.id) === String(receiptData.tenant.apartmentId)) : null;
         const prop = apt ? state.properties.find(p => String(p.id) === String(apt.propertyId)) : null;
         const receiptNo  = `RCP-${receiptData.id?.replace('pay','').slice(-6) || Date.now()}`;
-        const monthsStr  = receiptData.monthList
-            ? receiptData.monthList.map(m => formatMonth(m, lang)).join(', ')
-            : formatMonth(receiptData.monthPaid, lang);
+        const monthsStr  = receiptData.type === 'Deposit' 
+            ? '—'
+            : (receiptData.monthList
+                ? receiptData.monthList.map(m => formatMonth(m, lang)).join(', ')
+                : formatMonth(receiptData.monthPaid, lang));
         const total = (receiptData.totalAmount || receiptData.amount || 0).toLocaleString();
         const currency = state.settings.currency || '';
         const signature = state.settings.signature || '';
@@ -166,7 +173,7 @@ const Payments = () => {
       </thead>
       <tbody>
         <tr>
-          <td>Monthly Rent</td>
+          <td>${receiptData.types?.has('Rent') && receiptData.types?.has('Deposit') ? 'Monthly Rent & Security Deposit' : (receiptData.types?.has('Deposit') ? 'Security Deposit' : 'Monthly Rent')}</td>
           <td style="color:#718EBF">${monthsStr}</td>
           <td>${total} ${currency}</td>
         </tr>
@@ -205,12 +212,19 @@ const Payments = () => {
     // Derived: months this tenant has already paid for
     const paidMonths = useMemo(() => {
         if (!tenantId) return new Set();
+        const groupPaymentIds = editGroup 
+            ? new Set(
+                state.payments
+                    .filter(p => String(p.tenantId) === String(editGroup.tenantId) && p.date === editGroup.date)
+                    .map(p => p.id)
+              )
+            : new Set();
         return new Set(
             state.payments
-                .filter(p => String(p.tenantId) === String(tenantId))
+                .filter(p => String(p.tenantId) === String(tenantId) && !groupPaymentIds.has(p.id))
                 .map(p => p.monthPaid)
         );
-    }, [tenantId, state.payments]);
+    }, [tenantId, state.payments, editGroup]);
 
     const selectedTenant = state.tenants.find(t => String(t.id) === String(tenantId));
     const selectedApt    = selectedTenant ? state.apartments.find(a => String(a.id) === String(selectedTenant.apartmentId)) : null;
@@ -227,6 +241,35 @@ const Payments = () => {
     const agreedDay      = tenantContract?.agreedDay || selectedTenant?.dueDateDay || null;
     const rentPerMonth   = selectedTenant?.rentAmount || 0;
     const totalAmount    = selectedMonths.length * rentPerMonth;
+
+    // Derived: previously paid deposit months excluding current edit group
+    const revertedDepositMonthsPaid = useMemo(() => {
+        if (!selectedTenant) return 0;
+        if (!editGroup) return selectedTenant.depositMonthsPaid || 0;
+        
+        const groupPayments = state.payments.filter(p => 
+            String(p.tenantId) === String(editGroup.tenantId) && 
+            p.date === editGroup.date
+        );
+        const remainingPayments = state.payments.filter(p => !groupPayments.some(gp => gp.id === p.id));
+        const tenantPayments = remainingPayments.filter(p => String(p.tenantId) === String(tenantId));
+        return tenantPayments
+            .filter(p => p.type === 'Deposit')
+            .reduce((sum, p) => sum + (p.depositMonths || 0), 0);
+    }, [selectedTenant, editGroup, state.payments, tenantId]);
+
+    // Derived: list of deposit payments for the selected tenant
+    const tenantDepositPayments = useMemo(() => {
+        if (!tenantId) return [];
+        return state.payments.filter(p => String(p.tenantId) === String(tenantId) && p.type === 'Deposit');
+    }, [tenantId, state.payments]);
+
+    // Derived: maximum deposit months that can be registered for the selected tenant
+    const maxDepositMonthsSelectable = useMemo(() => {
+        if (!selectedTenant) return 0;
+        const depositMonthsRequired = selectedTenant.depositMonths || 0;
+        return Math.max(0, depositMonthsRequired - revertedDepositMonthsPaid);
+    }, [selectedTenant, revertedDepositMonthsPaid]);
 
     const handleTenantChange = (id) => {
         setTenantId(id);
@@ -248,48 +291,220 @@ const Payments = () => {
         setPayDate(TODAY);
         setNote('');
         setError('');
+        setEditGroup(null);
+        setPaymentMode('Rent');
+        setDepositAmountMonths(0);
         setShowModal(true);
     };
 
-    const closeModal = () => { setShowModal(false); setError(''); };
+    const closeModal = () => { 
+        setShowModal(false); 
+        setTenantId('');
+        setSelectedMonths([]);
+        setPayDate(TODAY);
+        setNote('');
+        setError('');
+        setEditGroup(null);
+        setPaymentMode('Rent');
+        setDepositAmountMonths(0);
+    };
 
     const handleSave = async () => {
         if (!tenantId)              { setError('Please select a tenant.'); return; }
-        if (selectedMonths.length === 0) { setError('Select at least one month.'); return; }
+        if (paymentMode === 'Rent' && selectedMonths.length === 0) { setError('Select at least one month.'); return; }
+        if (paymentMode === 'Deposit' && depositAmountMonths <= 0) {
+            setError('Please select a valid deposit period.');
+            return;
+        }
         if (!payDate)               { setError('Payment date is required.'); return; }
 
         setSaving(true); setError('');
         try {
-            const newPayments = selectedMonths.map(month => ({
-                id:        `pay${Date.now()}-${month}`,
-                tenantId,
-                monthPaid: month,
-                date:      payDate,
-                amount:    rentPerMonth,
-                note:      note.trim(),
-            }));
-
-            // Post all selected months
-            await Promise.all(newPayments.map(p => axios.post(`${API_URL}/payments`, p)));
-
-            // Update lastPaidMonth on the tenant (highest selected month if newer)
-            const latestSelected = [...selectedMonths].sort().pop();
-            if (selectedTenant && (!selectedTenant.lastPaidMonth || latestSelected > selectedTenant.lastPaidMonth)) {
-                await axios.put(`${API_URL}/tenants/${tenantId}`, { lastPaidMonth: latestSelected });
-                setState(prev => ({
-                    ...prev,
-                    payments: [...prev.payments, ...newPayments],
-                    tenants: prev.tenants.map(t =>
-                        String(t.id) === String(tenantId) ? { ...t, lastPaidMonth: latestSelected } : t
-                    ),
-                }));
-            } else {
-                setState(prev => ({ ...prev, payments: [...prev.payments, ...newPayments] }));
+            let currentDepositPaid = selectedTenant.depositPaidAmount || 0;
+            
+            if (editGroup) {
+                const groupPayments = state.payments.filter(p => 
+                    String(p.tenantId) === String(editGroup.tenantId) && 
+                    p.date === editGroup.date
+                );
+                await Promise.all(groupPayments.map(p => axios.delete(`${API_URL}/payments/${p.id}`)));
+                
+                const remainingPayments = state.payments.filter(p => !groupPayments.some(gp => gp.id === p.id));
+                const tenantPayments = remainingPayments.filter(p => String(p.tenantId) === String(tenantId));
+                
+                currentDepositPaid = tenantPayments
+                    .filter(p => p.type === 'Deposit')
+                    .reduce((sum, p) => sum + p.amount, 0);
             }
 
+            const timestamp = Date.now();
+            const newPayments = [];
+
+            if (paymentMode === 'Deposit') {
+                const depAmt = depositAmountMonths * rentPerMonth;
+                newPayments.push({
+                    id:        `pay${timestamp}-deposit`,
+                    tenantId,
+                    apartmentId: selectedTenant.apartmentId,
+                    amount:    depAmt,
+                    date:      payDate,
+                    monthPaid: '',
+                    type:      'Deposit',
+                    note:      note.trim() || 'Security Deposit Payment',
+                    depositMonths: depositAmountMonths
+                });
+            } else {
+                // Rent Payment Mode — Rent payments are strictly individual rent records per month.
+                // Absolutely no auto-splitting into deposit is performed.
+                const sortedMonths = [...selectedMonths].sort();
+                sortedMonths.forEach(month => {
+                    newPayments.push({
+                        id:        `pay${timestamp}-${month}`,
+                        tenantId,
+                        apartmentId: selectedTenant.apartmentId,
+                        amount:    rentPerMonth,
+                        date:      payDate,
+                        monthPaid: month,
+                        type:      'Rent',
+                        note:      note.trim()
+                    });
+                });
+            }
+
+            // Post all created payments (deposit and rent) to backend
+            await Promise.all(newPayments.map(p => axios.post(`${API_URL}/payments`, p)));
+
+            // Recalculate tenant properties based on the next payments list
+            const remainingPayments = state.payments.filter(p => {
+                if (editGroup) {
+                    return !(String(p.tenantId) === String(editGroup.tenantId) && p.date === editGroup.date);
+                }
+                return true;
+            });
+            const allPayments = [...remainingPayments, ...newPayments].filter(p => String(p.tenantId) === String(tenantId));
+            const allRentPayments = allPayments.filter(p => p.type === 'Rent');
+            const allDepositPayments = allPayments.filter(p => p.type === 'Deposit');
+            
+            const finalLastPaidMonth = allRentPayments.map(p => p.monthPaid).sort().pop() || '';
+            const newDepositPaidAmount = allDepositPayments.reduce((sum, p) => sum + p.amount, 0);
+            const newDepositMonthsPaid = allDepositPayments.reduce((sum, p) => sum + (p.depositMonths || 0), 0);
+            
+            const updatedFields = {
+                depositPaidAmount: newDepositPaidAmount,
+                depositMonthsPaid: newDepositMonthsPaid,
+                lastPaidMonth: finalLastPaidMonth
+            };
+
+            await axios.put(`${API_URL}/tenants/${tenantId}`, updatedFields);
+
+            // Update state locally
+            setState(prev => {
+                const filteredPayments = editGroup
+                    ? prev.payments.filter(p => !(String(p.tenantId) === String(editGroup.tenantId) && p.date === editGroup.date))
+                    : prev.payments;
+                
+                return {
+                    ...prev,
+                    payments: [...filteredPayments, ...newPayments],
+                    tenants: prev.tenants.map(t =>
+                        String(t.id) === String(tenantId) 
+                            ? { ...t, ...updatedFields } 
+                            : t
+                    ),
+                };
+            });
+
             closeModal();
-        } catch { setError('Failed to register payment. Please try again.'); }
-        finally { setSaving(false); }
+        } catch (err) { 
+            console.error(err);
+            setError('Failed to save payment. Please try again.'); 
+        } finally { setSaving(false); }
+    };
+
+    // Edit and Delete payment group logic
+    const handleDeleteGroup = async (group) => {
+        if (!confirm('Are you sure you want to delete this payment group?')) return;
+        try {
+            const groupPayments = state.payments.filter(p => 
+                String(p.tenantId) === String(group.tenantId) && 
+                p.date === group.date
+            );
+            
+            await Promise.all(groupPayments.map(p => axios.delete(`${API_URL}/payments/${p.id}`)));
+            
+            const tenantId = group.tenantId;
+            setState(prev => {
+                const remainingPayments = prev.payments.filter(p => !groupPayments.some(gp => gp.id === p.id));
+                const tenantPayments = remainingPayments.filter(p => String(p.tenantId) === String(tenantId));
+                
+                const newDepositPaidAmount = tenantPayments
+                    .filter(p => p.type === 'Deposit')
+                    .reduce((sum, p) => sum + p.amount, 0);
+                
+                const newDepositMonthsPaid = tenantPayments
+                    .filter(p => p.type === 'Deposit')
+                    .reduce((sum, p) => sum + (p.depositMonths || 0), 0);
+                
+                const remainingRentPayments = tenantPayments.filter(p => p.type !== 'Deposit');
+                const latestMonth = remainingRentPayments.map(p => p.monthPaid).sort().pop() || '';
+
+                return {
+                    ...prev,
+                    payments: remainingPayments,
+                    tenants: prev.tenants.map(t => 
+                        String(t.id) === String(tenantId)
+                            ? { ...t, depositPaidAmount: newDepositPaidAmount, depositMonthsPaid: newDepositMonthsPaid, lastPaidMonth: latestMonth }
+                            : t
+                    )
+                };
+            });
+            
+        } catch (err) {
+            console.error(err);
+            alert('Failed to delete payments. Please try again.');
+        }
+    };
+
+    const openEditGroup = (group) => {
+        setTenantId(group.tenantId);
+        
+        const tenant = state.tenants.find(t => String(t.id) === String(group.tenantId));
+        const currentRentPerMonth = tenant?.rentAmount || 0;
+        
+        const groupPayments = state.payments.filter(p => 
+            String(p.tenantId) === String(group.tenantId) && 
+            p.date === group.date
+        );
+        
+        // Resolve rent months from the group
+        const rentMonths = groupPayments.filter(p => p.type === 'Rent').map(p => p.monthPaid).filter(Boolean);
+        setSelectedMonths(rentMonths);
+        
+        // Resolve deposit months from the group
+        const depositPayment = groupPayments.find(p => p.type === 'Deposit');
+        if (depositPayment) {
+            const totalAmt = depositPayment.amount;
+            const savedMonths = depositPayment.depositMonths;
+            const months = savedMonths || (currentRentPerMonth > 0 ? Math.round(totalAmt / currentRentPerMonth) : 1);
+            setDepositAmountMonths(months);
+        } else {
+            setDepositAmountMonths(0);
+        }
+        
+        // Default to Deposit tab only if it's a deposit-only group
+        const hasRent = groupPayments.some(p => p.type === 'Rent');
+        const hasDeposit = groupPayments.some(p => p.type === 'Deposit');
+        if (hasDeposit && !hasRent) {
+            setPaymentMode('Deposit');
+        } else {
+            setPaymentMode('Rent');
+        }
+        
+        setPayDate(group.date);
+        setNote(group.note || '');
+        setError('');
+        setEditGroup(group);
+        setShowModal(true);
     };
 
     if (loading) return <div className="loader">Loading payments...</div>;
@@ -304,8 +519,18 @@ const Payments = () => {
     const renderPaymentTable = (payments) => {
         const grouped = payments.reduce((acc, p) => {
             const key = `${p.tenantId}-${p.date}`;
-            if (!acc[key]) acc[key] = { ...p, monthList: [p.monthPaid], totalAmount: p.amount };
-            else { acc[key].monthList.push(p.monthPaid); acc[key].totalAmount += p.amount; }
+            if (!acc[key]) {
+                acc[key] = { 
+                    ...p, 
+                    monthList: p.monthPaid ? [p.monthPaid] : [], 
+                    totalAmount: p.amount,
+                    types: new Set([p.type])
+                };
+            } else {
+                if (p.monthPaid) acc[key].monthList.push(p.monthPaid);
+                acc[key].totalAmount += p.amount;
+                acc[key].types.add(p.type);
+            }
             return acc;
         }, {});
 
@@ -314,6 +539,7 @@ const Payments = () => {
                 <thead>
                     <tr>
                         <th style={{ borderBottom: '1px solid var(--border-light)', padding: '1rem 0', textAlign: 'left' }}>Tenant</th>
+                        <th style={{ borderBottom: '1px solid var(--border-light)', textAlign: 'left' }}>Type</th>
                         <th style={{ borderBottom: '1px solid var(--border-light)', textAlign: 'left' }}>Month(s) Covered</th>
                         <th style={{ borderBottom: '1px solid var(--border-light)', textAlign: 'left' }}>Payment Date</th>
                         <th style={{ borderBottom: '1px solid var(--border-light)', textAlign: 'left' }}>Amount</th>
@@ -323,10 +549,46 @@ const Payments = () => {
                 <tbody>
                     {Object.values(grouped).sort((a, b) => b.date.localeCompare(a.date)).map(p => {
                         const tenant = state.tenants.find(t => String(t.id) === String(p.tenantId));
-                        const monthDisplay = p.monthList.map(m => formatMonth(m, lang)).reverse().join(', ');
+                        
+                        // Determine payment types display
+                        let typeLabel = 'Rent';
+                        let typeBg = '#EFF6FF';
+                        let typeColor = '#1D4ED8';
+                        let typeBorder = '1px solid #DBEAFE';
+                        
+                        if (p.types.has('Rent') && p.types.has('Deposit')) {
+                            typeLabel = 'Rent & Deposit';
+                            typeBg = '#F5F3FF';
+                            typeColor = '#6D28D9';
+                            typeBorder = '1px solid #EDE9FE';
+                        } else if (p.types.has('Deposit')) {
+                            typeLabel = 'Deposit';
+                            typeBg = '#EEF2FF';
+                            typeColor = '#4F46E5';
+                            typeBorder = '1px solid #E0E7FF';
+                        }
+
+                        const monthDisplay = p.monthList.length > 0 
+                            ? p.monthList.map(m => formatMonth(m, lang)).reverse().join(', ') 
+                            : '—';
                         return (
                             <tr key={p.id} className="payment-row">
                                 <td style={{ fontWeight: '600', color: '#343C6A', padding: '1rem 0' }}>{tenant ? tenant.name : 'Unknown'}</td>
+                                <td>
+                                    <span style={{ 
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        padding: '0.25rem 0.6rem',
+                                        borderRadius: '6px',
+                                        fontSize: '0.75rem',
+                                        fontWeight: '600',
+                                        background: typeBg,
+                                        color: typeColor,
+                                        border: typeBorder
+                                    }}>
+                                        {typeLabel}
+                                    </span>
+                                </td>
                                 <td><span className="status-pill" style={{ fontSize: '0.75rem', background: '#F5F7FA', color: 'var(--secondary)', minWidth: 'auto' }}>{monthDisplay}</span></td>
                                 <td style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>{p.date}</td>
                                 <td style={{ fontWeight: 'bold', color: 'var(--success)' }}>{p.totalAmount.toLocaleString()} {state.settings.currency}</td>
@@ -337,7 +599,16 @@ const Payments = () => {
                                             onClick={() => openReceipt(p, tenant)}>
                                             <Printer size={14}/>
                                         </button>
-                                        <button className="btn-icon" title="Delete" style={{ color: 'var(--error)', background: 'none', border: 'none', cursor: 'pointer' }}><Trash2 size={14}/></button>
+                                        <button className="btn-icon" title="Edit"
+                                            style={{ color: 'var(--primary)', background: 'none', border: 'none', cursor: 'pointer' }}
+                                            onClick={() => openEditGroup(p)}>
+                                            <Edit size={14}/>
+                                        </button>
+                                        <button className="btn-icon" title="Delete" 
+                                            style={{ color: 'var(--error)', background: 'none', border: 'none', cursor: 'pointer' }}
+                                            onClick={() => handleDeleteGroup(p)}>
+                                            <Trash2 size={14}/>
+                                        </button>
                                     </div>
                                 </td>
                             </tr>
@@ -416,7 +687,7 @@ const Payments = () => {
                 <div className="modal-overlay active">
                     <div className="modal animate-pop-in" style={{ maxWidth: '580px' }}>
                         <div className="modal-header">
-                            <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}><CalendarDays size={22} style={{ color: '#2D60FF' }} /> Register Payment</h3>
+                            <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}><CalendarDays size={22} style={{ color: '#2D60FF' }} /> {editGroup ? 'Edit Payment' : 'Register Payment'}</h3>
                             <button className="btn-close" onClick={closeModal}><X size={20} /></button>
                         </div>
 
@@ -430,7 +701,7 @@ const Payments = () => {
                             {/* Tenant selector */}
                             <div style={{ marginBottom: '1.25rem' }}>
                                 <label>Tenant *</label>
-                                <select value={tenantId} onChange={e => handleTenantChange(e.target.value)} style={selectStyle}>
+                                <select value={tenantId} onChange={e => handleTenantChange(e.target.value)} style={selectStyle} disabled={!!editGroup}>
                                     <option value="">— Select tenant —</option>
                                     {state.tenants.map(t => {
                                         const apt  = state.apartments.find(a => String(a.id) === String(t.apartmentId));
@@ -459,11 +730,58 @@ const Payments = () => {
                                         <div style={{ fontSize: '0.7rem', color: '#718EBF', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Rent / Month</div>
                                         <div style={{ fontWeight: '800', color: '#2D60FF', fontSize: '0.88rem' }}>{rentPerMonth.toLocaleString()} {state.settings.currency}</div>
                                     </div>
+                                    <div>
+                                        <div style={{ fontSize: '0.7rem', color: '#718EBF', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Deposit Paid</div>
+                                        <div style={{ fontWeight: '800', color: '#10B981', fontSize: '0.88rem' }}>{selectedTenant.depositMonthsPaid || 0} / {selectedTenant.depositMonths || 0} Month{(selectedTenant.depositMonths || 0) !== 1 ? 's' : ''}</div>
+                                    </div>
                                 </div>
                             )}
 
-                            {/* Month grid */}
+                            {/* Payment Type Toggle */}
                             {selectedTenant && (
+                                <div style={{ marginBottom: '1.25rem' }}>
+                                    <label>Payment Type *</label>
+                                    <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.5rem' }}>
+                                        <button 
+                                            type="button"
+                                            onClick={() => setPaymentMode('Rent')}
+                                            style={{
+                                                flex: 1,
+                                                padding: '0.75rem',
+                                                borderRadius: '10px',
+                                                border: paymentMode === 'Rent' ? '2px solid #2D60FF' : '1px solid #E6EFF5',
+                                                background: paymentMode === 'Rent' ? '#F0F5FF' : '#FFFFFF',
+                                                color: paymentMode === 'Rent' ? '#2D60FF' : '#718EBF',
+                                                fontWeight: '600',
+                                                cursor: 'pointer',
+                                                transition: 'all 0.15s ease'
+                                            }}
+                                        >
+                                            Rent Payment
+                                        </button>
+                                        <button 
+                                            type="button"
+                                            onClick={() => setPaymentMode('Deposit')}
+                                            style={{
+                                                flex: 1,
+                                                padding: '0.75rem',
+                                                borderRadius: '10px',
+                                                border: paymentMode === 'Deposit' ? '2px solid #2D60FF' : '1px solid #E6EFF5',
+                                                background: paymentMode === 'Deposit' ? '#F0F5FF' : '#FFFFFF',
+                                                color: paymentMode === 'Deposit' ? '#2D60FF' : '#718EBF',
+                                                fontWeight: '600',
+                                                cursor: 'pointer',
+                                                transition: 'all 0.15s ease'
+                                            }}
+                                        >
+                                            Security Deposit
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Month grid (Rent Payment Mode) */}
+                            {selectedTenant && paymentMode === 'Rent' && (
                                 <div style={{ marginBottom: '1.5rem' }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
                                         <label style={{ margin: 0, fontWeight: '700', color: '#343C6A', fontSize: '0.9rem' }}>Select Month(s) *</label>
@@ -521,8 +839,82 @@ const Payments = () => {
                                 </div>
                             )}
 
-                            {/* Summary + date + note */}
-                            {selectedTenant && selectedMonths.length > 0 && (
+                            {/* Deposit Period (Deposit Mode) */}
+                            {selectedTenant && paymentMode === 'Deposit' && (
+                                <div style={{ marginBottom: '1.5rem' }}>
+                                    <label>Deposit Period (Months) *</label>
+                                    <div style={{ fontSize: '0.8rem', color: '#718EBF', marginBottom: '0.75rem', fontWeight: '600' }}>
+                                        {editGroup ? (
+                                            <>
+                                                Current Paid Deposit (excluding this payment): <span style={{ color: '#10B981', fontWeight: '800' }}>{revertedDepositMonthsPaid} / {selectedTenant.depositMonths || 0} Month{revertedDepositMonthsPaid !== 1 ? 's' : ''}</span>
+                                            </>
+                                        ) : (
+                                            <>
+                                                Current Paid Deposit: <span style={{ color: '#10B981', fontWeight: '800' }}>{selectedTenant.depositMonthsPaid || 0} / {selectedTenant.depositMonths || 0} Month{selectedTenant.depositMonthsPaid !== 1 ? 's' : ''}</span>
+                                            </>
+                                        )}
+                                    </div>
+                                    <select 
+                                        value={depositAmountMonths} 
+                                        onChange={e => setDepositAmountMonths(Number(e.target.value))} 
+                                        style={selectStyle}
+                                        disabled={maxDepositMonthsSelectable === 0 && !editGroup}
+                                    >
+                                        <option value="0">— Select number of months —</option>
+                                        {Array.from({ length: Math.max(1, maxDepositMonthsSelectable, depositAmountMonths, selectedTenant?.depositMonths || 3) }, (_, i) => i + 1).map(m => (
+                                            <option key={m} value={m}>
+                                                {m} Month{m > 1 ? 's' : ''} ({ (m * rentPerMonth).toLocaleString() } {state.settings.currency})
+                                            </option>
+                                        ))}
+                                    </select>
+                                    {maxDepositMonthsSelectable === 0 && (
+                                        <div style={{ color: 'var(--success)', fontSize: '0.85rem', marginTop: '0.5rem', fontWeight: '600' }}>
+                                            ✓ Security deposit of {selectedTenant.depositMonths || 0} month(s) has been fully paid.
+                                        </div>
+                                    )}
+
+                                    {/* Security Deposit Payment History */}
+                                    {tenantDepositPayments.length > 0 && (
+                                        <div style={{ marginTop: '1.5rem' }}>
+                                            <label style={{ fontSize: '0.85rem', color: '#343C6A', fontWeight: '700', display: 'block', marginBottom: '0.5rem' }}>Deposit Payment History</label>
+                                            <div style={{ maxHeight: '150px', overflowY: 'auto', border: '1px solid #E6EFF5', borderRadius: '10px', padding: '0.5rem' }}>
+                                                {tenantDepositPayments.map(p => {
+                                                    const isCurrentlyEditing = editGroup && p.date === editGroup.date && String(p.tenantId) === String(editGroup.tenantId);
+                                                    return (
+                                                        <div 
+                                                            key={p.id} 
+                                                            style={{ 
+                                                                display: 'flex', 
+                                                                justifyContent: 'space-between', 
+                                                                alignItems: 'center', 
+                                                                padding: '0.6rem 0.8rem', 
+                                                                borderRadius: '8px', 
+                                                                marginBottom: '0.4rem', 
+                                                                border: isCurrentlyEditing ? '1.5px solid #2D60FF' : '1px dashed #E6EFF5',
+                                                                background: isCurrentlyEditing ? '#F0F5FF' : '#F8F9FB',
+                                                                fontSize: '0.8rem'
+                                                            }}
+                                                        >
+                                                            <div>
+                                                                <span style={{ fontWeight: '700', color: '#343C6A' }}>{p.depositMonths || 0} Month{p.depositMonths !== 1 ? 's' : ''} Paid</span>
+                                                                <div style={{ fontSize: '0.7rem', color: '#718EBF', marginTop: '2px' }}>
+                                                                    Date: {p.date} {p.note ? `| Note: ${p.note}` : ''}
+                                                                </div>
+                                                            </div>
+                                                            <div style={{ fontWeight: '800', color: isCurrentlyEditing ? '#2D60FF' : '#10B981' }}>
+                                                                {p.amount.toLocaleString()} {state.settings.currency}
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Summary + date + note (Rent Payment Mode) */}
+                            {selectedTenant && paymentMode === 'Rent' && selectedMonths.length > 0 && (
                                 <div style={{ background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: '12px', padding: '1rem 1.25rem', marginBottom: '1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                     <div>
                                         <div style={{ fontSize: '0.75rem', color: '#2D60FF', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{selectedMonths.length} month{selectedMonths.length > 1 ? 's' : ''} selected</div>
@@ -533,6 +925,22 @@ const Payments = () => {
                                     <div style={{ textAlign: 'right' }}>
                                         <div style={{ fontSize: '0.75rem', color: '#718EBF', fontWeight: '600' }}>Total Due</div>
                                         <div style={{ fontSize: '1.4rem', fontWeight: '800', color: '#2D60FF', fontFamily: 'Outfit' }}>{totalAmount.toLocaleString()} {state.settings.currency}</div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Summary + date + note (Deposit Mode) */}
+                            {selectedTenant && paymentMode === 'Deposit' && depositAmountMonths > 0 && (
+                                <div style={{ background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: '12px', padding: '1rem 1.25rem', marginBottom: '1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <div>
+                                        <div style={{ fontSize: '0.75rem', color: '#2D60FF', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Payment Description</div>
+                                        <div style={{ fontSize: '0.8rem', color: '#343C6A', marginTop: '2px', fontWeight: '500' }}>
+                                            Security Deposit Payment ({depositAmountMonths} Month{depositAmountMonths > 1 ? 's' : ''})
+                                        </div>
+                                    </div>
+                                    <div style={{ textAlign: 'right' }}>
+                                        <div style={{ fontSize: '0.75rem', color: '#718EBF', fontWeight: '600' }}>Total Amount</div>
+                                        <div style={{ fontSize: '1.4rem', fontWeight: '800', color: '#2D60FF', fontFamily: 'Outfit' }}>{(depositAmountMonths * rentPerMonth).toLocaleString()} {state.settings.currency}</div>
                                     </div>
                                 </div>
                             )}
@@ -554,23 +962,30 @@ const Payments = () => {
 
                         <div className="modal-footer">
                             <button className="btn btn-secondary" onClick={closeModal} disabled={saving}>Cancel</button>
-                            <button className="btn" style={btnBlue(saving || selectedMonths.length === 0)} onClick={handleSave}
-                                disabled={saving || selectedMonths.length === 0}>
-                                {saving ? 'Saving...' : `Register${selectedMonths.length > 0 ? ` (${selectedMonths.length} month${selectedMonths.length > 1 ? 's' : ''})` : ''}`}
+                            <button className="btn" 
+                                style={btnBlue(saving || (paymentMode === 'Rent' ? selectedMonths.length === 0 : depositAmountMonths === 0))} 
+                                onClick={handleSave}
+                                disabled={saving || (paymentMode === 'Rent' ? selectedMonths.length === 0 : depositAmountMonths === 0)}
+                            >
+                                {saving ? 'Saving...' : editGroup ? 'Save Changes' : `Register${paymentMode === 'Rent' && selectedMonths.length > 0 ? ` (${selectedMonths.length} month${selectedMonths.length > 1 ? 's' : ''})` : ''}`}
                             </button>
                         </div>
                     </div>
                 </div>
             )}
 
+
+
         {/* ══ Receipt Preview & Print ══ */}
         {receipt && (() => {
             const apt  = receipt.tenant ? state.apartments.find(a => String(a.id) === String(receipt.tenant.apartmentId)) : null;
             const prop = apt ? state.properties.find(p => String(p.id) === String(apt.propertyId)) : null;
             const receiptNo = `RCP-${receipt.id?.replace('pay','').slice(-6) || Date.now()}`;
-            const monthsStr = receipt.monthList
-                ? receipt.monthList.map(m => formatMonth(m, lang)).join(', ')
-                : formatMonth(receipt.monthPaid, lang);
+            const monthsStr = receipt.type === 'Deposit' 
+                ? '—'
+                : (receipt.monthList
+                    ? receipt.monthList.map(m => formatMonth(m, lang)).join(', ')
+                    : formatMonth(receipt.monthPaid, lang));
 
             return (
                 <>
@@ -617,7 +1032,9 @@ const Payments = () => {
                                 </thead>
                                 <tbody>
                                     <tr style={{ borderBottom: '1px solid #E6EFF5' }}>
-                                        <td style={{ padding: '12px', color: '#343C6A', fontWeight: '600' }}>Monthly Rent</td>
+                                        <td style={{ padding: '12px', color: '#343C6A', fontWeight: '600' }}>
+                                            {receipt.types?.has('Rent') && receipt.types?.has('Deposit') ? 'Monthly Rent & Security Deposit' : (receipt.types?.has('Deposit') ? 'Security Deposit' : 'Monthly Rent')}
+                                        </td>
                                         <td style={{ padding: '12px', color: '#718EBF' }}>{monthsStr}</td>
                                         <td style={{ padding: '12px', textAlign: 'right', fontWeight: '800', color: '#2D60FF' }}>
                                             {(receipt.totalAmount || receipt.amount || 0).toLocaleString()} {state.settings.currency}
@@ -640,10 +1057,19 @@ const Payments = () => {
                             </table>
 
                             {/* Footer */}
-                            <div style={{ borderTop: '1px dashed #E6EFF5', paddingTop: '14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <div style={{ fontSize: '10px', color: '#B1B1B1' }}>This receipt is computer-generated and requires no signature.</div>
-                                <div style={{ fontSize: '10px', color: '#2D60FF', fontWeight: '700' }}>✓ PAYMENT CONFIRMED</div>
-                            </div>
+                             <div style={{ borderTop: '1px dashed #E6EFF5', paddingTop: '14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                 {state.settings.signature ? (
+                                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+                                         <img src={state.settings.signature} style={{ maxHeight: '40px', maxWidth: '150px', display: 'block', marginBottom: '2px' }} alt="Landlord Signature" />
+                                         <div style={{ fontSize: '0.65rem', color: '#718EBF', textTransform: 'uppercase', borderTop: '1px solid #E6EFF5', display: 'inline-block', width: '120px', paddingTop: '2px', fontWeight: 'bold' }}>Landlord Signature</div>
+                                     </div>
+                                 ) : (
+                                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', paddingTop: '15px' }}>
+                                         <div style={{ fontSize: '0.65rem', color: '#B1B1B1', textTransform: 'uppercase', borderTop: '1px dashed #B1B1B1', display: 'inline-block', width: '120px', paddingTop: '2px', fontWeight: 'bold' }}>Landlord Signature</div>
+                                     </div>
+                                 )}
+                                 <div style={{ fontSize: '10px', color: '#2D60FF', fontWeight: '700' }}>✓ PAYMENT CONFIRMED</div>
+                             </div>
                         </div>
                     </div>
 
@@ -701,7 +1127,9 @@ const Payments = () => {
                                         </thead>
                                         <tbody>
                                             <tr style={{ borderBottom: '1px solid #E6EFF5' }}>
-                                                <td style={{ padding: '0.8rem 1rem', fontWeight: '600', color: '#343C6A' }}>Monthly Rent</td>
+                                                <td style={{ padding: '0.8rem 1rem', fontWeight: '600', color: '#343C6A' }}>
+                                                    {receipt.types?.has('Rent') && receipt.types?.has('Deposit') ? 'Monthly Rent & Security Deposit' : (receipt.types?.has('Deposit') ? 'Security Deposit' : 'Monthly Rent')}
+                                                </td>
                                                 <td style={{ padding: '0.8rem 1rem', color: '#718EBF' }}>{monthsStr}</td>
                                                 <td style={{ padding: '0.8rem 1rem', textAlign: 'right', fontWeight: '800', color: '#2D60FF' }}>
                                                     {(receipt.totalAmount || receipt.amount || 0).toLocaleString()} {state.settings.currency}

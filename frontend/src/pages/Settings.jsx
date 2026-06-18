@@ -243,7 +243,7 @@ const Settings = () => {
                             <option value="$">$ (USD)</option>
                             <option value="€">€ (EUR)</option>
                             <option value="£">£ (GBP)</option>
-                            <option value="FCFA">FCFA</option>
+                            <option value="CFA">CFA</option>
                         </select>
                     </div>
                     <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 'auto', fontStyle: 'italic' }}>

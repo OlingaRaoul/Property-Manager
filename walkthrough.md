@@ -1,40 +1,43 @@
-# Walkthrough — Landlord Signature Setup & Receipt Integration
+# Walkthrough — Unified Register & Edit Payment Modal with Month-Based Security Deposits & Self-Healing Migration
 
-We have implemented the ability for landlords/property managers to draw or upload a signature in Settings, and automatically print/preview it at the bottom of generated invoices and receipts.
-
-## Changes Made
-
-### ⚙️ Settings View
-- **File modified**: [Settings.jsx](file:///Users/olingajoseph/Documents/My%20projects/Property_manager/frontend/src/pages/Settings.jsx)
-- **Features added**:
-  - A canvas drawing interface enabling responsive touch and mouse interactions to draw signatures directly.
-  - A picture/image uploader converting files locally to base64 using `FileReader`.
-  - Delete capability to clear stored signatures.
-  - Automatic synchronization with the database using the composite key `/api/settings` endpoints.
-
-### 📄 Payment Receipts
-- **File modified**: [Payments.jsx](file:///Users/olingajoseph/Documents/My%20projects/Property_manager/frontend/src/pages/Payments.jsx)
-- **Receipt Print Popup (`printReceipt` function)**:
-  - Replaced `"Computer-generated receipt — no signature required"` note.
-  - If a signature exists, it renders the landlord's custom signature image.
-  - If no signature exists, it renders a clean dashed signature line block:
-    ```
-    ___________________________
-    Landlord Signature
-    ```
-- **Receipt Preview Modal**:
-  - Implemented identical layout rendering in the payment preview dialog.
+We have successfully executed the implementation plan to make a tenant's paid security deposit payments visible within the Register/Edit Payment modal, resolved the user data access issue, and restored backend syntax integrity.
 
 ---
 
-## Verification Results
+## 1. Backend Changes (Authentication & Migration)
 
-### Production Build Verification
-- We ran a full Vite compilation:
+* **File Modified**: [server.js](file:///Users/olingajoseph/Documents/My%20projects/Property_manager/backend/server.js)
+* **Logic Updates**:
+  * **Syntax Restored**: Resolved a bracket nesting error in the Google OAuth handler (`/api/auth/google`), restoring MongoDB registration flow support.
+  * **Self-Healing Legacy Migration**: Removed the conditional user-count boundary (`User.countDocuments() === 1`) and configured the backend to run `migrateLegacyData(user.id)` unconditionally on all standard register, standard login, and Google Sign-In authentication paths.
+  * **CFA Defaults**: Standardized default settings to CFA currency.
+
+---
+
+## 2. Frontend Changes (Payments Ledger & Modal)
+
+* **File Modified**: [Payments.jsx](file:///Users/olingajoseph/Documents/My%20projects/Property_manager/frontend/src/pages/Payments.jsx)
+* **UI Updates**:
+  * **Deposit Exclusion on Edit**: Updated the "Current Paid Deposit" indicator under the "Security Deposit" mode tab so that when editing a payment, it shows a breakdown (`Current Paid Deposit (excluding this payment): X / Y Months`) utilizing the `revertedDepositMonthsPaid` memo.
+  * **Deposit Payment History**:
+    * Rendered a scrollable list of all previous deposit transactions for the selected tenant directly at the bottom of the "Security Deposit" panel.
+    * Displayed the exact months paid, payment date, transaction amount, and optional note for each item.
+    * Highlighted the payment currently being edited with a distinct blue border and light blue background.
+
+---
+
+## 3. Verification & Testing
+
+### Automated Build Verification
+* Run Vite production compiler check:
   ```bash
   npm run build
+  ✓ built in 331ms
   ```
-  **Status**: Passed successfully with zero errors. All assets and chunk bundles built correctly.
 
-### Automated Browser Verification
-- The automated browser subagent encountered a system-level issue with browser context creation on the host. However, the manual verification plan is fully documented and ready for interactive testing by the user.
+### Live Status Verification
+* Polled backend server status:
+  ```bash
+  curl http://localhost:3000/api/status
+  {"status":"Property Manager MERN Server Online","version":"2.5.0-multitenant"}
+  ```

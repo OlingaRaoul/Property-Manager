@@ -38,7 +38,10 @@ const TenantSchema = new mongoose.Schema({
     rentAmount: { type: Number, default: 0 },
     dueDateDay: { type: Number, default: 1 },
     lastPaidMonth: { type: String, default: "" },
-    balance: { type: Number, default: 0 }
+    balance: { type: Number, default: 0 },
+    depositMonths: { type: Number, default: 0 },
+    depositPaidAmount: { type: Number, default: 0 },
+    depositMonthsPaid: { type: Number, default: 0 }
 });
 
 // Payment Schema
@@ -52,7 +55,8 @@ const PaymentSchema = new mongoose.Schema({
     monthList: [{ type: String }],
     totalAmount: { type: Number },
     type: { type: String, default: 'Rent' },
-    note: { type: String }
+    note: { type: String },
+    depositMonths: { type: Number, default: 0 }
 });
 
 // UnitType Schema
