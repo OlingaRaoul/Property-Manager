@@ -6,26 +6,28 @@ const AuthContext = createContext();
 export const useAuth = () => useContext(AuthContext);
 
 export const AuthProvider = ({ children }) => {
-    const [user, setUser] = useState(null);
-    const [token, setToken] = useState(localStorage.getItem('token'));
-    const [authLoading, setAuthLoading] = useState(true);
-
-    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
-
-    useEffect(() => {
-        const storedUser = localStorage.getItem('user');
+    const [token, setToken] = useState(() => {
         const storedToken = localStorage.getItem('token');
-        if (storedToken && storedUser) {
-            setToken(storedToken);
-            try {
-                setUser(JSON.parse(storedUser));
-            } catch(e) {
-                console.error("Failed to parse stored user", e);
-            }
+        if (storedToken) {
             axios.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`;
         }
-        setAuthLoading(false);
-    }, []);
+        return storedToken;
+    });
+    const [user, setUser] = useState(() => {
+        const storedUser = localStorage.getItem('user');
+        if (storedUser) {
+            try {
+                return JSON.parse(storedUser);
+            } catch (e) {
+                console.error("Failed to parse stored user", e);
+                return null;
+            }
+        }
+        return null;
+    });
+    const [authLoading, setAuthLoading] = useState(false);
+
+    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 
     // Axios interceptor to catch any 401 Unauthorized errors (session expiration)
     useEffect(() => {

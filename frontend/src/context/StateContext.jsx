@@ -40,7 +40,11 @@ export const StateProvider = ({ children }) => {
             }
             setLoading(true);
             try {
-                const { data } = await axios.get(`${API_URL}/data`);
+                const { data } = await axios.get(`${API_URL}/data`, {
+                    headers: {
+                        Authorization: `Bearer ${token}`
+                    }
+                });
                 const payments = data.payments || [];
                 const tenants = (data.tenants || []).map(t => {
                     const tenantPayments = payments.filter(p => String(p.tenantId) === String(t.id) && p.type === 'Deposit');
