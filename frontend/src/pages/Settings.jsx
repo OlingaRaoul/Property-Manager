@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAppState } from '../context/StateContext';
 import { t } from '../utils';
-import { Settings as SettingsIcon, Mail, Save, Send, Tag, Trash2, CheckCircle } from 'lucide-react';
+import { Settings as SettingsIcon, Mail, Save, Send, Tag, Trash2, CheckCircle, PenTool, Upload, RefreshCw, X, Edit } from 'lucide-react';
 import axios from 'axios';
 
 const Settings = () => {
@@ -11,6 +11,14 @@ const Settings = () => {
     const [newUnitType, setNewUnitType] = useState('');
     const [testLoading, setTestLoading] = useState(false);
     const lang = state.settings.lang || 'en';
+
+    // Signature state
+    const [signatureMode, setSignatureMode] = useState('preview'); // 'preview' | 'draw' | 'upload'
+    const [isDrawing, setIsDrawing] = useState(false);
+    const [hasDrawn, setHasDrawn] = useState(false);
+    const [uploadFile, setUploadFile] = useState(null);
+    const [uploadPreview, setUploadPreview] = useState('');
+    const canvasRef = useRef(null);
 
     useEffect(() => {
         const fetchSmtp = async () => {
@@ -95,6 +103,123 @@ const Settings = () => {
         }
     };
 
+    // Signature Pad logic
+    const getCoordinates = (e) => {
+        const canvas = canvasRef.current;
+        if (!canvas) return { x: 0, y: 0 };
+        const rect = canvas.getBoundingClientRect();
+        if (e.touches && e.touches.length > 0) {
+            return {
+                x: e.touches[0].clientX - rect.left,
+                y: e.touches[0].clientY - rect.top
+            };
+        }
+        return {
+            x: e.clientX - rect.left,
+            y: e.clientY - rect.top
+        };
+    };
+
+    const startDrawing = (e) => {
+        e.preventDefault();
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        ctx.strokeStyle = '#1e293b'; // Slate 800
+        ctx.lineWidth = 3;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        const { x, y } = getCoordinates(e);
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        setIsDrawing(true);
+    };
+
+    const draw = (e) => {
+        if (!isDrawing) return;
+        e.preventDefault();
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        const { x, y } = getCoordinates(e);
+        ctx.lineTo(x, y);
+        ctx.stroke();
+        setHasDrawn(true);
+    };
+
+    const stopDrawing = () => {
+        setIsDrawing(false);
+    };
+
+    const clearCanvas = () => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        setHasDrawn(false);
+    };
+
+    const saveSignatureToSettings = async (base64Data) => {
+        try {
+            await axios.post(`${API_URL}/settings`, { key: 'signature', value: base64Data });
+            setState(s => ({
+                ...s,
+                settings: { ...s.settings, signature: base64Data }
+            }));
+            setSignatureMode('preview');
+            setHasDrawn(false);
+            setStatusMsg({ text: 'Signature saved successfully!', type: 'success' });
+            setTimeout(() => setStatusMsg({ text: '', type: '' }), 3000);
+        } catch (e) {
+            setStatusMsg({ text: 'Failed to save signature', type: 'error' });
+        }
+    };
+
+    const saveDrawSignature = async () => {
+        const canvas = canvasRef.current;
+        if (!canvas || !hasDrawn) return;
+        const base64Data = canvas.toDataURL('image/png');
+        await saveSignatureToSettings(base64Data);
+    };
+
+    const handleFileChange = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        if (!file.type.startsWith('image/')) {
+            setStatusMsg({ text: 'Please select an image file', type: 'error' });
+            return;
+        }
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            setUploadPreview(event.target.result);
+        };
+        reader.readAsDataURL(file);
+        setUploadFile(file);
+    };
+
+    const saveUploadSignature = async () => {
+        if (!uploadPreview) return;
+        await saveSignatureToSettings(uploadPreview);
+        setUploadFile(null);
+        setUploadPreview('');
+    };
+
+    const deleteSignature = async () => {
+        if (!confirm('Are you sure you want to delete your signature?')) return;
+        try {
+            await axios.post(`${API_URL}/settings`, { key: 'signature', value: '' });
+            setState(s => ({
+                ...s,
+                settings: { ...s.settings, signature: '' }
+            }));
+            setSignatureMode('preview');
+            setStatusMsg({ text: 'Signature deleted successfully!', type: 'success' });
+            setTimeout(() => setStatusMsg({ text: '', type: '' }), 3000);
+        } catch (e) {
+            setStatusMsg({ text: 'Failed to delete signature', type: 'error' });
+        }
+    };
+
     return (
         <div className="view-container animate-fade-in" style={{ paddingTop: '1.25rem' }}>
             <div className="view-header" style={{ marginBottom: '2.5rem' }}>
@@ -173,6 +298,131 @@ const Settings = () => {
                             <Send size={15} /> {testLoading ? 'Testing...' : 'Test'}
                         </button>
                     </div>
+                </div>
+
+                {/* Landlord Signature Config */}
+                <div className="stat-card" style={{ display: 'flex', flexDirection: 'column', padding: '1.5rem', background: 'white', borderRadius: '20px', boxShadow: 'var(--card-shadow)', border: '1px solid var(--border-light)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem' }}>
+                        <div style={{ width: '40px', height: '40px', borderRadius: '12px', background: 'linear-gradient(135deg,#10B981,#059669)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
+                            <PenTool size={20} />
+                        </div>
+                        <div>
+                            <h3 style={{ margin: 0, fontFamily: 'Outfit', fontWeight: 800, fontSize: '1rem' }}>Landlord Signature</h3>
+                            <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-muted)' }}>Set up signature for invoices and receipts</p>
+                        </div>
+                    </div>
+
+                    {signatureMode === 'preview' && (
+                        <div style={{ display: 'flex', flexDirection: 'column', height: '100%', flex: 1 }}>
+                            {state.settings.signature ? (
+                                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                                    <div style={{ flex: 1, minHeight: '120px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#FAFAFA', borderRadius: '12px', border: '1px solid var(--border-light)', padding: '1rem' }}>
+                                        <img src={state.settings.signature} style={{ maxHeight: '80px', maxWidth: '100%', objectFit: 'contain', display: 'block' }} alt="Landlord Signature" />
+                                    </div>
+                                    <div style={{ display: 'flex', gap: '0.5rem', marginTop: 'auto' }}>
+                                        <button className="btn btn-secondary" onClick={() => setSignatureMode('draw')} style={{ flex: 1, padding: '0.6rem', border: 'none', borderRadius: '8px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', fontWeight: 600, background: 'var(--secondary)', color: 'white' }}>
+                                            <Edit size={14} /> Draw New
+                                        </button>
+                                        <button className="btn btn-secondary" onClick={() => setSignatureMode('upload')} style={{ flex: 1, padding: '0.6rem', border: 'none', borderRadius: '8px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', fontWeight: 600, background: 'var(--secondary)', color: 'white' }}>
+                                            <Upload size={14} /> Upload
+                                        </button>
+                                        <button className="btn btn-secondary" onClick={deleteSignature} style={{ padding: '0.6rem', border: 'none', borderRadius: '8px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: '#FEE2E2', color: '#EF4444' }}>
+                                            <Trash2 size={14} />
+                                        </button>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '1rem', justifyContent: 'center' }}>
+                                    <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-muted)', textAlign: 'center', fontStyle: 'italic', padding: '1rem' }}>
+                                        No signature configured. Rent receipts will render with a blank signature line placeholder.
+                                    </p>
+                                    <div style={{ display: 'flex', gap: '0.75rem', marginTop: 'auto' }}>
+                                        <button className="btn btn-primary" onClick={() => setSignatureMode('draw')} style={{ flex: 1, padding: '0.75rem', background: 'var(--primary)', color: 'white', border: 'none', borderRadius: '10px', cursor: 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
+                                            <PenTool size={15} /> Draw Signature
+                                        </button>
+                                        <button className="btn btn-secondary" onClick={() => setSignatureMode('upload')} style={{ flex: 1, padding: '0.75rem', background: 'var(--secondary)', color: 'white', border: 'none', borderRadius: '10px', cursor: 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
+                                            <Upload size={15} /> Upload Picture
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {signatureMode === 'draw' && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                            <div style={{ position: 'relative' }}>
+                                <canvas
+                                    ref={canvasRef}
+                                    width={400}
+                                    height={150}
+                                    style={{
+                                        width: '100%',
+                                        height: '150px',
+                                        background: '#FCFDFE',
+                                        border: '2px dashed var(--border-light)',
+                                        borderRadius: '12px',
+                                        cursor: 'crosshair',
+                                        touchAction: 'none'
+                                    }}
+                                    onMouseDown={startDrawing}
+                                    onMouseMove={draw}
+                                    onMouseUp={stopDrawing}
+                                    onMouseLeave={stopDrawing}
+                                    onTouchStart={startDrawing}
+                                    onTouchMove={draw}
+                                    onTouchEnd={stopDrawing}
+                                />
+                                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textAlign: 'center', marginTop: '0.25rem' }}>
+                                    Draw your signature inside the box using mouse, trackpad, or touch screen.
+                                </div>
+                            </div>
+                            <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                <button className="btn btn-primary" onClick={saveDrawSignature} disabled={!hasDrawn} style={{ flex: 1, padding: '0.65rem', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', background: 'var(--primary)', color: 'white', opacity: hasDrawn ? 1 : 0.5 }}>
+                                    <Save size={14} /> Save Signature
+                                </button>
+                                <button className="btn btn-secondary" onClick={clearCanvas} style={{ padding: '0.65rem', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', background: '#F3F4F6', color: '#4B5563' }}>
+                                    <RefreshCw size={14} /> Clear
+                                </button>
+                                <button className="btn btn-secondary" onClick={() => { setSignatureMode('preview'); setHasDrawn(false); }} style={{ padding: '0.65rem', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: '#EF4444', color: 'white' }}>
+                                    <X size={14} />
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {signatureMode === 'upload' && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', height: '100%' }}>
+                            <div style={{ border: '2px dashed var(--border-light)', borderRadius: '12px', padding: '1.5rem', textAlign: 'center', background: '#FCFDFE', position: 'relative' }}>
+                                <input
+                                    type="file"
+                                    id="signature-upload"
+                                    accept="image/*"
+                                    style={{ display: 'none' }}
+                                    onChange={handleFileChange}
+                                />
+                                <label htmlFor="signature-upload" style={{ cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
+                                    <Upload size={24} style={{ color: 'var(--primary)' }} />
+                                    <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--primary)' }}>Choose image file</span>
+                                    <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>PNG, JPG or SVG formats accepted</span>
+                                </label>
+                                {uploadPreview && (
+                                    <div style={{ marginTop: '1rem', borderTop: '1px solid var(--border-light)', paddingTop: '0.75rem' }}>
+                                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>Preview:</div>
+                                        <img src={uploadPreview} style={{ maxHeight: '70px', maxWidth: '100%', objectFit: 'contain', display: 'block', margin: '0 auto' }} alt="Upload preview" />
+                                    </div>
+                                )}
+                            </div>
+                            <div style={{ display: 'flex', gap: '0.5rem', marginTop: 'auto' }}>
+                                <button className="btn btn-primary" onClick={saveUploadSignature} disabled={!uploadPreview} style={{ flex: 1, padding: '0.65rem', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', background: 'var(--primary)', color: 'white', opacity: uploadPreview ? 1 : 0.5 }}>
+                                    <Save size={14} /> Save Signature
+                                </button>
+                                <button className="btn btn-secondary" onClick={() => { setSignatureMode('preview'); setUploadFile(null); setUploadPreview(''); }} style={{ padding: '0.65rem', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: '#EF4444', color: 'white' }}>
+                                    <X size={14} /> Cancel
+                                </button>
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
             

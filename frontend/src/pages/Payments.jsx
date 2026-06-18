@@ -86,6 +86,7 @@ const Payments = () => {
             : formatMonth(receiptData.monthPaid, lang);
         const total = (receiptData.totalAmount || receiptData.amount || 0).toLocaleString();
         const currency = state.settings.currency || '';
+        const signature = state.settings.signature || '';
 
         const html = `<!DOCTYPE html>
 <html>
@@ -180,7 +181,16 @@ const Payments = () => {
     </table>
 
     <div class="footer">
-      <div class="footer-note">Computer-generated receipt &mdash; no signature required.</div>
+      ${signature ? `
+        <div class="signature-container" style="text-align: left;">
+          <img src="${signature}" style="max-height: 40px; max-width: 150px; display: block; margin-bottom: 2px;" alt="Landlord Signature" />
+          <div style="font-size: 8px; color: #718EBF; text-transform: uppercase; border-top: 1px solid #E6EFF5; display: inline-block; width: 120px; padding-top: 2px; font-weight: bold;">Landlord Signature</div>
+        </div>
+      ` : `
+        <div class="signature-container" style="text-align: left; padding-top: 20px;">
+          <div style="font-size: 8px; color: #718EBF; text-transform: uppercase; border-top: 1px dashed #B1B1B1; display: inline-block; width: 120px; padding-top: 2px; font-weight: bold;">Landlord Signature</div>
+        </div>
+      `}
       <div class="footer-status">&#10003; PAYMENT CONFIRMED</div>
     </div>
   </div>
@@ -713,9 +723,18 @@ const Payments = () => {
                                         </tfoot>
                                     </table>
 
-                                    {/* Footer note */}
+                                    {/* Footer note / Signature */}
                                     <div style={{ borderTop: '1px dashed #E6EFF5', paddingTop: '0.8rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                        <div style={{ fontSize: '0.7rem', color: '#B1B1B1' }}>Computer-generated receipt — no signature required.</div>
+                                        {state.settings.signature ? (
+                                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+                                                <img src={state.settings.signature} style={{ maxHeight: '40px', maxWidth: '150px', display: 'block', marginBottom: '2px' }} alt="Landlord Signature" />
+                                                <div style={{ fontSize: '0.65rem', color: '#718EBF', textTransform: 'uppercase', borderTop: '1px solid #E6EFF5', display: 'inline-block', width: '120px', paddingTop: '2px', fontWeight: 'bold' }}>Landlord Signature</div>
+                                            </div>
+                                        ) : (
+                                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', paddingTop: '15px' }}>
+                                                <div style={{ fontSize: '0.65rem', color: '#B1B1B1', textTransform: 'uppercase', borderTop: '1px dashed #B1B1B1', display: 'inline-block', width: '120px', paddingTop: '2px', fontWeight: 'bold' }}>Landlord Signature</div>
+                                            </div>
+                                        )}
                                         <div style={{ fontSize: '0.72rem', color: '#15803D', fontWeight: '700' }}>✓ PAYMENT CONFIRMED</div>
                                     </div>
                                 </div>

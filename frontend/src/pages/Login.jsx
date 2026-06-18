@@ -198,6 +198,13 @@ const Login = () => {
                                 }}
                             />
                         </div>
+                        <div style={{ textAlign: 'right', marginTop: '0.45rem' }}>
+                            <Link to="/forgot-password" style={{ fontSize: '0.8rem', color: '#2D60FF', fontWeight: '600', textDecoration: 'none', transition: 'color 0.2s' }}
+                                onMouseEnter={e => e.target.style.color = '#60a5fa'}
+                                onMouseLeave={e => e.target.style.color = '#2D60FF'}>
+                                Forgot Password?
+                            </Link>
+                        </div>
                     </div>
 
                     {/* Submit Button */}

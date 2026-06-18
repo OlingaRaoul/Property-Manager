@@ -9,6 +9,7 @@ const path = require('path');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { OAuth2Client } = require('google-auth-library');
+const crypto = require('crypto');
 
 dotenv.config();
 
@@ -306,6 +307,154 @@ app.post('/api/auth/login', async (req, res) => {
             const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '7d' });
             return res.json({ status: 'success', token, user: { id: user.id, name: user.name, email: lowercaseEmail } });
         }
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/auth/forgot-password', async (req, res) => {
+    const { email } = req.body;
+    if (!email) {
+        return res.status(400).json({ error: 'Email is required.' });
+    }
+    const lowercaseEmail = email.toLowerCase().trim();
+    try {
+        const token = crypto.randomBytes(32).toString('hex');
+        const expires = Date.now() + 3600000; // 1 hour expiration
+
+        let userFound = false;
+        let smtpConfig = null;
+        let userName = '';
+
+        if (!isConnected()) {
+            const userIndex = mockData.users.findIndex(u => u.email === lowercaseEmail);
+            if (userIndex !== -1) {
+                mockData.users[userIndex].resetPasswordToken = token;
+                mockData.users[userIndex].resetPasswordExpires = new Date(expires).toISOString();
+                userName = mockData.users[userIndex].name;
+                saveMock();
+                userFound = true;
+                
+                // Get SMTP configuration for this user
+                smtpConfig = mockData.settings[`smtp_config_${mockData.users[userIndex].id}`];
+            }
+        } else {
+            const user = await User.findOne({ email: lowercaseEmail });
+            if (user) {
+                user.resetPasswordToken = token;
+                user.resetPasswordExpires = expires;
+                await user.save();
+                userName = user.name;
+                userFound = true;
+                
+                // Get SMTP configuration for this user
+                const row = await Setting.findOne({ key: 'smtp_config', userId: user.id });
+                if (row) smtpConfig = JSON.parse(row.value);
+            }
+        }
+
+        // To prevent user enumeration, we return success even if the email does not exist
+        if (!userFound) {
+            return res.json({ status: 'success', message: 'If that email address exists, a password reset link has been sent.' });
+        }
+
+        const clientOrigin = req.headers.origin || 'http://localhost:5173';
+        const resetLink = `${clientOrigin}/reset-password?token=${token}&email=${encodeURIComponent(lowercaseEmail)}`;
+
+        if (smtpConfig && smtpConfig.host && smtpConfig.user && smtpConfig.pass) {
+            const transporter = nodemailer.createTransport({
+                host: smtpConfig.host,
+                port: Number(smtpConfig.port) || 587,
+                secure: Number(smtpConfig.port) === 465,
+                auth: {
+                    user: smtpConfig.user,
+                    pass: smtpConfig.pass
+                }
+            });
+
+            const emailHtml = `
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;">
+                    <h2 style="color: #2D60FF;">Reset Your Password</h2>
+                    <p>Hello ${userName},</p>
+                    <p>We received a request to reset the password for your Property Manager account.</p>
+                    <p>Please click the button below to reset your password. This link is valid for 1 hour.</p>
+                    <div style="margin: 30px 0; text-align: center;">
+                        <a href="${resetLink}" style="background-color: #2D60FF; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">Reset Password</a>
+                    </div>
+                    <p>If the button above doesn't work, copy and paste this URL into your browser:</p>
+                    <p style="word-break: break-all; color: #64748B;">${resetLink}</p>
+                    <p style="margin-top: 30px; font-size: 0.88rem; color: #64748B;">If you did not request a password reset, you can safely ignore this email.</p>
+                </div>
+            `;
+
+            await transporter.sendMail({
+                from: `"${smtpConfig.from || 'Property Manager'}" <${smtpConfig.user}>`,
+                to: lowercaseEmail,
+                subject: 'Reset your Property Manager Password',
+                html: emailHtml
+            });
+
+            return res.json({ status: 'success', message: 'If that email address exists, a password reset link has been sent.' });
+        } else {
+            // Simulated delivery
+            console.log(`📧 [RESET PASSWORD SIMULATION] To: ${lowercaseEmail} | Subject: Reset your Property Manager Password`);
+            console.log(`🔗 Link: ${resetLink}`);
+            return res.json({ 
+                status: 'success', 
+                message: 'Password reset link simulated in server console (no SMTP configured).',
+                simulatedLink: resetLink
+            });
+        }
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/auth/reset-password', async (req, res) => {
+    const { email, token, newPassword } = req.body;
+    if (!email || !token || !newPassword) {
+        return res.status(400).json({ error: 'Email, token, and new password are required.' });
+    }
+    const lowercaseEmail = email.toLowerCase().trim();
+    try {
+        const hashedPassword = await bcrypt.hash(newPassword, 10);
+        let userFound = false;
+
+        if (!isConnected()) {
+            const userIndex = mockData.users.findIndex(u => u.email === lowercaseEmail);
+            if (userIndex !== -1) {
+                const user = mockData.users[userIndex];
+                if (user.resetPasswordToken === token && user.resetPasswordExpires) {
+                    const expiry = new Date(user.resetPasswordExpires).getTime();
+                    if (expiry > Date.now()) {
+                        mockData.users[userIndex].password = hashedPassword;
+                        mockData.users[userIndex].resetPasswordToken = undefined;
+                        mockData.users[userIndex].resetPasswordExpires = undefined;
+                        saveMock();
+                        userFound = true;
+                    }
+                }
+            }
+        } else {
+            const user = await User.findOne({
+                email: lowercaseEmail,
+                resetPasswordToken: token,
+                resetPasswordExpires: { $gt: Date.now() }
+            });
+            if (user) {
+                user.password = hashedPassword;
+                user.resetPasswordToken = undefined;
+                user.resetPasswordExpires = undefined;
+                await user.save();
+                userFound = true;
+            }
+        }
+
+        if (!userFound) {
+            return res.status(400).json({ error: 'Password reset link is invalid or has expired.' });
+        }
+
+        res.json({ status: 'success', message: 'Your password has been reset successfully!' });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
