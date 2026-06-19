@@ -285,6 +285,20 @@ const Settings = () => {
                             <option value="CFA">CFA</option>
                         </select>
                     </div>
+                    <div style={{ marginBottom: '1.5rem' }}>
+                        <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)' }}>Public Portal URL (Production)</label>
+                        <input 
+                            type="text" 
+                            className="search-box" 
+                            style={{ width: '100%' }} 
+                            placeholder="e.g. https://app.yourdomain.com" 
+                            value={state.settings.frontendBaseUrl || ''} 
+                            onChange={e => handleRegionalSettingChange('frontendBaseUrl', e.target.value)} 
+                        />
+                        <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block', marginTop: '0.35rem', lineHeight: '1.3' }}>
+                            Used to generate public links for tenants (e.g. payment page). Defaults to the current browser domain if empty.
+                        </span>
+                    </div>
                     <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 'auto', fontStyle: 'italic' }}>
                         * Settings are saved automatically as soon as they are changed.
                     </p>

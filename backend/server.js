@@ -953,6 +953,7 @@ app.get('/api/data', authMiddleware, async (req, res) => {
             settings.currency = mockData.settings[`currency_${req.userId}`] || mockData.settings.currency || 'CFA';
             settings.lang = mockData.settings[`lang_${req.userId}`] || mockData.settings.lang || 'en';
             settings.notificationThresholdDays = mockData.settings[`notificationThresholdDays_${req.userId}`] || mockData.settings.notificationThresholdDays || 3;
+            settings.frontendBaseUrl = mockData.settings[`frontendBaseUrl_${req.userId}`] || mockData.settings.frontendBaseUrl || '';
 
             return res.json({ 
                 properties, apartments, tenants, payments, settings, 

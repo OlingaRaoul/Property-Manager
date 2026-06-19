@@ -56,7 +56,13 @@ const Tenants = () => {
             alert("No payment token found for this tenant. Try editing the tenant or reloading.");
             return;
         }
-        const link = `${window.location.origin}/pay/${tenant.paymentToken}`;
+        let base = import.meta.env.VITE_FRONTEND_URL || state.settings.frontendBaseUrl || window.location.origin;
+        base = base.trim();
+        if (base && !/^https?:\/\//i.test(base)) {
+            // If no protocol specified, prepend window protocol
+            base = `${window.location.protocol}//${base}`;
+        }
+        const link = `${base.replace(/\/+$/, '')}/pay/${tenant.paymentToken}`;
         navigator.clipboard.writeText(link).then(() => {
             setToast(`Copied payment link for ${tenant.name}!`);
             setTimeout(() => setToast(''), 3000);
