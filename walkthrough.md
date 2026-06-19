@@ -1,43 +1,46 @@
-# Walkthrough — Unified Register & Edit Payment Modal with Month-Based Security Deposits & Self-Healing Migration
+# Walkthrough — Resolving Token Race Condition on Page Refresh
 
-We have successfully executed the implementation plan to make a tenant's paid security deposit payments visible within the Register/Edit Payment modal, resolved the user data access issue, and restored backend syntax integrity.
-
----
-
-## 1. Backend Changes (Authentication & Migration)
-
-* **File Modified**: [server.js](file:///Users/olingajoseph/Documents/My%20projects/Property_manager/backend/server.js)
-* **Logic Updates**:
-  * **Syntax Restored**: Resolved a bracket nesting error in the Google OAuth handler (`/api/auth/google`), restoring MongoDB registration flow support.
-  * **Self-Healing Legacy Migration**: Removed the conditional user-count boundary (`User.countDocuments() === 1`) and configured the backend to run `migrateLegacyData(user.id)` unconditionally on all standard register, standard login, and Google Sign-In authentication paths.
-  * **CFA Defaults**: Standardized default settings to CFA currency.
+We have identified and resolved the issue where data disappeared when the user refreshed the browser.
 
 ---
 
-## 2. Frontend Changes (Payments Ledger & Modal)
+## 1. Root Cause Analysis
 
-* **File Modified**: [Payments.jsx](file:///Users/olingajoseph/Documents/My%20projects/Property_manager/frontend/src/pages/Payments.jsx)
-* **UI Updates**:
-  * **Deposit Exclusion on Edit**: Updated the "Current Paid Deposit" indicator under the "Security Deposit" mode tab so that when editing a payment, it shows a breakdown (`Current Paid Deposit (excluding this payment): X / Y Months`) utilizing the `revertedDepositMonthsPaid` memo.
-  * **Deposit Payment History**:
-    * Rendered a scrollable list of all previous deposit transactions for the selected tenant directly at the bottom of the "Security Deposit" panel.
-    * Displayed the exact months paid, payment date, transaction amount, and optional note for each item.
-    * Highlighted the payment currently being edited with a distinct blue border and light blue background.
+* **Race Condition on Initial Load**:
+  * On page refresh, React state initializes.
+  * In the original setup, `AuthProvider` initialized the token from `localStorage` into state immediately, but only set the `axios.defaults.headers.common['Authorization']` global header inside a `useEffect` block, which runs **after** the initial render (mount) is completed.
+  * Concurrently, `StateProvider` observed that the `token` state was present (via the `useState` initializer value) and immediately fired the `fetchInitialData()` callback to load the MERN backend data.
+  * Because `StateProvider`'s fetch was initiated during mount *before* the `AuthProvider`'s `useEffect` had run, the request to `/api/data` was sent without the `Authorization` header.
+  * The backend responded with `401 Unauthorized` (unauthenticated request).
+  * The Axios interceptor caught the 401 error, assumed the session had expired, cleared `localStorage`, and triggered a redirect/logout, causing all data to disappear.
+
+---
+
+## 2. Changes Made
+
+### 🖥️ Frontend Context Updates
+* **File modified**: [AuthContext.jsx](file:///Users/olingajoseph/Documents/My%20projects/Property_manager/frontend/src/context/AuthContext.jsx)
+  * Synchronously read `user` and `token` from `localStorage` inside the `useState` functional initializers.
+  * Set `axios.defaults.headers.common['Authorization']` immediately when initializing the `token` state. This guarantees that the default authorization header is active *before* any child components render or make requests, preventing the race condition.
+  * Removed the initial mount `useEffect` that was setting the headers asynchronously.
+* **File modified**: [StateContext.jsx](file:///Users/olingajoseph/Documents/My%20projects/Property_manager/frontend/src/context/StateContext.jsx)
+  * Updated the `fetchInitialData` request to pass the Authorization header explicitly:
+    ```javascript
+    const { data } = await axios.get(`${API_URL}/data`, {
+        headers: {
+            Authorization: `Bearer ${token}`
+        }
+    });
+    ```
+    This adds double-layered safety ensuring that initial data fetches are never sent without authorization credentials.
 
 ---
 
 ## 3. Verification & Testing
 
-### Automated Build Verification
-* Run Vite production compiler check:
+### Frontend Compilation
+* Checked the production build compile:
   ```bash
   npm run build
-  ✓ built in 331ms
-  ```
-
-### Live Status Verification
-* Polled backend server status:
-  ```bash
-  curl http://localhost:3000/api/status
-  {"status":"Property Manager MERN Server Online","version":"2.5.0-multitenant"}
+  ✓ built in 368ms
   ```

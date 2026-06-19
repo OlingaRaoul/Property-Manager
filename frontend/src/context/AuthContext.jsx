@@ -27,7 +27,7 @@ export const AuthProvider = ({ children }) => {
     });
     const [authLoading, setAuthLoading] = useState(false);
 
-    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+    const API_URL = import.meta.env.VITE_API_URL || '/api';
 
     // Axios interceptor to catch any 401 Unauthorized errors (session expiration)
     useEffect(() => {
