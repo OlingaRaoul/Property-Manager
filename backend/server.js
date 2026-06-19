@@ -19,7 +19,8 @@ const { User, Property, Apartment, Tenant, Payment, UnitType, Contract, Utility,
 
 const app = express();
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
 const JWT_SECRET = process.env.JWT_SECRET || 'pm_super_secret_key_2026';
 
@@ -64,14 +65,142 @@ if (fs.existsSync(MOCK_DB_PATH)) {
 
 const saveMock = () => fs.writeFileSync(MOCK_DB_PATH, JSON.stringify(mockData, null, 2));
 
+const migrateTenantsTokens = async () => {
+    try {
+        if (isConnected()) {
+            const tenants = await Tenant.find({ paymentToken: { $exists: false } });
+            if (tenants.length > 0) {
+                console.log(`[MIGRATION] Generating payment tokens for ${tenants.length} tenants...`);
+                for (const t of tenants) {
+                    t.paymentToken = crypto.randomUUID();
+                    await t.save();
+                }
+                console.log('✅ Tenant payment token migration complete');
+            }
+        } else {
+            let updated = false;
+            mockData.tenants = mockData.tenants.map(t => {
+                if (!t.paymentToken) {
+                    updated = true;
+                    return { ...t, paymentToken: crypto.randomUUID() };
+                }
+                return t;
+            });
+            if (updated) {
+                saveMock();
+                console.log('✅ Mock Tenant payment token migration complete');
+            }
+        }
+    } catch (e) {
+        console.error("Tenant payment token migration error:", e.message);
+    }
+};
+
+const migrateSplitPayments = async () => {
+    try {
+        if (isConnected()) {
+            const payments = await Payment.find({ 
+                type: 'Rent', 
+                status: 'Approved', 
+                monthList: { $exists: true } 
+            });
+            for (const p of payments) {
+                if (p.monthList && p.monthList.length > 1) {
+                    const months = [...p.monthList];
+                    console.log(`[MIGRATION] Splitting payment ${p.id} for months: ${months.join(', ')}...`);
+                    const splitAmount = p.amount / months.length;
+                    
+                    // Update original
+                    p.amount = splitAmount;
+                    p.monthPaid = months[0];
+                    p.monthList = [months[0]];
+                    await p.save();
+
+                    // Create others
+                    for (let i = 1; i < months.length; i++) {
+                        const month = months[i];
+                        await Payment.create({
+                            id: `pay_${Date.now()}_${i}_${Math.random().toString(36).substr(2, 5)}`,
+                            tenantId: p.tenantId,
+                            apartmentId: p.apartmentId,
+                            amount: splitAmount,
+                            date: p.date,
+                            monthPaid: month,
+                            monthList: [month],
+                            type: 'Rent',
+                            note: p.note,
+                            status: 'Approved',
+                            proofFile: p.proofFile,
+                            proofFileType: p.proofFileType
+                        });
+                    }
+                }
+            }
+            console.log('✅ Split payment migration complete');
+        } else {
+            let updated = false;
+            const newPayments = [];
+            mockData.payments = mockData.payments.map(p => {
+                if (p.type === 'Rent' && p.status === 'Approved' && p.monthList && p.monthList.length > 1) {
+                    updated = true;
+                    const months = [...p.monthList];
+                    console.log(`[MIGRATION] Splitting mock payment ${p.id} for months: ${months.join(', ')}...`);
+                    const splitAmount = p.amount / months.length;
+                    
+                    for (let i = 1; i < months.length; i++) {
+                        const month = months[i];
+                        newPayments.push({
+                            id: `pay_${Date.now()}_${i}_${Math.random().toString(36).substr(2, 5)}`,
+                            tenantId: p.tenantId,
+                            apartmentId: p.apartmentId,
+                            amount: splitAmount,
+                            date: p.date,
+                            monthPaid: month,
+                            monthList: [month],
+                            type: 'Rent',
+                            note: p.note,
+                            status: 'Approved',
+                            proofFile: p.proofFile,
+                            proofFileType: p.proofFileType
+                        });
+                    }
+
+                    return {
+                        ...p,
+                        amount: splitAmount,
+                        monthPaid: months[0],
+                        monthList: [months[0]]
+                    };
+                }
+                return p;
+            });
+            if (updated) {
+                mockData.payments = [...mockData.payments, ...newPayments];
+                saveMock();
+                console.log('✅ Mock split payment migration complete');
+            }
+        }
+    } catch (e) {
+        console.error("Split payment migration error:", e.message);
+    }
+};
+
 // Connect to MongoDB with a short timeout to prevent hanging the first request
 mongoose.connect(process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/property_manager', {
     serverSelectionTimeoutMS: 2000 // 2 seconds timeout for initial connection
 }).then(() => {
     console.log('✅ Connected to MongoDB Backend Database');
+    (async () => {
+        await migrateTenantsTokens();
+        await migrateSplitPayments();
+    })();
 }).catch(err => {
     console.error('❌ MongoDB Connection ERROR:', err.message);
     console.warn('⚠️ Falling back to Mock JSON Mode.');
+    (async () => {
+        await migrateTenantsTokens();
+        await migrateSplitPayments();
+    })();
 });
 
 const isConnected = () => mongoose.connection.readyState === 1;
@@ -484,6 +613,324 @@ app.post('/api/auth/change-password', authMiddleware, async (req, res) => {
     }
 });
 
+app.get('/api/public/tenant/:token', async (req, res) => {
+    const { token } = req.params;
+    try {
+        if (!isConnected()) {
+            const tenant = mockData.tenants.find(t => t.paymentToken === token);
+            if (!tenant) return res.status(404).json({ error: 'Tenant not found.' });
+
+            const apt = mockData.apartments.find(a => String(a.id) === String(tenant.apartmentId));
+            const prop = apt ? mockData.properties.find(p => String(p.id) === String(apt.propertyId)) : null;
+
+            const utilities = mockData.utilities.filter(u => 
+                String(u.apartmentId) === String(tenant.apartmentId) && 
+                u.status !== 'Paid'
+            );
+
+            return res.json({
+                tenant: {
+                    id: tenant.id,
+                    name: tenant.name,
+                    rentAmount: tenant.rentAmount,
+                    lastPaidMonth: tenant.lastPaidMonth,
+                },
+                apartment: apt ? { unitNumber: apt.unitNumber } : null,
+                property: prop ? { name: prop.name } : null,
+                pendingUtilities: utilities.map(u => ({
+                    id: u.id,
+                    type: u.type,
+                    amount: u.amount,
+                    month: u.month
+                }))
+            });
+        } else {
+            const tenant = await Tenant.findOne({ paymentToken: token }).lean();
+            if (!tenant) return res.status(404).json({ error: 'Tenant not found.' });
+
+            const apt = await Apartment.findOne({ id: tenant.apartmentId }).lean();
+            const prop = apt ? await Property.findOne({ id: apt.propertyId }).lean() : null;
+
+            const utilities = await Utility.find({ 
+                apartmentId: tenant.apartmentId,
+                status: { $ne: 'Paid' }
+            }).lean();
+
+            return res.json({
+                tenant: {
+                    id: tenant.id,
+                    name: tenant.name,
+                    rentAmount: tenant.rentAmount,
+                    lastPaidMonth: tenant.lastPaidMonth,
+                },
+                apartment: apt ? { unitNumber: apt.unitNumber } : null,
+                property: prop ? { name: prop.name } : null,
+                pendingUtilities: utilities.map(u => ({
+                    id: u.id,
+                    type: u.type,
+                    amount: u.amount,
+                    month: u.month
+                }))
+            });
+        }
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/public/payments/submit', async (req, res) => {
+    const { paymentToken, type, amount, date, monthPaid, monthList, depositMonths, utilityId, note, proofFile, proofFileType } = req.body;
+    if (!paymentToken || !type || !amount || !date || !proofFile) {
+        return res.status(400).json({ error: 'Token, type, amount, date and proof document are required.' });
+    }
+    try {
+        if (!isConnected()) {
+            const tenant = mockData.tenants.find(t => t.paymentToken === paymentToken);
+            if (!tenant) return res.status(404).json({ error: 'Tenant not found.' });
+
+            // Determine monthPaid from list if type is Rent
+            const finalMonthPaid = type === 'Rent' 
+                ? (monthList && monthList.length > 0 ? monthList[monthList.length - 1] : monthPaid)
+                : undefined;
+
+            // Build note with months info if Rent
+            let finalNote = note;
+            if (type === 'Rent' && monthList && monthList.length > 0) {
+                finalNote = `[Months: ${monthList.join(', ')}] ${note || ''}`;
+            } else if (type === 'Utility Bill' && utilityId) {
+                finalNote = `[Utility: ${utilityId}] ${note || ''}`;
+            }
+
+            const newPayment = {
+                id: `pay_${Date.now()}`,
+                tenantId: tenant.id,
+                apartmentId: tenant.apartmentId,
+                amount: Number(amount),
+                date,
+                monthPaid: finalMonthPaid,
+                monthList: type === 'Rent' ? monthList : undefined,
+                depositMonths: type === 'Deposit' ? Number(depositMonths || 0) : undefined,
+                type,
+                note: finalNote,
+                status: 'Pending',
+                proofFile,
+                proofFileType
+            };
+
+            mockData.payments.push(newPayment);
+            saveMock();
+            return res.status(201).json({ status: 'success', message: 'Proof of payment submitted successfully for verification!' });
+        } else {
+            const tenant = await Tenant.findOne({ paymentToken }).lean();
+            if (!tenant) return res.status(404).json({ error: 'Tenant not found.' });
+
+            // Determine monthPaid from list if type is Rent
+            const finalMonthPaid = type === 'Rent' 
+                ? (monthList && monthList.length > 0 ? monthList[monthList.length - 1] : monthPaid)
+                : undefined;
+
+            // Build note with months info if Rent
+            let finalNote = note;
+            if (type === 'Rent' && monthList && monthList.length > 0) {
+                finalNote = `[Months: ${monthList.join(', ')}] ${note || ''}`;
+            } else if (type === 'Utility Bill' && utilityId) {
+                finalNote = `[Utility: ${utilityId}] ${note || ''}`;
+            }
+
+            const paymentData = {
+                id: `pay_${Date.now()}`,
+                tenantId: tenant.id,
+                apartmentId: tenant.apartmentId,
+                amount: Number(amount),
+                date,
+                monthPaid: finalMonthPaid,
+                monthList: type === 'Rent' ? monthList : undefined,
+                depositMonths: type === 'Deposit' ? Number(depositMonths || 0) : undefined,
+                type,
+                note: finalNote,
+                status: 'Pending',
+                proofFile,
+                proofFileType
+            };
+
+            await Payment.create(paymentData);
+            return res.status(201).json({ status: 'success', message: 'Proof of payment submitted successfully for verification!' });
+        }
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+const recalculateTenantFields = async (tenantId) => {
+    try {
+        if (!isConnected()) {
+            const tenantIndex = mockData.tenants.findIndex(t => String(t.id) === String(tenantId));
+            if (tenantIndex === -1) return;
+
+            const allPayments = mockData.payments.filter(p => String(p.tenantId) === String(tenantId) && p.status === 'Approved');
+            const rentPayments = allPayments.filter(p => p.type === 'Rent');
+            const depositPayments = allPayments.filter(p => p.type === 'Deposit');
+
+            const lastPaidMonth = rentPayments.map(p => p.monthPaid).sort().pop() || '';
+            const depositPaidAmount = depositPayments.reduce((sum, p) => sum + p.amount, 0);
+            const depositMonthsPaid = depositPayments.reduce((sum, p) => sum + (p.depositMonths || 0), 0);
+
+            mockData.tenants[tenantIndex].lastPaidMonth = lastPaidMonth;
+            mockData.tenants[tenantIndex].depositPaidAmount = depositPaidAmount;
+            mockData.tenants[tenantIndex].depositMonthsPaid = depositMonthsPaid;
+            saveMock();
+            console.log(`[RECALCULATION] Mock Tenant ${tenantId} updated: lastPaidMonth=${lastPaidMonth}, depositPaidAmount=${depositPaidAmount}, depositMonthsPaid=${depositMonthsPaid}`);
+        } else {
+            const tenant = await Tenant.findOne({ id: tenantId });
+            if (!tenant) return;
+
+            const allPayments = await Payment.find({ tenantId, status: 'Approved' }).lean();
+            const rentPayments = allPayments.filter(p => p.type === 'Rent');
+            const depositPayments = allPayments.filter(p => p.type === 'Deposit');
+
+            const lastPaidMonth = rentPayments.map(p => p.monthPaid).sort().pop() || '';
+            const depositPaidAmount = depositPayments.reduce((sum, p) => sum + p.amount, 0);
+            const depositMonthsPaid = depositPayments.reduce((sum, p) => sum + (p.depositMonths || 0), 0);
+
+            tenant.lastPaidMonth = lastPaidMonth;
+            tenant.depositPaidAmount = depositPaidAmount;
+            tenant.depositMonthsPaid = depositMonthsPaid;
+            await tenant.save();
+            console.log(`[RECALCULATION] MongoDB Tenant ${tenantId} updated: lastPaidMonth=${lastPaidMonth}, depositPaidAmount=${depositPaidAmount}, depositMonthsPaid=${depositMonthsPaid}`);
+        }
+    } catch (e) {
+        console.error("Failed to recalculate tenant fields:", e.message);
+    }
+};
+
+app.put('/api/payments/:id/approve', authMiddleware, async (req, res) => {
+    try {
+        if (!isConnected()) {
+            const payment = mockData.payments.find(p => String(p.id) === String(req.params.id));
+            if (!payment) return res.status(404).json({ error: 'Payment not found.' });
+
+            payment.status = 'Approved';
+            
+            // If Rent and has multiple months in monthList, split the payment
+            if (payment.type === 'Rent' && payment.monthList && payment.monthList.length > 1) {
+                const months = [...payment.monthList];
+                const splitAmount = payment.amount / months.length;
+
+                payment.amount = splitAmount;
+                payment.monthPaid = months[0];
+                payment.monthList = [months[0]];
+
+                for (let i = 1; i < months.length; i++) {
+                    const month = months[i];
+                    mockData.payments.push({
+                        id: `pay_${Date.now()}_${i}_${Math.random().toString(36).substr(2, 5)}`,
+                        tenantId: payment.tenantId,
+                        apartmentId: payment.apartmentId,
+                        amount: splitAmount,
+                        date: payment.date,
+                        monthPaid: month,
+                        monthList: [month],
+                        type: 'Rent',
+                        note: payment.note,
+                        status: 'Approved',
+                        proofFile: payment.proofFile,
+                        proofFileType: payment.proofFileType
+                    });
+                }
+            }
+
+            // Reconcile utility status if applicable
+            if (payment.type === 'Utility Bill' && payment.note) {
+                const match = payment.note.match(/\[Utility:\s*([^\]]+)\]/);
+                if (match && match[1]) {
+                    const utilId = match[1].trim();
+                    const utilIndex = mockData.utilities.findIndex(u => String(u.id) === String(utilId));
+                    if (utilIndex !== -1) {
+                        mockData.utilities[utilIndex].status = 'Paid';
+                    }
+                }
+            }
+
+            saveMock();
+            await recalculateTenantFields(payment.tenantId);
+            return res.json({ status: 'success', message: 'Payment approved successfully!' });
+        } else {
+            const payment = await Payment.findOne({ id: req.params.id });
+            if (!payment) return res.status(404).json({ error: 'Payment not found.' });
+
+            payment.status = 'Approved';
+
+            // If Rent and has multiple months in monthList, split the payment
+            if (payment.type === 'Rent' && payment.monthList && payment.monthList.length > 1) {
+                const months = [...payment.monthList];
+                const splitAmount = payment.amount / months.length;
+
+                payment.amount = splitAmount;
+                payment.monthPaid = months[0];
+                payment.monthList = [months[0]];
+
+                for (let i = 1; i < months.length; i++) {
+                    const month = months[i];
+                    await Payment.create({
+                        id: `pay_${Date.now()}_${i}_${Math.random().toString(36).substr(2, 5)}`,
+                        tenantId: payment.tenantId,
+                        apartmentId: payment.apartmentId,
+                        amount: splitAmount,
+                        date: payment.date,
+                        monthPaid: month,
+                        monthList: [month],
+                        type: 'Rent',
+                        note: payment.note,
+                        status: 'Approved',
+                        proofFile: payment.proofFile,
+                        proofFileType: payment.proofFileType
+                    });
+                }
+            }
+
+            await payment.save();
+
+            // Reconcile utility status if applicable
+            if (payment.type === 'Utility Bill' && payment.note) {
+                const match = payment.note.match(/\[Utility:\s*([^\]]+)\]/);
+                if (match && match[1]) {
+                    const utilId = match[1].trim();
+                    await Utility.findOneAndUpdate({ id: utilId }, { status: 'Paid' });
+                }
+            }
+
+            await recalculateTenantFields(payment.tenantId);
+            return res.json({ status: 'success', message: 'Payment approved successfully!' });
+        }
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.put('/api/payments/:id/reject', authMiddleware, async (req, res) => {
+    try {
+        if (!isConnected()) {
+            const payment = mockData.payments.find(p => String(p.id) === String(req.params.id));
+            if (!payment) return res.status(404).json({ error: 'Payment not found.' });
+
+            payment.status = 'Rejected';
+            saveMock();
+            await recalculateTenantFields(payment.tenantId);
+            return res.json({ status: 'success', message: 'Payment rejected successfully!' });
+        } else {
+            const payment = await Payment.findOne({ id: req.params.id });
+            if (!payment) return res.status(404).json({ error: 'Payment not found.' });
+
+            payment.status = 'Rejected';
+            await payment.save();
+            await recalculateTenantFields(payment.tenantId);
+            return res.json({ status: 'success', message: 'Payment rejected successfully!' });
+        }
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // ── Data Hydration Endpoint ───────────────────────────────────────────
 
 app.get('/api/data', authMiddleware, async (req, res) => {
@@ -824,16 +1271,24 @@ app.post('/api/tenants', authMiddleware, async (req, res) => {
             const prop = apt ? mockData.properties.find(p => String(p.id) === String(apt.propertyId) && p.userId === req.userId) : null;
             if (!prop) return res.status(403).json({ error: 'Apartment access denied.' });
 
-            mockPOST('tenants', req.body); 
-            return res.status(201).json({ status: 'success' }); 
+            const newTenant = {
+                ...req.body,
+                paymentToken: req.body.paymentToken || crypto.randomUUID()
+            };
+            mockPOST('tenants', newTenant); 
+            return res.status(201).json({ status: 'success', tenant: newTenant }); 
         }
         
         const apt = await Apartment.findOne({ id: apartmentId });
         const prop = apt ? await Property.findOne({ id: apt.propertyId, userId: req.userId }) : null;
         if (!prop) return res.status(403).json({ error: 'Apartment access denied.' });
 
-        await Tenant.create(req.body); 
-        res.status(201).json({ status: 'success' }); 
+        const tenantData = {
+            ...req.body,
+            paymentToken: req.body.paymentToken || crypto.randomUUID()
+        };
+        const createdTenant = await Tenant.create(tenantData); 
+        res.status(201).json({ status: 'success', tenant: createdTenant }); 
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

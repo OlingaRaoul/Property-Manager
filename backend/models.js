@@ -41,7 +41,8 @@ const TenantSchema = new mongoose.Schema({
     balance: { type: Number, default: 0 },
     depositMonths: { type: Number, default: 0 },
     depositPaidAmount: { type: Number, default: 0 },
-    depositMonthsPaid: { type: Number, default: 0 }
+    depositMonthsPaid: { type: Number, default: 0 },
+    paymentToken: { type: String, unique: true }
 });
 
 // Payment Schema
@@ -56,7 +57,10 @@ const PaymentSchema = new mongoose.Schema({
     totalAmount: { type: Number },
     type: { type: String, default: 'Rent' },
     note: { type: String },
-    depositMonths: { type: Number, default: 0 }
+    depositMonths: { type: Number, default: 0 },
+    status: { type: String, enum: ['Pending', 'Approved', 'Rejected'], default: 'Approved' },
+    proofFile: { type: String },
+    proofFileType: { type: String }
 });
 
 // UnitType Schema

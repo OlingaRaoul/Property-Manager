@@ -95,6 +95,119 @@ const Payments = () => {
         const currency = state.settings.currency || '';
         const signature = state.settings.signature || '';
 
+        // Fetch individual payment records for this group
+        const groupPayments = state.payments.filter(pay => 
+            String(pay.tenantId) === String(receiptData.tenantId || receiptData.tenant?.id) && 
+            pay.date === receiptData.date
+        );
+
+        // Security Deposit calculations
+        const tenant = receiptData.tenant || state.tenants.find(t => String(t.id) === String(receiptData.tenantId));
+        const rentAmount = Number(tenant?.rentAmount || 0);
+        const depositMonths = Number(tenant?.depositMonths || 0);
+        const reqDeposit = depositMonths * rentAmount;
+
+        const tenantPayments = state.payments.filter(p => 
+            String(p.tenantId) === String(tenant?.id) && 
+            p.type === 'Deposit' &&
+            (p.status === 'Approved' || !p.status)
+        );
+        const paidDeposit = tenantPayments.reduce((sum, p) => sum + p.amount, 0);
+        const depositMonthsPaid = tenantPayments.reduce((sum, p) => 
+            sum + (p.depositMonths || (rentAmount > 0 ? Math.round(p.amount / rentAmount) : 1)), 
+            0
+        );
+        const outstandingBalance = paidDeposit - reqDeposit;
+
+        const itemsHtml = groupPayments.length > 0
+            ? groupPayments.map(pay => {
+                let desc = 'Monthly Rent';
+                let period = '—';
+                if (pay.type === 'Deposit') {
+                    desc = 'Security Deposit';
+                    const mCount = pay.depositMonths || 0;
+                    period = `${mCount} Month${mCount !== 1 ? 's' : ''}`;
+                } else if (pay.type === 'Rent') {
+                    desc = 'Monthly Rent';
+                    period = pay.monthList
+                        ? pay.monthList.map(m => formatMonth(m, lang)).join(', ')
+                        : formatMonth(pay.monthPaid, lang);
+                } else if (pay.type) {
+                    desc = pay.type === 'Utility' ? 'Utility Bill' : pay.type;
+                    if (pay.utilityId) {
+                        desc += ` (${pay.utilityId})`;
+                    }
+                    period = '—';
+                }
+                return `
+                  <tr style="border-bottom: 1px solid #E6EFF5;">
+                    <td style="padding: 12px; color: #343C6A; font-weight: 600;">${desc}</td>
+                    <td style="padding: 12px; color: #718EBF;">${period}</td>
+                    <td style="padding: 12px; text-align: right; font-weight: 800; color: #2D60FF;">${pay.amount.toLocaleString()} ${currency}</td>
+                  </tr>
+                `;
+            }).join('')
+            : `
+              <tr style="border-bottom: 1px solid #E6EFF5;">
+                <td style="padding: 12px; color: #343C6A; font-weight: 600;">${
+                    receiptData.types?.has('Rent') && receiptData.types?.has('Deposit') 
+                        ? 'Monthly Rent & Security Deposit' 
+                        : (receiptData.types?.has('Deposit') ? 'Security Deposit' : 'Monthly Rent')
+                }</td>
+                <td style="padding: 12px; color: #718EBF;">${monthsStr}</td>
+                <td style="padding: 12px; text-align: right; font-weight: 800; color: #2D60FF;">${total} ${currency}</td>
+              </tr>
+            `;
+
+        const depositDetailInfoHtml = (depositMonths > 0 || paidDeposit > 0)
+            ? `
+            <div style="border-top: 1px solid #E6EFF5; margin-top: 8px; padding-top: 8px; font-size: 11px; color: #343C6A;">
+              <strong>Deposit:</strong> ${depositMonthsPaid}/${depositMonths} paid
+            </div>
+            <div style="font-size: 11px; color: ${outstandingBalance < 0 ? '#EF4444' : '#10B981'};">
+              <strong>Outstanding Deposit:</strong> ${outstandingBalance.toLocaleString()} ${currency}
+            </div>
+            `
+            : '';
+
+        let depositInfoHtml = '';
+        if (depositMonths > 0 || paidDeposit > 0) {
+            depositInfoHtml = `
+              <div class="deposit-section" style="margin-top: 10px; margin-bottom: 10px; background: #F5F7FA; border-radius: 12px; padding: 10px 12px; border: 1px solid #E6EFF5;">
+                <div style="font-size: 10px; color: #718EBF; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; text-align: left;">Security Deposit Status</div>
+                <div style="display: flex; justify-content: space-between; gap: 15px; text-align: left;">
+                  <div style="flex: 1;">
+                    <span style="font-size: 8px; color: #718EBF; text-transform: uppercase; display: block; font-weight: 600;">Deposit Progress</span>
+                    <span style="font-size: 11px; font-weight: 800; color: #343C6A; display: block; margin-top: 1px;">
+                      ${depositMonthsPaid} / ${depositMonths} paid
+                    </span>
+                    <span style="font-size: 8px; color: #718EBF; display: block; margin-top: 0px;">(Required: ${reqDeposit.toLocaleString()} ${currency})</span>
+                  </div>
+                  <div style="flex: 1; border-left: 1px solid #E6EFF5; padding-left: 15px;">
+                    <span style="font-size: 8px; color: #718EBF; text-transform: uppercase; display: block; font-weight: 600;">Deposit Held (Current)</span>
+                    <span style="font-size: 11px; font-weight: 800; color: #2D60FF; display: block; margin-top: 1px;">
+                      ${paidDeposit.toLocaleString()} ${currency}
+                    </span>
+                  </div>
+                  <div style="flex: 1; border-left: 1px solid #E6EFF5; padding-left: 15px;">
+                    <span style="font-size: 8px; color: #718EBF; text-transform: uppercase; display: block; font-weight: 600;">Outstanding Balance</span>
+                    ${outstandingBalance < 0 
+                      ? `<span style="font-size: 11px; font-weight: 800; color: #EF4444; display: block; margin-top: 1px;">${outstandingBalance.toLocaleString()} ${currency}</span>`
+                      : `<span style="font-size: 11px; font-weight: 800; color: #10B981; display: block; margin-top: 1px;">${outstandingBalance.toLocaleString()} ${currency}</span>`
+                    }
+                  </div>
+                </div>
+              </div>
+            `;
+        } else {
+            depositInfoHtml = `
+              <div class="deposit-section" style="margin-top: 10px; margin-bottom: 10px; background: #F5F7FA; border-radius: 12px; padding: 10px 12px; border: 1px solid #E6EFF5;">
+                <div style="font-size: 10px; color: #718EBF; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; text-align: left;">Security Deposit Status</div>
+                <div style="font-size: 11px; color: #718EBF; font-weight: 600; font-style: italic; text-align: left;">No security deposit required or held for this tenancy.</div>
+              </div>
+            `;
+        }
+
         const html = `<!DOCTYPE html>
 <html>
 <head>
@@ -103,35 +216,35 @@ const Payments = () => {
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: Arial, sans-serif; color: #1a1a2e; background: white; }
-    .page { padding: 2cm; max-width: 14cm; margin: 0 auto; }
+    .page { padding: 0.8cm; max-width: 14cm; margin: 0 auto; }
     .header { display: flex; justify-content: space-between; align-items: flex-start;
-              border-bottom: 2px solid #2D60FF; padding-bottom: 16px; margin-bottom: 20px; }
-    .title { font-size: 22px; font-weight: 900; color: #2D60FF; letter-spacing: -0.5px; }
-    .subtitle { font-size: 11px; color: #718EBF; margin-top: 4px; font-weight: 600;
+              border-bottom: 2px solid #2D60FF; padding-bottom: 10px; margin-bottom: 12px; }
+    .title { font-size: 20px; font-weight: 900; color: #2D60FF; letter-spacing: -0.5px; }
+    .subtitle { font-size: 10px; color: #718EBF; margin-top: 2px; font-weight: 600;
                 text-transform: uppercase; letter-spacing: 0.5px; }
-    .receipt-no-label { font-size: 11px; color: #718EBF; font-weight: 600; text-align: right; }
-    .receipt-no { font-size: 14px; font-weight: 800; text-align: right; }
-    .date { font-size: 10px; color: #718EBF; text-align: right; margin-top: 4px; }
-    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
-    .info-box { background: #F5F7FA; border-radius: 10px; padding: 14px; }
-    .info-label { font-size: 9px; color: #718EBF; font-weight: 700; text-transform: uppercase;
-                  letter-spacing: 0.5px; margin-bottom: 6px; }
-    .info-name { font-size: 15px; font-weight: 800; }
-    .info-sub { font-size: 11px; color: #718EBF; margin-top: 3px; }
-    .info-unit { font-size: 12px; font-weight: 700; color: #2D60FF; margin-top: 4px; }
-    table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 12px; }
+    .receipt-no-label { font-size: 10px; color: #718EBF; font-weight: 600; text-align: right; }
+    .receipt-no { font-size: 13px; font-weight: 800; text-align: right; }
+    .date { font-size: 9px; color: #718EBF; text-align: right; margin-top: 2px; }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px; }
+    .info-box { background: #F5F7FA; border-radius: 10px; padding: 8px 12px; }
+    .info-label { font-size: 8px; color: #718EBF; font-weight: 700; text-transform: uppercase;
+                  letter-spacing: 0.5px; margin-bottom: 3px; }
+    .info-name { font-size: 13px; font-weight: 800; }
+    .info-sub { font-size: 10px; color: #718EBF; margin-top: 2px; }
+    .info-unit { font-size: 11px; font-weight: 700; color: #2D60FF; margin-top: 2px; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 12px; font-size: 11px; }
     thead tr { background: #2D60FF; color: white; }
-    th { padding: 10px 12px; text-align: left; font-weight: 700; }
+    th { padding: 6px 8px; text-align: left; font-weight: 700; }
     th:last-child { text-align: right; }
-    td { padding: 12px; border-bottom: 1px solid #E6EFF5; }
+    td { padding: 8px; border-bottom: 1px solid #E6EFF5; }
     td:last-child { text-align: right; font-weight: 800; color: #2D60FF; }
-    tfoot td { background: #F5F7FA; font-weight: 800; font-size: 14px; border-bottom: none; }
-    tfoot td:last-child { font-size: 18px; font-weight: 900; }
-    .footer { border-top: 1px dashed #E6EFF5; padding-top: 14px;
+    tfoot td { background: #F5F7FA; font-weight: 800; font-size: 12px; border-bottom: none; padding: 8px; }
+    tfoot td:last-child { font-size: 15px; font-weight: 900; }
+    .footer { border-top: 1px dashed #E6EFF5; padding-top: 8px;
               display: flex; justify-content: space-between; align-items: center; }
     .footer-note { font-size: 10px; color: #B1B1B1; }
     .footer-status { font-size: 10px; color: #2D60FF; font-weight: 700; }
-    @media print { @page { margin: 1.5cm; size: A5 portrait; } }
+    @media print { @page { margin: 0.6cm; size: A5 portrait; } }
   </style>
 </head>
 <body>
@@ -154,6 +267,7 @@ const Payments = () => {
         <div class="info-name">${receiptData.tenant?.name || 'Unknown'}</div>
         ${receiptData.tenant?.phone ? `<div class="info-sub">&#128222; ${receiptData.tenant.phone}</div>` : ''}
         ${receiptData.tenant?.email ? `<div class="info-sub">&#9993; ${receiptData.tenant.email}</div>` : ''}
+        ${depositDetailInfoHtml}
       </div>
       <div class="info-box">
         <div class="info-label">Property / Unit</div>
@@ -172,11 +286,7 @@ const Payments = () => {
         </tr>
       </thead>
       <tbody>
-        <tr>
-          <td>${receiptData.types?.has('Rent') && receiptData.types?.has('Deposit') ? 'Monthly Rent & Security Deposit' : (receiptData.types?.has('Deposit') ? 'Security Deposit' : 'Monthly Rent')}</td>
-          <td style="color:#718EBF">${monthsStr}</td>
-          <td>${total} ${currency}</td>
-        </tr>
+        ${itemsHtml}
         ${receiptData.note ? `<tr><td colspan="3" style="color:#718EBF;font-style:italic">Note: ${receiptData.note}</td></tr>` : ''}
       </tbody>
       <tfoot>
@@ -186,6 +296,8 @@ const Payments = () => {
         </tr>
       </tfoot>
     </table>
+
+    ${depositInfoHtml}
 
     <div class="footer">
       ${signature ? `
@@ -987,85 +1099,184 @@ const Payments = () => {
                     ? receipt.monthList.map(m => formatMonth(m, lang)).join(', ')
                     : formatMonth(receipt.monthPaid, lang));
 
+            // Fetch individual payment records for this group
+            const groupPayments = state.payments.filter(pay => 
+                String(pay.tenantId) === String(receipt.tenantId || receipt.tenant?.id) && 
+                pay.date === receipt.date
+            );
+
+            // Security Deposit calculations
+            const tenant = receipt.tenant || state.tenants.find(t => String(t.id) === String(receipt.tenantId));
+            const rentAmount = Number(tenant?.rentAmount || 0);
+            const depositMonths = Number(tenant?.depositMonths || 0);
+            const reqDeposit = depositMonths * rentAmount;
+
+            const tenantPayments = state.payments.filter(p => 
+                String(p.tenantId) === String(tenant?.id) && 
+                p.type === 'Deposit' &&
+                (p.status === 'Approved' || !p.status)
+            );
+            const paidDeposit = tenantPayments.reduce((sum, p) => sum + p.amount, 0);
+            const depositMonthsPaid = tenantPayments.reduce((sum, p) => 
+                sum + (p.depositMonths || (rentAmount > 0 ? Math.round(p.amount / rentAmount) : 1)), 
+                0
+            );
+            const outstandingBalance = paidDeposit - reqDeposit;
+
             return (
                 <>
                     {/* Print-only root (hidden until window.print()) */}
                     <div id="print-receipt-root">
-                        <div style={{ fontFamily: 'Arial, sans-serif', padding: '1.5cm', maxWidth: '14cm', margin: '0 auto', color: '#1a1a2e' }}>
+                        <div style={{ fontFamily: 'Arial, sans-serif', padding: '0.8cm', maxWidth: '14cm', margin: '0 auto', color: '#1a1a2e' }}>
                             {/* Header */}
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '2px solid #2D60FF', paddingBottom: '16px', marginBottom: '20px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '2px solid #2D60FF', paddingBottom: '10px', marginBottom: '12px' }}>
                                 <div>
-                                    <div style={{ fontSize: '22px', fontWeight: '900', color: '#2D60FF', letterSpacing: '-0.5px' }}>RENT RECEIPT</div>
-                                    <div style={{ fontSize: '11px', color: '#718EBF', marginTop: '4px', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Payment Confirmation</div>
+                                    <div style={{ fontSize: '20px', fontWeight: '900', color: '#2D60FF', letterSpacing: '-0.5px' }}>RENT RECEIPT</div>
+                                    <div style={{ fontSize: '10px', color: '#718EBF', marginTop: '2px', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Payment Confirmation</div>
                                 </div>
                                 <div style={{ textAlign: 'right' }}>
-                                    <div style={{ fontSize: '11px', color: '#718EBF', fontWeight: '600' }}>Receipt No.</div>
-                                    <div style={{ fontSize: '14px', fontWeight: '800', color: '#1a1a2e' }}>{receiptNo}</div>
-                                    <div style={{ fontSize: '10px', color: '#718EBF', marginTop: '4px' }}>Date: {receipt.date}</div>
+                                    <div style={{ fontSize: '10px', color: '#718EBF', fontWeight: '600' }}>Receipt No.</div>
+                                    <div style={{ fontSize: '13px', fontWeight: '800', color: '#1a1a2e' }}>{receiptNo}</div>
+                                    <div style={{ fontSize: '9px', color: '#718EBF', marginTop: '2px' }}>Date: {receipt.date}</div>
                                 </div>
                             </div>
 
                             {/* Tenant + Property info */}
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '24px' }}>
-                                <div style={{ background: '#F5F7FA', borderRadius: '10px', padding: '14px' }}>
-                                    <div style={{ fontSize: '9px', color: '#718EBF', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>Received From</div>
-                                    <div style={{ fontSize: '15px', fontWeight: '800', color: '#1a1a2e' }}>{receipt.tenant?.name || 'Unknown Tenant'}</div>
-                                    {receipt.tenant?.phone && <div style={{ fontSize: '11px', color: '#718EBF', marginTop: '3px' }}>📞 {receipt.tenant.phone}</div>}
-                                    {receipt.tenant?.email && <div style={{ fontSize: '11px', color: '#718EBF' }}>✉ {receipt.tenant.email}</div>}
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '14px' }}>
+                                <div style={{ background: '#F5F7FA', borderRadius: '10px', padding: '8px 12px' }}>
+                                    <div style={{ fontSize: '8px', color: '#718EBF', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '3px' }}>Received From</div>
+                                    <div style={{ fontSize: '13px', fontWeight: '800', color: '#1a1a2e' }}>{receipt.tenant?.name || 'Unknown Tenant'}</div>
+                                    {receipt.tenant?.phone && <div style={{ fontSize: '10px', color: '#718EBF', marginTop: '2px' }}>📞 {receipt.tenant.phone}</div>}
+                                    {receipt.tenant?.email && <div style={{ fontSize: '10px', color: '#718EBF' }}>✉ {receipt.tenant.email}</div>}
+                                    {(depositMonths > 0 || paidDeposit > 0) && (
+                                        <>
+                                            <div style={{ borderTop: '1px solid #E6EFF5', marginTop: '8px', paddingTop: '8px', fontSize: '11px', color: '#343C6A' }}>
+                                                <strong>Deposit:</strong> {depositMonthsPaid}/{depositMonths} paid
+                                            </div>
+                                            <div style={{ fontSize: '11px', color: outstandingBalance < 0 ? '#EF4444' : '#10B981' }}>
+                                                <strong>Outstanding Deposit:</strong> {outstandingBalance.toLocaleString()} {state.settings.currency}
+                                            </div>
+                                        </>
+                                    )}
                                 </div>
-                                <div style={{ background: '#F5F7FA', borderRadius: '10px', padding: '14px' }}>
-                                    <div style={{ fontSize: '9px', color: '#718EBF', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>Property / Unit</div>
-                                    <div style={{ fontSize: '14px', fontWeight: '800', color: '#1a1a2e' }}>{prop?.name || '—'}</div>
-                                    <div style={{ fontSize: '11px', color: '#718EBF', marginTop: '3px' }}>{prop?.address || ''}</div>
-                                    <div style={{ fontSize: '12px', fontWeight: '700', color: '#2D60FF', marginTop: '4px' }}>Unit: {apt?.unitNumber || '—'} ({apt?.type || '—'})</div>
+                                <div style={{ background: '#F5F7FA', borderRadius: '10px', padding: '8px 12px' }}>
+                                    <div style={{ fontSize: '8px', color: '#718EBF', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '3px' }}>Property / Unit</div>
+                                    <div style={{ fontSize: '13px', fontWeight: '800', color: '#1a1a2e' }}>{prop?.name || '—'}</div>
+                                    <div style={{ fontSize: '10px', color: '#718EBF', marginTop: '2px' }}>{prop?.address || ''}</div>
+                                    <div style={{ fontSize: '11px', fontWeight: '700', color: '#2D60FF', marginTop: '2px' }}>Unit: {apt?.unitNumber || '—'} ({apt?.type || '—'})</div>
                                 </div>
                             </div>
 
                             {/* Payment details table */}
-                            <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '20px', fontSize: '12px' }}>
+                            <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '12px', fontSize: '11px' }}>
                                 <thead>
                                     <tr style={{ background: '#2D60FF', color: 'white' }}>
-                                        <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: '700', borderRadius: '8px 0 0 0' }}>Description</th>
-                                        <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: '700' }}>Period</th>
-                                        <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: '700', borderRadius: '0 8px 0 0' }}>Amount</th>
+                                        <th style={{ padding: '6px 8px', textAlign: 'left', fontWeight: '700', borderRadius: '8px 0 0 0' }}>Description</th>
+                                        <th style={{ padding: '6px 8px', textAlign: 'left', fontWeight: '700' }}>Period</th>
+                                        <th style={{ padding: '6px 8px', textAlign: 'right', fontWeight: '700', borderRadius: '0 8px 0 0' }}>Amount</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <tr style={{ borderBottom: '1px solid #E6EFF5' }}>
-                                        <td style={{ padding: '12px', color: '#343C6A', fontWeight: '600' }}>
-                                            {receipt.types?.has('Rent') && receipt.types?.has('Deposit') ? 'Monthly Rent & Security Deposit' : (receipt.types?.has('Deposit') ? 'Security Deposit' : 'Monthly Rent')}
-                                        </td>
-                                        <td style={{ padding: '12px', color: '#718EBF' }}>{monthsStr}</td>
-                                        <td style={{ padding: '12px', textAlign: 'right', fontWeight: '800', color: '#2D60FF' }}>
-                                            {(receipt.totalAmount || receipt.amount || 0).toLocaleString()} {state.settings.currency}
-                                        </td>
-                                    </tr>
+                                    {groupPayments.length > 0 ? (
+                                        groupPayments.map(pay => {
+                                            let desc = 'Monthly Rent';
+                                            let period = '—';
+                                            if (pay.type === 'Deposit') {
+                                                desc = 'Security Deposit';
+                                                const mCount = pay.depositMonths || 0;
+                                                period = `${mCount} Month${mCount !== 1 ? 's' : ''}`;
+                                            } else if (pay.type === 'Rent') {
+                                                desc = 'Monthly Rent';
+                                                period = pay.monthList
+                                                    ? pay.monthList.map(m => formatMonth(m, lang)).join(', ')
+                                                    : formatMonth(pay.monthPaid, lang);
+                                            } else if (pay.type) {
+                                                desc = pay.type === 'Utility' ? 'Utility Bill' : pay.type;
+                                                if (pay.utilityId) {
+                                                    desc += ` (${pay.utilityId})`;
+                                                }
+                                                period = '—';
+                                            }
+                                            return (
+                                                <tr key={pay.id} style={{ borderBottom: '1px solid #E6EFF5' }}>
+                                                    <td style={{ padding: '8px', color: '#343C6A', fontWeight: '600' }}>{desc}</td>
+                                                    <td style={{ padding: '8px', color: '#718EBF' }}>{period}</td>
+                                                    <td style={{ padding: '8px', textAlign: 'right', fontWeight: '800', color: '#2D60FF' }}>
+                                                        {pay.amount.toLocaleString()} {state.settings.currency}
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })
+                                    ) : (
+                                        <tr style={{ borderBottom: '1px solid #E6EFF5' }}>
+                                            <td style={{ padding: '8px', color: '#343C6A', fontWeight: '600' }}>
+                                                {receipt.types?.has('Rent') && receipt.types?.has('Deposit') ? 'Monthly Rent & Security Deposit' : (receipt.types?.has('Deposit') ? 'Security Deposit' : 'Monthly Rent')}
+                                            </td>
+                                            <td style={{ padding: '8px', color: '#718EBF' }}>{monthsStr}</td>
+                                            <td style={{ padding: '8px', textAlign: 'right', fontWeight: '800', color: '#2D60FF' }}>
+                                                {(receipt.totalAmount || receipt.amount || 0).toLocaleString()} {state.settings.currency}
+                                            </td>
+                                        </tr>
+                                    )}
                                     {receipt.note && (
                                         <tr style={{ borderBottom: '1px solid #E6EFF5' }}>
-                                            <td style={{ padding: '12px', color: '#718EBF', fontStyle: 'italic' }} colSpan={3}>Note: {receipt.note}</td>
+                                            <td style={{ padding: '8px', color: '#718EBF', fontStyle: 'italic' }} colSpan={3}>Note: {receipt.note}</td>
                                         </tr>
                                     )}
                                 </tbody>
                                 <tfoot>
                                     <tr style={{ background: '#F5F7FA' }}>
-                                        <td colSpan={2} style={{ padding: '14px 12px', fontWeight: '800', fontSize: '14px', color: '#343C6A' }}>TOTAL PAID</td>
-                                        <td style={{ padding: '14px 12px', textAlign: 'right', fontWeight: '900', fontSize: '18px', color: '#2D60FF' }}>
+                                        <td colSpan={2} style={{ padding: '8px', fontWeight: '800', fontSize: '12px', color: '#343C6A' }}>TOTAL PAID</td>
+                                        <td style={{ padding: '8px', textAlign: 'right', fontWeight: '900', fontSize: '15px', color: '#2D60FF' }}>
                                             {(receipt.totalAmount || receipt.amount || 0).toLocaleString()} {state.settings.currency}
                                         </td>
                                     </tr>
                                 </tfoot>
                             </table>
 
+                            {/* Security Deposit Status */}
+                            {(reqDeposit > 0 || paidDeposit > 0) ? (
+                                <div style={{ marginTop: '10px', marginBottom: '10px', background: '#F5F7FA', borderRadius: '12px', padding: '10px 12px', border: '1px solid #E6EFF5' }}>
+                                    <div style={{ fontSize: '10px', color: '#718EBF', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px', textAlign: 'left' }}>Security Deposit Status</div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: '15px', textAlign: 'left' }}>
+                                        <div style={{ flex: 1 }}>
+                                            <span style={{ fontSize: '8px', color: '#718EBF', textTransform: 'uppercase', display: 'block', fontWeight: '600' }}>Deposit Progress</span>
+                                            <span style={{ fontSize: '11px', fontWeight: '800', color: '#343C6A', display: 'block', marginTop: '1px' }}>
+                                                {depositMonthsPaid} / {depositMonths} paid
+                                            </span>
+                                            <span style={{ fontSize: '8px', color: '#718EBF', display: 'block', marginTop: '0px' }}>(Required: {reqDeposit.toLocaleString()} {state.settings.currency})</span>
+                                        </div>
+                                        <div style={{ flex: 1, borderLeft: '1px solid #E6EFF5', paddingLeft: '15px' }}>
+                                            <span style={{ fontSize: '8px', color: '#718EBF', textTransform: 'uppercase', display: 'block', fontWeight: '600' }}>Deposit Held (Current)</span>
+                                            <span style={{ fontSize: '11px', fontWeight: '800', color: '#2D60FF', display: 'block', marginTop: '1px' }}>
+                                                {paidDeposit.toLocaleString()} {state.settings.currency}
+                                            </span>
+                                        </div>
+                                        <div style={{ flex: 1, borderLeft: '1px solid #E6EFF5', paddingLeft: '15px' }}>
+                                            <span style={{ fontSize: '8px', color: '#718EBF', textTransform: 'uppercase', display: 'block', fontWeight: '600' }}>Outstanding Balance</span>
+                                            <span style={{ fontSize: '11px', fontWeight: '800', color: outstandingBalance < 0 ? '#EF4444' : '#10B981', display: 'block', marginTop: '1px' }}>
+                                                {outstandingBalance.toLocaleString()} {state.settings.currency}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div style={{ marginTop: '10px', marginBottom: '10px', background: '#F5F7FA', borderRadius: '12px', padding: '10px 12px', border: '1px solid #E6EFF5' }}>
+                                    <div style={{ fontSize: '10px', color: '#718EBF', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px', textAlign: 'left' }}>Security Deposit Status</div>
+                                    <div style={{ fontSize: '11px', color: '#718EBF', fontWeight: '600', fontStyle: 'italic', textAlign: 'left' }}>No security deposit required or held for this tenancy.</div>
+                                </div>
+                            )}
+
                             {/* Footer */}
-                             <div style={{ borderTop: '1px dashed #E6EFF5', paddingTop: '14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                             <div style={{ borderTop: '1px dashed #E6EFF5', paddingTop: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                  {state.settings.signature ? (
                                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
                                          <img src={state.settings.signature} style={{ maxHeight: '40px', maxWidth: '150px', display: 'block', marginBottom: '2px' }} alt="Landlord Signature" />
-                                         <div style={{ fontSize: '0.65rem', color: '#718EBF', textTransform: 'uppercase', borderTop: '1px solid #E6EFF5', display: 'inline-block', width: '120px', paddingTop: '2px', fontWeight: 'bold' }}>Landlord Signature</div>
+                                         <div style={{ fontSize: '0.65rem', color: '#718EBF', textTransform: 'uppercase', borderTop: '1px solid #E6EFF5', display: 'inline-block', width: '120px', paddingTop: '1px', fontWeight: 'bold' }}>Landlord Signature</div>
                                      </div>
                                  ) : (
-                                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', paddingTop: '15px' }}>
-                                         <div style={{ fontSize: '0.65rem', color: '#B1B1B1', textTransform: 'uppercase', borderTop: '1px dashed #B1B1B1', display: 'inline-block', width: '120px', paddingTop: '2px', fontWeight: 'bold' }}>Landlord Signature</div>
+                                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', paddingTop: '8px' }}>
+                                         <div style={{ fontSize: '0.65rem', color: '#B1B1B1', textTransform: 'uppercase', borderTop: '1px dashed #B1B1B1', display: 'inline-block', width: '120px', paddingTop: '1px', fontWeight: 'bold' }}>Landlord Signature</div>
                                      </div>
                                  )}
                                  <div style={{ fontSize: '10px', color: '#2D60FF', fontWeight: '700' }}>✓ PAYMENT CONFIRMED</div>
@@ -1107,6 +1318,16 @@ const Payments = () => {
                                             <div style={{ fontSize: '1rem', fontWeight: '800', color: '#343C6A' }}>{receipt.tenant?.name || '—'}</div>
                                             {receipt.tenant?.phone && <div style={{ fontSize: '0.78rem', color: '#718EBF', marginTop: '3px' }}>📞 {receipt.tenant.phone}</div>}
                                             {receipt.tenant?.email && <div style={{ fontSize: '0.78rem', color: '#718EBF' }}>✉ {receipt.tenant.email}</div>}
+                                            {(depositMonths > 0 || paidDeposit > 0) && (
+                                                <>
+                                                    <div style={{ borderTop: '1px solid #E6EFF5', marginTop: '8px', paddingTop: '8px', fontSize: '11px', color: '#343C6A' }}>
+                                                        <strong>Deposit:</strong> {depositMonthsPaid}/{depositMonths} paid
+                                                    </div>
+                                                    <div style={{ fontSize: '11px', color: outstandingBalance < 0 ? '#EF4444' : '#10B981' }}>
+                                                        <strong>Outstanding Deposit:</strong> {outstandingBalance.toLocaleString()} {state.settings.currency}
+                                                    </div>
+                                                </>
+                                            )}
                                         </div>
                                         <div style={{ background: '#F5F7FA', borderRadius: '10px', padding: '1rem' }}>
                                             <div style={{ fontSize: '0.65rem', color: '#718EBF', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>Property / Unit</div>
@@ -1126,15 +1347,47 @@ const Payments = () => {
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            <tr style={{ borderBottom: '1px solid #E6EFF5' }}>
-                                                <td style={{ padding: '0.8rem 1rem', fontWeight: '600', color: '#343C6A' }}>
-                                                    {receipt.types?.has('Rent') && receipt.types?.has('Deposit') ? 'Monthly Rent & Security Deposit' : (receipt.types?.has('Deposit') ? 'Security Deposit' : 'Monthly Rent')}
-                                                </td>
-                                                <td style={{ padding: '0.8rem 1rem', color: '#718EBF' }}>{monthsStr}</td>
-                                                <td style={{ padding: '0.8rem 1rem', textAlign: 'right', fontWeight: '800', color: '#2D60FF' }}>
-                                                    {(receipt.totalAmount || receipt.amount || 0).toLocaleString()} {state.settings.currency}
-                                                </td>
-                                            </tr>
+                                            {groupPayments.length > 0 ? (
+                                                groupPayments.map(pay => {
+                                                    let desc = 'Monthly Rent';
+                                                    let period = '—';
+                                                    if (pay.type === 'Deposit') {
+                                                        desc = 'Security Deposit';
+                                                        const mCount = pay.depositMonths || 0;
+                                                        period = `${mCount} Month${mCount !== 1 ? 's' : ''}`;
+                                                    } else if (pay.type === 'Rent') {
+                                                        desc = 'Monthly Rent';
+                                                        period = pay.monthList
+                                                            ? pay.monthList.map(m => formatMonth(m, lang)).join(', ')
+                                                            : formatMonth(pay.monthPaid, lang);
+                                                    } else if (pay.type) {
+                                                        desc = pay.type === 'Utility' ? 'Utility Bill' : pay.type;
+                                                        if (pay.utilityId) {
+                                                            desc += ` (${pay.utilityId})`;
+                                                        }
+                                                        period = '—';
+                                                    }
+                                                    return (
+                                                        <tr key={pay.id} style={{ borderBottom: '1px solid #E6EFF5' }}>
+                                                            <td style={{ padding: '0.8rem 1rem', fontWeight: '600', color: '#343C6A' }}>{desc}</td>
+                                                            <td style={{ padding: '0.8rem 1rem', color: '#718EBF' }}>{period}</td>
+                                                            <td style={{ padding: '0.8rem 1rem', textAlign: 'right', fontWeight: '800', color: '#2D60FF' }}>
+                                                                {pay.amount.toLocaleString()} {state.settings.currency}
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })
+                                            ) : (
+                                                <tr style={{ borderBottom: '1px solid #E6EFF5' }}>
+                                                    <td style={{ padding: '0.8rem 1rem', fontWeight: '600', color: '#343C6A' }}>
+                                                        {receipt.types?.has('Rent') && receipt.types?.has('Deposit') ? 'Monthly Rent & Security Deposit' : (receipt.types?.has('Deposit') ? 'Security Deposit' : 'Monthly Rent')}
+                                                    </td>
+                                                    <td style={{ padding: '0.8rem 1rem', color: '#718EBF' }}>{monthsStr}</td>
+                                                    <td style={{ padding: '0.8rem 1rem', textAlign: 'right', fontWeight: '800', color: '#2D60FF' }}>
+                                                        {(receipt.totalAmount || receipt.amount || 0).toLocaleString()} {state.settings.currency}
+                                                    </td>
+                                                </tr>
+                                            )}
                                             {receipt.note && (
                                                 <tr>
                                                     <td colSpan={3} style={{ padding: '0.5rem 1rem', color: '#718EBF', fontStyle: 'italic', fontSize: '0.78rem' }}>Note: {receipt.note}</td>
@@ -1151,19 +1404,52 @@ const Payments = () => {
                                         </tfoot>
                                     </table>
 
+                                    {/* Security Deposit Details */}
+                                    {(reqDeposit > 0 || paidDeposit > 0) ? (
+                                        <div style={{ marginTop: '1.25rem', marginBottom: '1.25rem', background: '#F5F7FA', borderRadius: '12px', padding: '1rem', border: '1px solid #E6EFF5' }}>
+                                            <div style={{ fontSize: '0.7rem', color: '#718EBF', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px', textAlign: 'left' }}>Security Deposit Status</div>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', textAlign: 'left' }}>
+                                                <div style={{ flex: 1 }}>
+                                                    <span style={{ fontSize: '0.6rem', color: '#718EBF', textTransform: 'uppercase', display: 'block', fontWeight: '600' }}>Deposit Progress</span>
+                                                    <span style={{ fontSize: '0.85rem', fontWeight: '800', color: '#343C6A', display: 'block', marginTop: '2px' }}>
+                                                        {depositMonthsPaid} / {depositMonths} paid
+                                                    </span>
+                                                    <span style={{ fontSize: '0.6rem', color: '#718EBF', display: 'block', marginTop: '1px' }}>(Required: {reqDeposit.toLocaleString()} {state.settings.currency})</span>
+                                                </div>
+                                                <div style={{ flex: 1, borderLeft: '1px solid #E6EFF5', paddingLeft: '1rem' }}>
+                                                    <span style={{ fontSize: '0.6rem', color: '#718EBF', textTransform: 'uppercase', display: 'block', fontWeight: '600' }}>Deposit Held (Current)</span>
+                                                    <span style={{ fontSize: '0.85rem', fontWeight: '800', color: '#2D60FF', display: 'block', marginTop: '2px' }}>
+                                                        {paidDeposit.toLocaleString()} {state.settings.currency}
+                                                    </span>
+                                                </div>
+                                                <div style={{ flex: 1, borderLeft: '1px solid #E6EFF5', paddingLeft: '1rem' }}>
+                                                    <span style={{ fontSize: '0.6rem', color: '#718EBF', textTransform: 'uppercase', display: 'block', fontWeight: '600' }}>Outstanding Balance</span>
+                                                    <span style={{ fontSize: '0.85rem', fontWeight: '800', color: outstandingBalance < 0 ? '#EF4444' : '#10B981', display: 'block', marginTop: '2px' }}>
+                                                        {outstandingBalance.toLocaleString()} {state.settings.currency}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div style={{ marginTop: '1rem', marginBottom: '1rem', background: '#F5F7FA', borderRadius: '12px', padding: '0.75rem', border: '1px solid #E6EFF5' }}>
+                                            <div style={{ fontSize: '0.65rem', color: '#718EBF', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px', textAlign: 'left' }}>Security Deposit Status</div>
+                                            <div style={{ fontSize: '0.7rem', color: '#718EBF', fontWeight: '600', fontStyle: 'italic', textAlign: 'left' }}>No security deposit required or held for this tenancy.</div>
+                                        </div>
+                                    )}
+
                                     {/* Footer note / Signature */}
-                                    <div style={{ borderTop: '1px dashed #E6EFF5', paddingTop: '0.8rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <div style={{ borderTop: '1px dashed #E6EFF5', paddingTop: '6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                         {state.settings.signature ? (
                                             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
-                                                <img src={state.settings.signature} style={{ maxHeight: '40px', maxWidth: '150px', display: 'block', marginBottom: '2px' }} alt="Landlord Signature" />
-                                                <div style={{ fontSize: '0.65rem', color: '#718EBF', textTransform: 'uppercase', borderTop: '1px solid #E6EFF5', display: 'inline-block', width: '120px', paddingTop: '2px', fontWeight: 'bold' }}>Landlord Signature</div>
+                                                <img src={state.settings.signature} style={{ maxHeight: '30px', maxWidth: '120px', display: 'block', marginBottom: '1px' }} alt="Landlord Signature" />
+                                                <div style={{ fontSize: '0.6rem', color: '#718EBF', textTransform: 'uppercase', borderTop: '1px solid #E6EFF5', display: 'inline-block', width: '100px', paddingTop: '1px', fontWeight: 'bold' }}>Landlord Signature</div>
                                             </div>
                                         ) : (
-                                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', paddingTop: '15px' }}>
-                                                <div style={{ fontSize: '0.65rem', color: '#B1B1B1', textTransform: 'uppercase', borderTop: '1px dashed #B1B1B1', display: 'inline-block', width: '120px', paddingTop: '2px', fontWeight: 'bold' }}>Landlord Signature</div>
+                                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', paddingTop: '5px' }}>
+                                                <div style={{ fontSize: '0.6rem', color: '#B1B1B1', textTransform: 'uppercase', borderTop: '1px dashed #B1B1B1', display: 'inline-block', width: '100px', paddingTop: '1px', fontWeight: 'bold' }}>Landlord Signature</div>
                                             </div>
                                         )}
-                                        <div style={{ fontSize: '0.72rem', color: '#15803D', fontWeight: '700' }}>✓ PAYMENT CONFIRMED</div>
+                                        <div style={{ fontSize: '0.7rem', color: '#15803D', fontWeight: '700' }}>✓ PAYMENT CONFIRMED</div>
                                     </div>
                                 </div>
                             </div>

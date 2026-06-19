@@ -2,7 +2,7 @@ import { useState } from 'react';
 import axios from 'axios';
 import { useAppState } from '../context/StateContext';
 import { formatMonth, calculateRentStatus } from '../utils';
-import { UserPlus, Edit, DoorOpen, Trash2, X, AlertTriangle } from 'lucide-react';
+import { UserPlus, Edit, DoorOpen, Trash2, X, AlertTriangle, Link } from 'lucide-react';
 
 const EMPTY_FORM = {
     name: '',
@@ -46,6 +46,24 @@ const Tenants = () => {
     // ── Delete confirmation ──────────────────────────────────────────
     const [deleteConfirm, setDeleteConfirm] = useState(null);
     const [deleting, setDeleting]           = useState(false);
+    
+    // Toast notification state
+    const [toast, setToast] = useState('');
+
+    const copyPaymentLink = (tenant) => {
+        if (!tenant.paymentToken) {
+            // Self-healing fallback if token isn't in state
+            alert("No payment token found for this tenant. Try editing the tenant or reloading.");
+            return;
+        }
+        const link = `${window.location.origin}/pay/${tenant.paymentToken}`;
+        navigator.clipboard.writeText(link).then(() => {
+            setToast(`Copied payment link for ${tenant.name}!`);
+            setTimeout(() => setToast(''), 3000);
+        }).catch(err => {
+            console.error("Copy failed", err);
+        });
+    };
 
     // Derived: units available for selected property
     const availableUnits = form.propertyId
@@ -112,8 +130,9 @@ const Tenants = () => {
 
             if (modal === 'create') {
                 const newTenant = { id: `t${Date.now()}`, ...payload };
-                await axios.post(`${API_URL}/tenants`, newTenant);
-                setState(prev => ({ ...prev, tenants: [...prev.tenants, newTenant] }));
+                const response = await axios.post(`${API_URL}/tenants`, newTenant);
+                const savedTenant = response.data.tenant || newTenant;
+                setState(prev => ({ ...prev, tenants: [...prev.tenants, savedTenant] }));
             } else {
                 await axios.put(`${API_URL}/tenants/${modal.id}`, payload);
                 setState(prev => ({
@@ -198,6 +217,7 @@ const Tenants = () => {
                                     </div>
                                 </div>
                                 <div style={{ display: 'flex', gap: '0.25rem' }}>
+                                    <button className="btn-icon" title="Copy Payment Link" onClick={() => copyPaymentLink(tenantObj)}><Link size={16}/></button>
                                     <button className="btn-icon" title="Edit" onClick={() => openEdit(tenantObj)}><Edit size={16}/></button>
                                     <button className="btn-icon" title="Delete" style={{ color: 'var(--error)' }} onClick={() => setDeleteConfirm(tenantObj)}><Trash2 size={16}/></button>
                                 </div>
@@ -366,6 +386,27 @@ const Tenants = () => {
                             </button>
                         </div>
                     </div>
+                </div>
+            )}
+            {/* Toast Notification */}
+            {toast && (
+                <div className="toast animate-fade-in" style={{
+                    position: 'fixed',
+                    bottom: '2rem',
+                    right: '2rem',
+                    background: '#343C6A',
+                    color: '#fff',
+                    padding: '0.8rem 1.5rem',
+                    borderRadius: '10px',
+                    boxShadow: '0 8px 30px rgba(0,0,0,0.15)',
+                    zIndex: 9999,
+                    fontWeight: '600',
+                    fontSize: '0.9rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem'
+                }}>
+                    <span>{toast}</span>
                 </div>
             )}
         </div>

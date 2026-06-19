@@ -1,6 +1,6 @@
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { LayoutDashboard, Building2, Users, CreditCard, Settings, Zap, FileText, X } from 'lucide-react';
+import { LayoutDashboard, Building2, Users, CreditCard, Settings, Zap, FileText, X, Inbox } from 'lucide-react';
 
 const Sidebar = ({ isOpen, onClose }) => {
   const { user, logout } = useAuth();
@@ -37,6 +37,10 @@ const Sidebar = ({ isOpen, onClose }) => {
         <NavLink to="/payments" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} onClick={onClose}>
           <CreditCard size={20} />
           <span>Rent & Payments</span>
+        </NavLink>
+        <NavLink to="/submissions" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} onClick={onClose}>
+          <Inbox size={20} />
+          <span>Payment Submissions</span>
         </NavLink>
         <NavLink to="/utilities" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} onClick={onClose}>
           <Zap size={20} />
