@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAppState } from '../context/StateContext';
 import { t } from '../utils';
-import { Settings as SettingsIcon, Mail, Save, Send, Tag, Trash2, CheckCircle, PenTool, Upload, RefreshCw, X, Edit } from 'lucide-react';
+import { Settings as SettingsIcon, Mail, Save, Send, Tag, Trash2, CheckCircle, PenTool, Upload, RefreshCw, X, Edit, Lock } from 'lucide-react';
 import axios from 'axios';
 
 const Settings = () => {
@@ -19,6 +19,45 @@ const Settings = () => {
     const [uploadFile, setUploadFile] = useState(null);
     const [uploadPreview, setUploadPreview] = useState('');
     const canvasRef = useRef(null);
+
+    // Password state
+    const [pwdState, setPwdState] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
+    const [pwdLoading, setPwdLoading] = useState(false);
+    const [pwdStatus, setPwdStatus] = useState({ text: '', type: '' });
+
+    const handlePasswordChange = async (e) => {
+        e.preventDefault();
+        setPwdStatus({ text: '', type: '' });
+
+        if (!pwdState.currentPassword || !pwdState.newPassword || !pwdState.confirmPassword) {
+            setPwdStatus({ text: 'All fields are required.', type: 'error' });
+            return;
+        }
+
+        if (pwdState.newPassword !== pwdState.confirmPassword) {
+            setPwdStatus({ text: 'New passwords do not match.', type: 'error' });
+            return;
+        }
+
+        if (pwdState.newPassword.length < 6) {
+            setPwdStatus({ text: 'New password must be at least 6 characters.', type: 'error' });
+            return;
+        }
+
+        setPwdLoading(true);
+        try {
+            const { data } = await axios.post(`${API_URL}/auth/change-password`, {
+                currentPassword: pwdState.currentPassword,
+                newPassword: pwdState.newPassword
+            });
+            setPwdStatus({ text: data.message || 'Password updated successfully!', type: 'success' });
+            setPwdState({ currentPassword: '', newPassword: '', confirmPassword: '' });
+        } catch (err) {
+            setPwdStatus({ text: err.response?.data?.error || 'Failed to update password.', type: 'error' });
+        } finally {
+            setPwdLoading(false);
+        }
+    };
 
     useEffect(() => {
         const fetchSmtp = async () => {
@@ -423,6 +462,80 @@ const Settings = () => {
                             </div>
                         </div>
                     )}
+                </div>
+
+                {/* Security & Password */}
+                <div className="stat-card" style={{ display: 'flex', flexDirection: 'column', padding: '1.5rem', background: 'white', borderRadius: '20px', boxShadow: 'var(--card-shadow)', border: '1px solid var(--border-light)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem' }}>
+                        <div style={{ width: '40px', height: '40px', borderRadius: '12px', background: 'linear-gradient(135deg, #F59E0B, #D97706)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
+                            <Lock size={20} />
+                        </div>
+                        <div>
+                            <h3 style={{ margin: 0, fontFamily: 'Outfit', fontWeight: 800, fontSize: '1rem' }}>Security & Password</h3>
+                            <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-muted)' }}>Change your account password directly</p>
+                        </div>
+                    </div>
+                    <form onSubmit={handlePasswordChange} style={{ display: 'flex', flexDirection: 'column', gap: '1rem', height: '100%', flex: 1 }}>
+                        <input 
+                            type="password" 
+                            className="search-box" 
+                            style={{ width: '100%' }} 
+                            placeholder="Current Password" 
+                            value={pwdState.currentPassword} 
+                            onChange={e => setPwdState({ ...pwdState, currentPassword: e.target.value })} 
+                            required 
+                        />
+                        <input 
+                            type="password" 
+                            className="search-box" 
+                            style={{ width: '100%' }} 
+                            placeholder="New Password" 
+                            value={pwdState.newPassword} 
+                            onChange={e => setPwdState({ ...pwdState, newPassword: e.target.value })} 
+                            required 
+                        />
+                        <input 
+                            type="password" 
+                            className="search-box" 
+                            style={{ width: '100%' }} 
+                            placeholder="Confirm New Password" 
+                            value={pwdState.confirmPassword} 
+                            onChange={e => setPwdState({ ...pwdState, confirmPassword: e.target.value })} 
+                            required 
+                        />
+                        {pwdStatus.text && (
+                            <div style={{ 
+                                color: pwdStatus.type === 'success' ? 'var(--success)' : 'var(--error)', 
+                                fontSize: '0.8rem', 
+                                fontWeight: '600',
+                                marginTop: '0.25rem'
+                            }}>
+                                {pwdStatus.text}
+                            </div>
+                        )}
+                        <button 
+                            type="submit" 
+                            className="btn btn-primary" 
+                            disabled={pwdLoading} 
+                            style={{ 
+                                marginTop: 'auto', 
+                                padding: '0.75rem', 
+                                background: 'var(--primary)', 
+                                color: 'white', 
+                                border: 'none', 
+                                borderRadius: '10px', 
+                                cursor: pwdLoading ? 'not-allowed' : 'pointer', 
+                                fontWeight: 600, 
+                                display: 'flex', 
+                                alignItems: 'center', 
+                                justifyContent: 'center', 
+                                gap: '0.5rem',
+                                opacity: pwdLoading ? 0.7 : 1
+                            }}
+                        >
+                            <Save size={15} /> {pwdLoading ? 'Updating...' : 'Update Password'}
+                        </button>
+                    </form>
                 </div>
             </div>
             

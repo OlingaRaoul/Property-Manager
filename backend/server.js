@@ -388,10 +388,13 @@ app.post('/api/auth/forgot-password', async (req, res) => {
             // Simulated delivery
             console.log(`📧 [RESET PASSWORD SIMULATION] To: ${lowercaseEmail} | Subject: Reset your Property Manager Password`);
             console.log(`🔗 Link: ${resetLink}`);
+            const isLocalRequest = req.headers.host && (req.headers.host.includes('localhost') || req.headers.host.includes('127.0.0.1'));
             return res.json({ 
                 status: 'success', 
-                message: 'Password reset link simulated in server console (no SMTP configured).',
-                simulatedLink: resetLink
+                message: isLocalRequest
+                    ? 'Password reset link simulated in server console (no SMTP configured).'
+                    : 'If that email address exists, a password reset link has been sent.',
+                simulatedLink: isLocalRequest ? resetLink : undefined
             });
         }
     } catch (err) {
@@ -444,6 +447,38 @@ app.post('/api/auth/reset-password', async (req, res) => {
         }
 
         res.json({ status: 'success', message: 'Your password has been reset successfully!' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/auth/change-password', authMiddleware, async (req, res) => {
+    const { currentPassword, newPassword } = req.body;
+    if (!currentPassword || !newPassword) {
+        return res.status(400).json({ error: 'Current password and new password are required.' });
+    }
+    try {
+        if (!isConnected()) {
+            const user = mockData.users.find(u => u.id === req.userId);
+            if (!user) return res.status(404).json({ error: 'User not found.' });
+
+            const isMatch = await bcrypt.compare(currentPassword, user.password);
+            if (!isMatch) return res.status(400).json({ error: 'Incorrect current password.' });
+
+            user.password = await bcrypt.hash(newPassword, 10);
+            saveMock();
+            return res.json({ status: 'success', message: 'Password updated successfully!' });
+        } else {
+            const user = await User.findOne({ id: req.userId });
+            if (!user) return res.status(404).json({ error: 'User not found.' });
+
+            const isMatch = await bcrypt.compare(currentPassword, user.password);
+            if (!isMatch) return res.status(400).json({ error: 'Incorrect current password.' });
+
+            user.password = await bcrypt.hash(newPassword, 10);
+            await user.save();
+            return res.json({ status: 'success', message: 'Password updated successfully!' });
+        }
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
