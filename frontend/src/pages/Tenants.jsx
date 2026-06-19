@@ -58,6 +58,15 @@ const Tenants = () => {
         }
         let base = import.meta.env.VITE_FRONTEND_URL || state.settings.frontendBaseUrl || window.location.origin;
         base = base.trim();
+        
+        // Self-healing: if the saved setting contains localhost/127.0.0.1 but the landlord accesses the app via a production domain,
+        // ignore the stale local database setting and fall back to the actual browser origin.
+        const isCurrentLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+        const isBaseLocal = base.includes('localhost') || base.includes('127.0.0.1');
+        if (isBaseLocal && !isCurrentLocal) {
+            base = window.location.origin;
+        }
+
         if (base && !/^https?:\/\//i.test(base)) {
             // If no protocol specified, prepend window protocol
             base = `${window.location.protocol}//${base}`;
