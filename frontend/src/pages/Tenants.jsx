@@ -72,12 +72,42 @@ const Tenants = () => {
             base = `${window.location.protocol}//${base}`;
         }
         const link = `${base.replace(/\/+$/, '')}/pay/${tenant.paymentToken}`;
-        navigator.clipboard.writeText(link).then(() => {
-            setToast(`Copied payment link for ${tenant.name}!`);
-            setTimeout(() => setToast(''), 3000);
-        }).catch(err => {
-            console.error("Copy failed", err);
-        });
+
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(link).then(() => {
+                setToast(`Copied payment link for ${tenant.name}!`);
+                setTimeout(() => setToast(''), 3000);
+            }).catch(err => {
+                console.error("Clipboard copy failed", err);
+                fallbackCopy(link, tenant.name);
+            });
+        } else {
+            fallbackCopy(link, tenant.name);
+        }
+    };
+
+    const fallbackCopy = (text, name) => {
+        const textArea = document.createElement("textarea");
+        textArea.value = text;
+        textArea.style.position = "fixed";
+        textArea.style.left = "-999999px";
+        textArea.style.top = "-999999px";
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        try {
+            const successful = document.execCommand('copy');
+            if (successful) {
+                setToast(`Copied payment link for ${name}!`);
+                setTimeout(() => setToast(''), 3000);
+            } else {
+                alert(`Could not copy automatically. Here is the link:\n\n${text}`);
+            }
+        } catch (err) {
+            console.error("Fallback copy failed", err);
+            alert(`Could not copy automatically. Here is the link:\n\n${text}`);
+        }
+        document.body.removeChild(textArea);
     };
 
     // Derived: units available for selected property
