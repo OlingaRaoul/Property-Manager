@@ -136,6 +136,12 @@ export function calculateRentStatus(tenant, settings) {
     const currentDay = today.getDate();
     const lang = settings.lang || 'en';
     
+    // Resolve dynamic due date day for the current month
+    const year = today.getFullYear();
+    const month = today.getMonth() + 1;
+    const daysInMonth = new Date(year, month, 0).getDate();
+    const actualDueDay = Math.min(tenant.dueDateDay || 1, daysInMonth);
+    
     // Check if paid this month or future months
     if (tenant.lastPaidMonth && tenant.lastPaidMonth >= currentMonthStr) {
         return { status: t('paid', lang), class: 'paid', message: t('paid', lang) };
@@ -145,7 +151,10 @@ export function calculateRentStatus(tenant, settings) {
     let overdueMonths = 0;
     if (tenant.lastPaidMonth) {
         overdueMonths = getMonthsDifference(tenant.lastPaidMonth, currentMonthStr);
-    } else if (currentDay > tenant.dueDateDay) {
+        if (currentDay <= actualDueDay) {
+            overdueMonths = Math.max(0, overdueMonths - 1);
+        }
+    } else if (currentDay > actualDueDay) {
         overdueMonths = 1;
     }
     
@@ -174,9 +183,9 @@ export function calculateRentStatus(tenant, settings) {
     }
     
     // If within threshold before due date for the upcoming month
-    if (tenant.dueDateDay - currentDay <= (settings.notificationThresholdDays || 3)) {
-        return { status: t('due_soon', lang), class: 'due', message: `${t('due_date', lang)} ${tenant.dueDateDay}` };
+    if (actualDueDay - currentDay <= (settings.notificationThresholdDays || 3)) {
+        return { status: t('due_soon', lang), class: 'due', message: `${t('due_date', lang)} ${actualDueDay}` };
     }
     
-    return { status: t('upcoming', lang), class: '', message: `${t('due_date', lang)} ${tenant.dueDateDay}` };
+    return { status: t('upcoming', lang), class: '', message: `${t('due_date', lang)} ${actualDueDay}` };
 }

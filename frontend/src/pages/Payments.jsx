@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import axios from 'axios';
 import { useAppState } from '../context/StateContext';
@@ -73,6 +73,22 @@ const Payments = () => {
     const [editGroup, setEditGroup] = useState(null); // null | paymentGroupObj
     const [paymentMode, setPaymentMode] = useState('Rent'); // 'Rent' | 'Deposit'
     const [depositAmountMonths, setDepositAmountMonths] = useState(0);
+    const [activeYear, setActiveYear] = useState(new Date().getFullYear());
+
+    const scrollContainerRef = useRef(null);
+
+    const scrollOneYear = (direction) => {
+        if (scrollContainerRef.current) {
+            const container = scrollContainerRef.current;
+            const card = container.querySelector('.month-scroll-card');
+            const cardWidth = card ? card.getBoundingClientRect().width + 8 : 84; // card (76) + gap (8)
+            const scrollAmount = cardWidth * 12;
+            container.scrollBy({
+                left: direction === 'left' ? -scrollAmount : scrollAmount,
+                behavior: 'smooth'
+            });
+        }
+    };
 
     // ── Receipt state ─────────────────────────────────────────────────
     const [receipt, setReceipt] = useState(null);
@@ -350,6 +366,94 @@ const Payments = () => {
         ) || null;
     }, [tenantId, state.contracts]);
 
+    // Oldest contract (representing date of entry)
+    const oldestContract = useMemo(() => {
+        if (!tenantId || !state.contracts) return null;
+        const tenantContracts = state.contracts.filter(c => String(c.tenantId) === String(tenantId));
+        if (tenantContracts.length === 0) return null;
+        return [...tenantContracts].sort((a, b) => a.startDate.localeCompare(b.startDate))[0];
+    }, [tenantId, state.contracts]);
+
+    const entryMonth = useMemo(() => {
+        return oldestContract?.startDate ? oldestContract.startDate.slice(0, 7) : null;
+    }, [oldestContract]);
+
+    const monthsToRender = useMemo(() => {
+        const baseMonth = entryMonth || THIS_MONTH;
+        const [baseY, baseM] = baseMonth.split('-').map(Number);
+        
+        // Go 12 months before the base month
+        const startDateObj = new Date(baseY, baseM - 1 - 12, 1);
+        
+        // Go 24 months after the current month
+        const [currY, currM] = THIS_MONTH.split('-').map(Number);
+        const endDateObj = new Date(currY, currM - 1 + 24, 1);
+        
+        const list = [];
+        let temp = new Date(startDateObj);
+        while (temp <= endDateObj) {
+            const val = `${temp.getFullYear()}-${String(temp.getMonth() + 1).padStart(2, '0')}`;
+            const fallbackLabel = temp.toLocaleString('default', { month: 'short', year: '2-digit' });
+            list.push({
+                val,
+                fallbackLabel,
+                isFuture: val > THIS_MONTH,
+                isCurrent: val === THIS_MONTH
+            });
+            temp.setMonth(temp.getMonth() + 1);
+        }
+        return list;
+    }, [entryMonth]);
+
+    const yearsToRender = useMemo(() => {
+        const startYear = entryMonth ? parseInt(entryMonth.split('-')[0]) - 1 : new Date().getFullYear() - 1;
+        const endYear = new Date().getFullYear() + 2;
+        const years = [];
+        for (let y = startYear; y <= endYear; y++) {
+            years.push(y);
+        }
+        return years;
+    }, [entryMonth]);
+
+    const scrollYear = (direction) => {
+        if (scrollContainerRef.current) {
+            const container = scrollContainerRef.current;
+            const width = container.clientWidth;
+            container.scrollBy({
+                left: direction === 'prev' ? -width : width,
+                behavior: 'smooth'
+            });
+        }
+    };
+
+    const handleScroll = (e) => {
+        const scrollLeft = e.target.scrollLeft;
+        const width = e.target.clientWidth;
+        if (width > 0) {
+            const index = Math.round(scrollLeft / width);
+            if (yearsToRender[index] && yearsToRender[index] !== activeYear) {
+                setActiveYear(yearsToRender[index]);
+            }
+        }
+    };
+
+    // Automatically scroll to the current year when a tenant is loaded
+    useEffect(() => {
+        if (tenantId && scrollContainerRef.current) {
+            const todayYear = new Date().getFullYear();
+            const targetIndex = yearsToRender.indexOf(todayYear);
+            if (targetIndex !== -1) {
+                const container = scrollContainerRef.current;
+                setTimeout(() => {
+                    if (container) {
+                        container.scrollLeft = targetIndex * container.clientWidth;
+                        setActiveYear(todayYear);
+                    }
+                }, 100);
+            }
+        }
+    }, [tenantId, yearsToRender]);
+
     const agreedDay      = tenantContract?.agreedDay || selectedTenant?.dueDateDay || null;
     const rentPerMonth   = selectedTenant?.rentAmount || 0;
     const totalAmount    = selectedMonths.length * rentPerMonth;
@@ -386,11 +490,13 @@ const Payments = () => {
     const handleTenantChange = (id) => {
         setTenantId(id);
         setSelectedMonths([]);
+        setDepositAmountMonths(0);
         setError('');
     };
 
     const toggleMonth = (month) => {
         if (paidMonths.has(month)) return; // already paid — block it
+        if (entryMonth && month < entryMonth) return; // before entry month — block it
         setSelectedMonths(prev =>
             prev.includes(month) ? prev.filter(m => m !== month) : [...prev, month]
         );
@@ -406,6 +512,7 @@ const Payments = () => {
         setEditGroup(null);
         setPaymentMode('Rent');
         setDepositAmountMonths(0);
+        setActiveYear(new Date().getFullYear());
         setShowModal(true);
     };
 
@@ -419,16 +526,19 @@ const Payments = () => {
         setEditGroup(null);
         setPaymentMode('Rent');
         setDepositAmountMonths(0);
+        setActiveYear(new Date().getFullYear());
     };
 
     const handleSave = async () => {
-        if (!tenantId)              { setError('Please select a tenant.'); return; }
-        if (paymentMode === 'Rent' && selectedMonths.length === 0) { setError('Select at least one month.'); return; }
-        if (paymentMode === 'Deposit' && depositAmountMonths <= 0) {
-            setError('Please select a valid deposit period.');
+        if (!tenantId) { setError('Please select a tenant.'); return; }
+        
+        const hasRent = selectedMonths.length > 0;
+        const hasDeposit = depositAmountMonths > 0;
+        if (!hasRent && !hasDeposit) {
+            setError('Please select at least one month for rent payment or a valid deposit period.');
             return;
         }
-        if (!payDate)               { setError('Payment date is required.'); return; }
+        if (!payDate) { setError('Payment date is required.'); return; }
 
         setSaving(true); setError('');
         try {
@@ -452,7 +562,12 @@ const Payments = () => {
             const timestamp = Date.now();
             const newPayments = [];
 
-            if (paymentMode === 'Deposit') {
+            // Preserve metadata if editing a tenant payment submission
+            const status = editGroup?.status || 'Approved';
+            const proofFile = editGroup?.proofFile;
+            const proofFileType = editGroup?.proofFileType;
+
+            if (hasDeposit) {
                 const depAmt = depositAmountMonths * rentPerMonth;
                 newPayments.push({
                     id:        `pay${timestamp}-deposit`,
@@ -463,22 +578,28 @@ const Payments = () => {
                     monthPaid: '',
                     type:      'Deposit',
                     note:      note.trim() || 'Security Deposit Payment',
-                    depositMonths: depositAmountMonths
+                    depositMonths: depositAmountMonths,
+                    status,
+                    proofFile,
+                    proofFileType
                 });
-            } else {
-                // Rent Payment Mode — Rent payments are strictly individual rent records per month.
-                // Absolutely no auto-splitting into deposit is performed.
+            }
+
+            if (hasRent) {
                 const sortedMonths = [...selectedMonths].sort();
-                sortedMonths.forEach(month => {
+                sortedMonths.forEach((month, idx) => {
                     newPayments.push({
-                        id:        `pay${timestamp}-${month}`,
+                        id:        `pay${timestamp}-${month}-${idx}`,
                         tenantId,
                         apartmentId: selectedTenant.apartmentId,
                         amount:    rentPerMonth,
                         date:      payDate,
                         monthPaid: month,
                         type:      'Rent',
-                        note:      note.trim()
+                        note:      note.trim(),
+                        status,
+                        proofFile,
+                        proofFileType
                     });
                 });
             }
@@ -903,50 +1024,173 @@ const Payments = () => {
                                             <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><span style={{ width: '10px', height: '10px', borderRadius: '3px', background: '#FEF9C3', border: '1px solid #A16207', display: 'inline-block' }} /> Advance</span>
                                         </div>
                                     </div>
-                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '0.5rem' }}>
-                                        {MONTH_WINDOW.map(({ val, fallbackLabel, isFuture, isCurrent }) => {
-                                            const isPaid     = paidMonths.has(val);
-                                            const isSelected = selectedMonths.includes(val);
 
-                                            // Compute due date label
-                                            const dueLabelObj = agreedDay ? getDueDateLabel(agreedDay, val) : null;
+                                    {/* Year Navigation Header */}
+                                    <div style={{ 
+                                        display: 'flex', 
+                                        alignItems: 'center', 
+                                        justifyContent: 'center', 
+                                        gap: '1.5rem', 
+                                        marginBottom: '0.85rem',
+                                        background: 'var(--bg-body)',
+                                        padding: '0.45rem 1rem',
+                                        borderRadius: '10px',
+                                        border: '1px solid var(--border-light)'
+                                    }}>
+                                        <button 
+                                            type="button" 
+                                            onClick={() => scrollYear('prev')} 
+                                            style={{ 
+                                                border: 'none', 
+                                                background: 'none', 
+                                                color: '#2D60FF', 
+                                                fontSize: '1.1rem', 
+                                                cursor: 'pointer', 
+                                                fontWeight: 'bold',
+                                                padding: '2px 8px',
+                                                userSelect: 'none'
+                                            }}
+                                        >
+                                            ◀
+                                        </button>
+                                        <span style={{ fontWeight: '800', fontSize: '1.05rem', color: '#343C6A', letterSpacing: '0.5px' }}>
+                                            {activeYear}
+                                        </span>
+                                        <button 
+                                            type="button" 
+                                            onClick={() => scrollYear('next')} 
+                                            style={{ 
+                                                border: 'none', 
+                                                background: 'none', 
+                                                color: '#2D60FF', 
+                                                fontSize: '1.1rem', 
+                                                cursor: 'pointer', 
+                                                fontWeight: 'bold',
+                                                padding: '2px 8px',
+                                                userSelect: 'none'
+                                            }}
+                                        >
+                                            ▶
+                                        </button>
+                                    </div>
 
-                                            let bg, border, color, cursor, titleText;
-                                            if (isPaid) {
-                                                bg = '#DCFCE7'; border = '1.5px solid #16a34a'; color = '#15803D'; cursor = 'not-allowed'; titleText = 'Already paid';
-                                            } else if (isSelected && isFuture) {
-                                                bg = '#FEF9C3'; border = '1.5px solid #A16207'; color = '#92400E'; cursor = 'pointer'; titleText = 'Advance payment selected';
-                                            } else if (isSelected) {
-                                                bg = '#EFF6FF'; border = '1.5px solid #2D60FF'; color = '#2D60FF'; cursor = 'pointer'; titleText = 'Selected';
-                                            } else if (isFuture) {
-                                                bg = '#FAFAFA'; border = '1.5px dashed #D1D5DB'; color = '#9CA3AF'; cursor = 'pointer'; titleText = 'Click to pay in advance';
-                                            } else if (isCurrent) {
-                                                bg = '#F8FAFF'; border = '1.5px solid #93C5FD'; color = '#343C6A'; cursor = 'pointer'; titleText = 'Current month';
-                                            } else {
-                                                bg = '#F9FAFB'; border = '1.5px solid #E5E7EB'; color = '#6B7280'; cursor = 'pointer'; titleText = 'Click to select';
-                                            }
+                                    <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                                        <div 
+                                            ref={scrollContainerRef}
+                                            onScroll={handleScroll}
+                                            className="months-scroll-container"
+                                            style={{ 
+                                                display: 'flex', 
+                                                overflowX: 'auto', 
+                                                width: '100%', 
+                                                scrollSnapType: 'x mandatory',
+                                                scrollBehavior: 'smooth',
+                                                scrollbarWidth: 'none',
+                                                msOverflowStyle: 'none',
+                                                padding: '4px 0'
+                                            }}
+                                        >
+                                            <style>{`
+                                                .months-scroll-container::-webkit-scrollbar {
+                                                    display: none;
+                                                }
+                                            `}</style>
+                                            {yearsToRender.map(year => {
+                                                const yearMonths = Array.from({ length: 12 }, (_, i) => {
+                                                    const m = i + 1;
+                                                    return `${year}-${String(m).padStart(2, '0')}`;
+                                                });
 
-                                            return (
-                                                <button key={val} title={titleText} onClick={() => toggleMonth(val)} disabled={isPaid}
-                                                    style={{ background: bg, border, borderRadius: '8px', padding: '0.45rem 0.2rem', cursor, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px', transition: 'all 0.15s ease', position: 'relative', minHeight: '52px', justifyContent: 'center' }}>
-                                                    {dueLabelObj ? (
-                                                        <>
-                                                            <span style={{ fontSize: '0.85rem', fontWeight: '800', color, lineHeight: 1 }}>{dueLabelObj.line1}</span>
-                                                            <span style={{ fontSize: '0.62rem', fontWeight: '600', color, opacity: 0.85 }}>{dueLabelObj.line2}</span>
-                                                            {dueLabelObj.capped && (
-                                                                <span style={{ fontSize: '0.55rem', color: '#A16207', fontWeight: '700', lineHeight: 1 }}>last day</span>
-                                                            )}
-                                                        </>
-                                                    ) : (
-                                                        <span style={{ fontSize: '0.7rem', fontWeight: '700', color }}>{fallbackLabel}</span>
-                                                    )}
-                                                    {isPaid && <CheckCircle2 size={11} color="#16a34a" />}
-                                                    {isPaid && <Lock size={9} color="#16a34a" style={{ position: 'absolute', top: '3px', right: '3px' }} />}
-                                                    {isSelected && !isPaid && <CheckCircle2 size={11} color={isFuture ? '#92400E' : '#2D60FF'} />}
-                                                    {isCurrent && !isPaid && !isSelected && <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: '#2D60FF', display: 'inline-block' }} />}
-                                                </button>
-                                            );
-                                        })}
+                                                return (
+                                                    <div 
+                                                        key={year}
+                                                        style={{
+                                                            flex: '0 0 100%',
+                                                            width: '100%',
+                                                            scrollSnapAlign: 'start',
+                                                            display: 'grid',
+                                                            gridTemplateColumns: 'repeat(6, 1fr)',
+                                                            gap: '0.5rem',
+                                                            boxSizing: 'border-box'
+                                                        }}
+                                                    >
+                                                        {yearMonths.map(val => {
+                                                            const isPaid       = paidMonths.has(val);
+                                                            const isSelected   = selectedMonths.includes(val);
+                                                            const isBeforeEntry = entryMonth ? val < entryMonth : false;
+
+                                                            // Extract month abbreviation
+                                                            const [_, mStr] = val.split('-');
+                                                            const monthIndex = parseInt(mStr) - 1;
+                                                            const fallbackLabel = new Date(year, monthIndex, 1).toLocaleString('default', { month: 'short' });
+
+                                                            // Compute due date label
+                                                            const dueLabelObj = agreedDay ? getDueDateLabel(agreedDay, val) : null;
+
+                                                            let bg, border, color, cursor, titleText, isDisabled;
+                                                            if (isBeforeEntry) {
+                                                                bg = '#F3F4F6'; border = '1.5px solid #E5E7EB'; color = '#9CA3AF'; cursor = 'not-allowed'; titleText = 'Before entry date'; isDisabled = true;
+                                                            } else if (isPaid) {
+                                                                bg = '#DCFCE7'; border = '1.5px solid #16a34a'; color = '#15803D'; cursor = 'not-allowed'; titleText = 'Already paid'; isDisabled = true;
+                                                            } else if (isSelected && val > THIS_MONTH) {
+                                                                bg = '#FEF9C3'; border = '1.5px solid #A16207'; color = '#92400E'; cursor = 'pointer'; titleText = 'Advance payment selected'; isDisabled = false;
+                                                            } else if (isSelected) {
+                                                                bg = '#EFF6FF'; border = '1.5px solid #2D60FF'; color = '#2D60FF'; cursor = 'pointer'; titleText = 'Selected'; isDisabled = false;
+                                                            } else if (val > THIS_MONTH) {
+                                                                bg = '#FAFAFA'; border = '1.5px dashed #D1D5DB'; color = '#9CA3AF'; cursor = 'pointer'; titleText = 'Click to pay in advance'; isDisabled = false;
+                                                            } else if (val === THIS_MONTH) {
+                                                                bg = '#F8FAFF'; border = '1.5px solid #93C5FD'; color = '#343C6A'; cursor = 'pointer'; titleText = 'Current month'; isDisabled = false;
+                                                            } else {
+                                                                bg = '#F9FAFB'; border = '1.5px solid #E5E7EB'; color = '#6B7280'; cursor = 'pointer'; titleText = 'Click to select'; isDisabled = false;
+                                                            }
+
+                                                            return (
+                                                                <button 
+                                                                    key={val} 
+                                                                    title={titleText} 
+                                                                    onClick={() => toggleMonth(val)} 
+                                                                    disabled={isDisabled}
+                                                                    style={{ 
+                                                                        background: bg, 
+                                                                        border, 
+                                                                        borderRadius: '8px', 
+                                                                        padding: '0.45rem 0.2rem', 
+                                                                        cursor, 
+                                                                        display: 'flex', 
+                                                                        flexDirection: 'column', 
+                                                                        alignItems: 'center', 
+                                                                        gap: '2px', 
+                                                                        transition: 'all 0.15s ease', 
+                                                                        position: 'relative', 
+                                                                        minHeight: '56px', 
+                                                                        justifyContent: 'center',
+                                                                        width: '100%',
+                                                                        boxSizing: 'border-box'
+                                                                    }}
+                                                                >
+                                                                    {dueLabelObj ? (
+                                                                        <>
+                                                                            <span style={{ fontSize: '0.85rem', fontWeight: '800', color, lineHeight: 1 }}>{dueLabelObj.line1}</span>
+                                                                            <span style={{ fontSize: '0.62rem', fontWeight: '600', color, opacity: 0.85 }}>{dueLabelObj.line2}</span>
+                                                                            {dueLabelObj.capped && (
+                                                                                <span style={{ fontSize: '0.55rem', color: '#A16207', fontWeight: '700', lineHeight: 1 }}>last day</span>
+                                                                            )}
+                                                                        </>
+                                                                    ) : (
+                                                                        <span style={{ fontSize: '0.7rem', fontWeight: '700', color }}>{fallbackLabel}</span>
+                                                                    )}
+                                                                    {isBeforeEntry && <Lock size={9} color="#9CA3AF" style={{ position: 'absolute', top: '3px', right: '3px' }} />}
+                                                                    {isPaid && <CheckCircle2 size={11} color="#16a34a" />}
+                                                                    {isPaid && <Lock size={9} color="#16a34a" style={{ position: 'absolute', top: '3px', right: '3px' }} />}
+                                                                    {isSelected && !isPaid && <CheckCircle2 size={11} color={val > THIS_MONTH ? '#92400E' : '#2D60FF'} />}
+                                                                    {val === THIS_MONTH && !isPaid && !isSelected && <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: '#2D60FF', display: 'inline-block' }} />}
+                                                                </button>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
                                     </div>
                                 </div>
                             )}
@@ -1075,11 +1319,11 @@ const Payments = () => {
                         <div className="modal-footer">
                             <button className="btn btn-secondary" onClick={closeModal} disabled={saving}>Cancel</button>
                             <button className="btn" 
-                                style={btnBlue(saving || (paymentMode === 'Rent' ? selectedMonths.length === 0 : depositAmountMonths === 0))} 
+                                style={btnBlue(saving || (selectedMonths.length === 0 && depositAmountMonths === 0))} 
                                 onClick={handleSave}
-                                disabled={saving || (paymentMode === 'Rent' ? selectedMonths.length === 0 : depositAmountMonths === 0)}
+                                disabled={saving || (selectedMonths.length === 0 && depositAmountMonths === 0)}
                             >
-                                {saving ? 'Saving...' : editGroup ? 'Save Changes' : `Register${paymentMode === 'Rent' && selectedMonths.length > 0 ? ` (${selectedMonths.length} month${selectedMonths.length > 1 ? 's' : ''})` : ''}`}
+                                {saving ? 'Saving...' : editGroup ? 'Save Changes' : 'Register Payment'}
                             </button>
                         </div>
                     </div>

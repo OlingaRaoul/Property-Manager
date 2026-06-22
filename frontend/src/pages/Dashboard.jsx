@@ -55,10 +55,18 @@ const Dashboard = () => {
     let totalDue = 0;
 
     state.tenants.forEach(tenant => {
+        const year = today.getFullYear();
+        const month = today.getMonth() + 1;
+        const daysInMonth = new Date(year, month, 0).getDate();
+        const actualDueDay = Math.min(tenant.dueDateDay || 1, daysInMonth);
+
         let overdueMonths = 0;
         if (tenant.lastPaidMonth) {
             overdueMonths = getMonthsDifference(tenant.lastPaidMonth, currentMonthStr);
-        } else if (currentDay > tenant.dueDateDay) {
+            if (currentDay <= actualDueDay) {
+                overdueMonths = Math.max(0, overdueMonths - 1);
+            }
+        } else if (currentDay > actualDueDay) {
             overdueMonths = 1;
         }
 

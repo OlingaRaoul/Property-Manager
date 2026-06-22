@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import axios from 'axios';
 import { useAppState } from '../context/StateContext';
-import { formatMonth, calculateRentStatus } from '../utils';
+import { formatMonth, calculateRentStatus, getMonthsDifference } from '../utils';
 import { UserPlus, Edit, DoorOpen, Trash2, X, AlertTriangle, Link } from 'lucide-react';
 
 const EMPTY_FORM = {
@@ -246,6 +246,45 @@ const Tenants = () => {
                     const property  = apartment ? state.properties.find(p => String(p.id) === String(apartment.propertyId)) : null;
                     const rentStatus = calculateRentStatus(tenantObj, state.settings);
 
+                    // 1. Date of Last Payment
+                    const tenantPayments = state.payments.filter(p => String(p.tenantId) === String(tenantObj.id));
+                    const sortedPayments = [...tenantPayments].sort((a, b) => b.date.localeCompare(a.date));
+                    const lastPaymentDate = sortedPayments.length > 0 ? sortedPayments[0].date : (lang === 'fr' ? 'Aucun paiement' : 'No payments');
+
+                    // Helper to get next month string
+                    const getNextMonth = (monthStr) => {
+                        if (!monthStr || !monthStr.includes('-')) {
+                            const today = new Date();
+                            return today.toISOString().slice(0, 7);
+                        }
+                        const [y, m] = monthStr.split('-').map(Number);
+                        let nextY = y;
+                        let nextM = m + 1;
+                        if (nextM > 12) {
+                            nextM = 1;
+                            nextY += 1;
+                        }
+                        return `${nextY}-${String(nextM).padStart(2, '0')}`;
+                    };
+
+                    // Helper to get due date of a month capped to the month length
+                    const getDueDateForMonth = (dueDateDay, monthStr) => {
+                        if (!monthStr || !monthStr.includes('-')) return '';
+                        const [y, m] = monthStr.split('-').map(Number);
+                        const daysInMonth = new Date(y, m, 0).getDate();
+                        const cappedDay = Math.min(dueDateDay || 1, daysInMonth);
+                        return `${monthStr}-${String(cappedDay).padStart(2, '0')}`;
+                    };
+
+                    // 2. Current Rent Payment Due Date
+                    const nextUnpaidMonth = getNextMonth(tenantObj.lastPaidMonth);
+                    const nextDueDate = getDueDateForMonth(tenantObj.dueDateDay, nextUnpaidMonth);
+
+                    // 3. Number of months left before next payment
+                    const today = new Date();
+                    const currentMonthStr = today.toISOString().slice(0, 7);
+                    const monthsLeft = Math.max(0, getMonthsDifference(currentMonthStr, tenantObj.lastPaidMonth));
+
                     return (
                         <div key={tenantObj.id} className="stat-card animate-slide-in">
                             {/* Card header */}
@@ -281,6 +320,36 @@ const Tenants = () => {
                                 </div>
                                 {tenantObj.phone && <div style={{ fontSize: '0.8rem', color: '#718EBF', marginTop: '0.35rem' }}>📞 {tenantObj.phone}</div>}
                                 {tenantObj.email && <div style={{ fontSize: '0.8rem', color: '#718EBF' }}>✉️ {tenantObj.email}</div>}
+                            </div>
+
+                            {/* Payment status breakdown */}
+                            <div style={{
+                                padding: '0.75rem 1rem',
+                                backgroundColor: 'var(--bg-body)',
+                                borderRadius: 'var(--radius-md)',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '0.4rem',
+                                border: '1px dashed var(--border-light)',
+                                marginBottom: '1.25rem'
+                            }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', fontWeight: '500' }}>
+                                    <span style={{ color: 'var(--text-muted)' }}>{lang === 'fr' ? 'Dernier paiement :' : 'Last Payment:'}</span>
+                                    <span style={{ fontWeight: '700', color: '#343C6A' }}>{lastPaymentDate}</span>
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', fontWeight: '500' }}>
+                                    <span style={{ color: 'var(--text-muted)' }}>{lang === 'fr' ? "Date d'échéance :" : 'Next Due Date:'}</span>
+                                    <span style={{ fontWeight: '700', color: '#343C6A' }}>{nextDueDate}</span>
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', fontWeight: '500' }}>
+                                    <span style={{ color: 'var(--text-muted)' }}>{lang === 'fr' ? 'Mois restants :' : 'Months Left:'}</span>
+                                    <span style={{
+                                        fontWeight: '800',
+                                        color: monthsLeft > 0 ? 'var(--success)' : '#D97706',
+                                    }}>
+                                        {monthsLeft} {lang === 'fr' ? `mois` : `Month${monthsLeft !== 1 ? 's' : ''}`}
+                                    </span>
+                                </div>
                             </div>
 
                             {/* Payment history */}
@@ -381,10 +450,15 @@ const Tenants = () => {
                             <div>
                                 <label>Rent Due Day</label>
                                 <select value={form.dueDateDay} onChange={e => setForm(f => ({ ...f, dueDateDay: e.target.value }))} style={selectStyle}>
-                                    {Array.from({ length: 28 }, (_, i) => i + 1).map(d => (
-                                        <option key={d} value={d}>Day {d} of each month</option>
+                                    {Array.from({ length: 31 }, (_, i) => i + 1).map(d => (
+                                        <option key={d} value={d}>Day {d}{d > 28 ? ' (may use last day of month)' : ''}</option>
                                     ))}
                                 </select>
+                                {Number(form.dueDateDay) > 28 && (
+                                    <div style={{ fontSize: '0.75rem', color: '#A16207', fontWeight: '600', marginTop: '5px' }}>
+                                        ⚠ For months with fewer than {form.dueDateDay} days, the due date will be the last day of that month.
+                                    </div>
+                                )}
                             </div>
 
                             <div>
