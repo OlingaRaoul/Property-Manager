@@ -782,6 +782,7 @@ const Payments = () => {
                 <tbody>
                     {Object.values(grouped).sort((a, b) => b.date.localeCompare(a.date)).map(p => {
                         const tenant = state.tenants.find(t => String(t.id) === String(p.tenantId));
+                        const apartment = state.apartments.find(a => String(a.id) === String(p.apartmentId || tenant?.apartmentId));
                         
                         // Determine payment types display
                         let typeLabel = 'Rent';
@@ -806,7 +807,14 @@ const Payments = () => {
                             : '—';
                         return (
                             <tr key={p.id} className="payment-row">
-                                <td style={{ fontWeight: '600', color: '#343C6A', padding: '1rem 0' }}>{tenant ? tenant.name : 'Unknown'}</td>
+                                <td style={{ fontWeight: '600', color: '#343C6A', padding: '1rem 0' }}>
+                                    {tenant ? tenant.name : 'Unknown'}
+                                    {apartment && (
+                                        <span style={{ fontSize: '0.78rem', color: '#718EBF', fontWeight: '500', marginLeft: '6px' }}>
+                                            ({lang === 'fr' ? 'Chambre' : 'Room'} {apartment.unitNumber})
+                                        </span>
+                                    )}
+                                </td>
                                 <td>
                                     <span style={{ 
                                         display: 'inline-flex',
