@@ -772,6 +772,7 @@ const Payments = () => {
                 <thead>
                     <tr>
                         <th style={{ borderBottom: '1px solid var(--border-light)', padding: '1rem 0', textAlign: 'left' }}>Tenant</th>
+                        <th style={{ borderBottom: '1px solid var(--border-light)', textAlign: 'left' }}>{lang === 'fr' ? 'Chambre' : 'Room'}</th>
                         <th style={{ borderBottom: '1px solid var(--border-light)', textAlign: 'left' }}>Type</th>
                         <th style={{ borderBottom: '1px solid var(--border-light)', textAlign: 'left' }}>Month(s) Covered</th>
                         <th style={{ borderBottom: '1px solid var(--border-light)', textAlign: 'left' }}>Payment Date</th>
@@ -807,14 +808,8 @@ const Payments = () => {
                             : '—';
                         return (
                             <tr key={p.id} className="payment-row">
-                                <td style={{ fontWeight: '600', color: '#343C6A', padding: '1rem 0' }}>
-                                    {tenant ? tenant.name : 'Unknown'}
-                                    {apartment && (
-                                        <span style={{ fontSize: '0.78rem', color: '#718EBF', fontWeight: '500', marginLeft: '6px' }}>
-                                            ({lang === 'fr' ? 'Chambre' : 'Room'} {apartment.unitNumber})
-                                        </span>
-                                    )}
-                                </td>
+                                <td style={{ fontWeight: '600', color: '#343C6A', padding: '1rem 0' }}>{tenant ? tenant.name : 'Unknown'}</td>
+                                <td style={{ fontWeight: '600', color: '#343C6A' }}>{apartment ? apartment.unitNumber : '—'}</td>
                                 <td>
                                     <span style={{ 
                                         display: 'inline-flex',
