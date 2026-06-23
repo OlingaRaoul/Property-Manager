@@ -839,7 +839,7 @@ const Payments = () => {
         const paginatedPayments = sortedPayments.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
         return (
-            <div>
+            <div style={{ paddingBottom: '0.75rem' }}>
                 <table className="data-table" style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>
                     <thead>
                         <tr>
