@@ -1166,15 +1166,6 @@ app.delete('/api/payments/:id', authMiddleware, async (req, res) => {
         await Payment.findOneAndDelete({ id: req.params.id });
         res.json({ status: 'success' });
     } catch (e) { res.status(500).json({ error: e.message }); }
-});).sort().pop() || '';
-                tenant.lastPaidMonth = latestMonth;
-            }
-            await tenant.save();
-        }
-
-        await Payment.findOneAndDelete({ id: req.params.id });
-        res.json({ status: 'success' });
-    } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.put('/api/payments/:id', authMiddleware, async (req, res) => {
