@@ -212,13 +212,49 @@ const migrateLegacyData = async (defaultUserId) => {
             const legacyQuery = { $or: [ { userId: { $exists: false } }, { userId: null }, { userId: "" } ] };
             const result = await Property.updateMany(legacyQuery, { userId: defaultUserId });
             const settingsResult = await Setting.updateMany(legacyQuery, { userId: defaultUserId });
-            const tenantResult = await Tenant.updateMany(legacyQuery, { userId: defaultUserId });
-            await Tenant.updateMany({ isAssigned: { $exists: false } }, { isAssigned: true });
+            
+            // Re-assign or repair tenant ownership based on their properties
+            const allTenants = await Tenant.find().lean();
+            let tenantMigratedCount = 0;
+            for (const tenant of allTenants) {
+                let targetUserId = tenant.userId;
+                let needsUpdate = false;
+
+                if (tenant.apartmentId) {
+                    const apt = await Apartment.findOne({ id: tenant.apartmentId }).lean();
+                    const prop = apt ? await Property.findOne({ id: apt.propertyId }).lean() : null;
+                    if (prop && prop.userId) {
+                        if (tenant.userId !== prop.userId) {
+                            targetUserId = prop.userId;
+                            needsUpdate = true;
+                        }
+                    }
+                }
+
+                if (!targetUserId) {
+                    targetUserId = defaultUserId;
+                    needsUpdate = true;
+                }
+
+                let updatePayload = {};
+                if (needsUpdate) {
+                    updatePayload.userId = targetUserId;
+                }
+                if (tenant.isAssigned === undefined) {
+                    updatePayload.isAssigned = true;
+                }
+
+                if (Object.keys(updatePayload).length > 0) {
+                    await Tenant.updateOne({ id: tenant.id }, { $set: updatePayload });
+                    tenantMigratedCount++;
+                }
+            }
+
             if (result.modifiedCount > 0) {
                 console.log(`[MIGRATION] Assigned ${result.modifiedCount} legacy properties in MongoDB to User: ${defaultUserId}`);
             }
-            if (tenantResult.modifiedCount > 0) {
-                console.log(`[MIGRATION] Assigned ${tenantResult.modifiedCount} legacy tenants in MongoDB to User: ${defaultUserId}`);
+            if (tenantMigratedCount > 0) {
+                console.log(`[MIGRATION] Repaired/Assigned ${tenantMigratedCount} tenants in MongoDB`);
             }
         } else {
             let count = 0;
@@ -232,21 +268,35 @@ const migrateLegacyData = async (defaultUserId) => {
             mockData.tenants = mockData.tenants.map(t => {
                 let updated = false;
                 const newT = { ...t };
-                if (!newT.userId) {
-                    count++;
-                    newT.userId = defaultUserId;
+                
+                let targetUserId = newT.userId;
+                if (newT.apartmentId) {
+                    const apt = mockData.apartments.find(a => String(a.id) === String(newT.apartmentId));
+                    const prop = apt ? mockData.properties.find(p => String(p.id) === String(apt.propertyId)) : null;
+                    if (prop && prop.userId) {
+                        if (newT.userId !== prop.userId) {
+                            targetUserId = prop.userId;
+                            updated = true;
+                        }
+                    }
+                }
+                if (!targetUserId) {
+                    targetUserId = defaultUserId;
                     updated = true;
                 }
                 if (newT.isAssigned === undefined) {
                     newT.isAssigned = true;
                     updated = true;
                 }
-                if (updated) return newT;
+                if (updated) {
+                    count++;
+                    return { ...newT, userId: targetUserId, isAssigned: newT.isAssigned !== undefined ? newT.isAssigned : true };
+                }
                 return t;
             });
             if (count > 0) {
                 saveMock();
-                console.log(`[MIGRATION] Assigned legacy entities in Mock DB to User: ${defaultUserId}`);
+                console.log(`[MIGRATION] Assigned/Repaired legacy entities in Mock DB`);
             }
         }
     } catch (e) {
