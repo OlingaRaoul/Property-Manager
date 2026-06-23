@@ -1003,7 +1003,7 @@ const Payments = () => {
     };
 
     return (
-        <div className="animate-fade-in view-container" style={{ paddingTop: '0.25rem' }}>
+        <div className="animate-fade-in view-container" style={{ paddingTop: '0.25rem', paddingBottom: '4rem' }}>
             {/* ── Header ── */}
             <div className="view-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '1.5rem' }}>
                 <h2 style={{ fontSize: '1.25rem', fontWeight: '800', color: '#343C6A', margin: 0, fontFamily: 'Outfit' }}>Payment Ledger History</h2>
