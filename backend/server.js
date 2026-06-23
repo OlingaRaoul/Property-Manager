@@ -209,9 +209,10 @@ const isConnected = () => mongoose.connection.readyState === 1;
 const migrateLegacyData = async (defaultUserId) => {
     try {
         if (isConnected()) {
-            const result = await Property.updateMany({ userId: { $exists: false } }, { userId: defaultUserId });
-            const settingsResult = await Setting.updateMany({ userId: { $exists: false } }, { userId: defaultUserId });
-            const tenantResult = await Tenant.updateMany({ userId: { $exists: false } }, { userId: defaultUserId });
+            const legacyQuery = { $or: [ { userId: { $exists: false } }, { userId: null }, { userId: "" } ] };
+            const result = await Property.updateMany(legacyQuery, { userId: defaultUserId });
+            const settingsResult = await Setting.updateMany(legacyQuery, { userId: defaultUserId });
+            const tenantResult = await Tenant.updateMany(legacyQuery, { userId: defaultUserId });
             await Tenant.updateMany({ isAssigned: { $exists: false } }, { isAssigned: true });
             if (result.modifiedCount > 0) {
                 console.log(`[MIGRATION] Assigned ${result.modifiedCount} legacy properties in MongoDB to User: ${defaultUserId}`);
@@ -955,6 +956,9 @@ app.put('/api/payments/:id/reject', authMiddleware, async (req, res) => {
 
 app.get('/api/data', authMiddleware, async (req, res) => {
     try {
+        // Ensure legacy database entries are dynamically migrated to the active user on page refresh
+        await migrateLegacyData(req.userId);
+
         if (!isConnected()) {
             const properties = mockData.properties.filter(p => p.userId === req.userId);
             const propIds = properties.map(p => p.id);
