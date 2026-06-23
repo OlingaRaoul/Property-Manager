@@ -60,6 +60,24 @@ const Payments = () => {
     const [expandedPanels, setExpandedPanels] = useState({});
     const lang = state.settings.lang || 'en';
 
+    const [sortField, setSortField] = useState('date'); // 'name' | 'room' | 'date' | 'type'
+    const [sortDirection, setSortDirection] = useState('desc'); // 'asc' | 'desc'
+
+    const handleSort = (field) => {
+        if (sortField === field) {
+            setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+        } else {
+            setSortField(field);
+            if (field === 'room') {
+                setSortDirection('asc');
+            } else if (field === 'date') {
+                setSortDirection('desc');
+            } else {
+                setSortDirection('asc');
+            }
+        }
+    };
+
     // ── Modal state ──────────────────────────────────────────────────
     const [showModal, setShowModal]   = useState(false);
     const [tenantId, setTenantId]     = useState('');
@@ -767,21 +785,108 @@ const Payments = () => {
             return acc;
         }, {});
 
+        const groupedArray = Object.values(grouped).map(p => {
+            const tenant = state.tenants.find(t => String(t.id) === String(p.tenantId));
+            const apartment = state.apartments.find(a => String(a.id) === String(p.apartmentId || tenant?.apartmentId));
+            
+            let typeLabel = 'Rent';
+            if (p.types.has('Rent') && p.types.has('Deposit')) {
+                typeLabel = 'Rent & Deposit';
+            } else if (p.types.has('Deposit')) {
+                typeLabel = 'Deposit';
+            }
+
+            return {
+                ...p,
+                tenantName: tenant ? tenant.name : 'Unknown',
+                roomNumber: apartment ? apartment.unitNumber : '',
+                typeLabel
+            };
+        });
+
+        const sortedPayments = [...groupedArray].sort((a, b) => {
+            let valA, valB;
+            if (sortField === 'name') {
+                valA = a.tenantName.toLowerCase();
+                valB = b.tenantName.toLowerCase();
+            } else if (sortField === 'room') {
+                const numA = parseInt(a.roomNumber.replace(/\D/g, '')) || 0;
+                const numB = parseInt(b.roomNumber.replace(/\D/g, '')) || 0;
+                if (numA !== numB) {
+                    valA = numA;
+                    valB = numB;
+                } else {
+                    valA = a.roomNumber.toLowerCase();
+                    valB = b.roomNumber.toLowerCase();
+                }
+            } else if (sortField === 'type') {
+                valA = a.typeLabel.toLowerCase();
+                valB = b.typeLabel.toLowerCase();
+            } else { // default to 'date'
+                valA = a.date;
+                valB = b.date;
+            }
+
+            if (valA < valB) return sortDirection === 'asc' ? -1 : 1;
+            if (valA > valB) return sortDirection === 'asc' ? 1 : -1;
+            return 0;
+        });
+
         return (
             <table className="data-table" style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>
                 <thead>
                     <tr>
-                        <th style={{ borderBottom: '1px solid var(--border-light)', padding: '1rem 0', textAlign: 'left' }}>Tenant</th>
-                        <th style={{ borderBottom: '1px solid var(--border-light)', textAlign: 'left' }}>{lang === 'fr' ? 'Chambre' : 'Room'}</th>
-                        <th style={{ borderBottom: '1px solid var(--border-light)', textAlign: 'left' }}>Type</th>
+                        <th 
+                            style={{ borderBottom: '1px solid var(--border-light)', padding: '1rem 0', textAlign: 'left', cursor: 'pointer', userSelect: 'none' }}
+                            onClick={() => handleSort('name')}
+                        >
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                Tenant
+                                <span style={{ fontSize: '10px', opacity: sortField === 'name' ? 1 : 0.4 }}>
+                                    {sortField === 'name' ? (sortDirection === 'asc' ? '▲' : '▼') : '↕'}
+                                </span>
+                            </span>
+                        </th>
+                        <th 
+                            style={{ borderBottom: '1px solid var(--border-light)', textAlign: 'left', cursor: 'pointer', userSelect: 'none' }}
+                            onClick={() => handleSort('room')}
+                        >
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                {lang === 'fr' ? 'Chambre' : 'Room'}
+                                <span style={{ fontSize: '10px', opacity: sortField === 'room' ? 1 : 0.4 }}>
+                                    {sortField === 'room' ? (sortDirection === 'asc' ? '▲' : '▼') : '↕'}
+                                </span>
+                            </span>
+                        </th>
+                        <th 
+                            style={{ borderBottom: '1px solid var(--border-light)', textAlign: 'left', cursor: 'pointer', userSelect: 'none' }}
+                            onClick={() => handleSort('type')}
+                        >
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                Type
+                                <span style={{ fontSize: '10px', opacity: sortField === 'type' ? 1 : 0.4 }}>
+                                    {sortField === 'type' ? (sortDirection === 'asc' ? '▲' : '▼') : '↕'}
+                                </span>
+                            </span>
+                        </th>
                         <th style={{ borderBottom: '1px solid var(--border-light)', textAlign: 'left' }}>Month(s) Covered</th>
-                        <th style={{ borderBottom: '1px solid var(--border-light)', textAlign: 'left' }}>Payment Date</th>
+                        <th 
+                            style={{ borderBottom: '1px solid var(--border-light)', textAlign: 'left', cursor: 'pointer', userSelect: 'none' }}
+                            onClick={() => handleSort('date')}
+                        >
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                Payment Date
+                                <span style={{ fontSize: '10px', opacity: sortField === 'date' ? 1 : 0.4 }}>
+                                    {sortField === 'date' ? (sortDirection === 'asc' ? '▲' : '▼') : '↕'}
+                                </span>
+                            </span>
+                        </th>
                         <th style={{ borderBottom: '1px solid var(--border-light)', textAlign: 'left' }}>Amount</th>
                         <th style={{ borderBottom: '1px solid var(--border-light)', textAlign: 'right' }}>Actions</th>
                     </tr>
                 </thead>
                 <tbody>
-                    {Object.values(grouped).sort((a, b) => b.date.localeCompare(a.date)).map(p => {
+                    {sortedPayments.map(p => {
                         const tenant = state.tenants.find(t => String(t.id) === String(p.tenantId));
                         const apartment = state.apartments.find(a => String(a.id) === String(p.apartmentId || tenant?.apartmentId));
                         
