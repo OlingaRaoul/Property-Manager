@@ -979,3 +979,36 @@ body {
         size: A5 portrait;
     }
 }
+
+/* ── Clickable Tenant Animation ── */
+.clickable-tenant {
+    color: var(--primary) !important;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: inline-block;
+    position: relative;
+    text-decoration: none !important;
+}
+
+.clickable-tenant:hover {
+    color: #1a4cd6 !important;
+    transform: translateY(-1.5px);
+}
+
+.clickable-tenant::after {
+    content: '';
+    position: absolute;
+    width: 100%;
+    transform: scaleX(0);
+    height: 2px;
+    bottom: -2px;
+    left: 0;
+    background-color: var(--primary);
+    transform-origin: bottom right;
+    transition: transform 0.25s ease-out;
+}
+
+.clickable-tenant:hover::after {
+    transform: scaleX(1);
+    transform-origin: bottom left;
+}

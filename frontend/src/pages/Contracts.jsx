@@ -75,7 +75,7 @@ const selectCls = { ...inputCls };
 // ── Component ─────────────────────────────────────────────────────────
 
 const Contracts = () => {
-    const { state, setState, API_URL, loading } = useAppState();
+    const { state, setState, API_URL, loading, showTenantHistory } = useAppState();
 
     const [modal, setModal]     = useState(null); // null | 'create' | contractObj
     const [form, setForm]       = useState(EMPTY_FORM);
@@ -302,7 +302,13 @@ const Contracts = () => {
                                         <img src={`https://robohash.org/${tenant?.name ? encodeURIComponent(tenant.name) : 'default'}?set=set4`} style={{ width: '100%', height: '100%', background: '#F5F7FA' }} alt="" />
                                     </div>
                                     <div>
-                                        <div style={{ fontWeight: '800', fontSize: '1.05rem', color: '#343C6A' }}>{tenant?.name || 'Unknown Tenant'}</div>
+                                            {tenant ? (
+                                                <div className="clickable-tenant" style={{ fontWeight: '800', fontSize: '1.05rem' }} onClick={() => showTenantHistory(tenant.id)}>
+                                                    {tenant.name}
+                                                </div>
+                                            ) : (
+                                                <div style={{ fontWeight: '800', fontSize: '1.05rem', color: '#343C6A' }}>Unknown Tenant</div>
+                                            )}
                                         <div style={{ fontSize: '0.82rem', color: '#718EBF', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                                             <Building2 size={13} /> {prop?.name || '—'} &nbsp;/&nbsp; {apt?.unitNumber || '—'}
                                         </div>

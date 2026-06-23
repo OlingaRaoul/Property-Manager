@@ -211,8 +211,13 @@ const migrateLegacyData = async (defaultUserId) => {
         if (isConnected()) {
             const result = await Property.updateMany({ userId: { $exists: false } }, { userId: defaultUserId });
             const settingsResult = await Setting.updateMany({ userId: { $exists: false } }, { userId: defaultUserId });
+            const tenantResult = await Tenant.updateMany({ userId: { $exists: false } }, { userId: defaultUserId });
+            await Tenant.updateMany({ isAssigned: { $exists: false } }, { isAssigned: true });
             if (result.modifiedCount > 0) {
                 console.log(`[MIGRATION] Assigned ${result.modifiedCount} legacy properties in MongoDB to User: ${defaultUserId}`);
+            }
+            if (tenantResult.modifiedCount > 0) {
+                console.log(`[MIGRATION] Assigned ${tenantResult.modifiedCount} legacy tenants in MongoDB to User: ${defaultUserId}`);
             }
         } else {
             let count = 0;
@@ -223,9 +228,24 @@ const migrateLegacyData = async (defaultUserId) => {
                 }
                 return p;
             });
+            mockData.tenants = mockData.tenants.map(t => {
+                let updated = false;
+                const newT = { ...t };
+                if (!newT.userId) {
+                    count++;
+                    newT.userId = defaultUserId;
+                    updated = true;
+                }
+                if (newT.isAssigned === undefined) {
+                    newT.isAssigned = true;
+                    updated = true;
+                }
+                if (updated) return newT;
+                return t;
+            });
             if (count > 0) {
                 saveMock();
-                console.log(`[MIGRATION] Assigned ${count} legacy properties in Mock DB to User: ${defaultUserId}`);
+                console.log(`[MIGRATION] Assigned legacy entities in Mock DB to User: ${defaultUserId}`);
             }
         }
     } catch (e) {
@@ -942,11 +962,20 @@ app.get('/api/data', authMiddleware, async (req, res) => {
             const apartments = mockData.apartments.filter(a => propIds.includes(a.propertyId));
             const aptIds = apartments.map(a => a.id);
 
-            const tenants = mockData.tenants.filter(t => aptIds.includes(t.apartmentId));
+            const tenants = mockData.tenants
+                .filter(t => t.userId === req.userId || aptIds.includes(t.apartmentId))
+                .map(t => ({ ...t, isAssigned: t.isAssigned !== undefined ? t.isAssigned : true }));
             const tenantIds = tenants.map(t => t.id);
 
             const payments = mockData.payments.filter(p => tenantIds.includes(p.tenantId));
-            const contracts = mockData.contracts.filter(c => tenantIds.includes(c.tenantId));
+            const rawContracts = mockData.contracts.filter(c => tenantIds.includes(c.tenantId));
+            const contracts = rawContracts.map(c => ({
+                ...c,
+                agreedDay: c.agreedDay !== undefined ? c.agreedDay : c.agreedPaymentDay,
+                deposit: c.deposit !== undefined ? c.deposit : c.depositAmount,
+                notes: c.notes !== undefined ? c.notes : c.terms,
+                active: c.active !== undefined ? c.active : (c.status === 'Active')
+            }));
             const utilities = mockData.utilities.filter(u => aptIds.includes(u.apartmentId));
 
             const settings = {};
@@ -967,16 +996,28 @@ app.get('/api/data', authMiddleware, async (req, res) => {
         const apartments = await Apartment.find({ propertyId: { $in: propIds } }).lean();
         const aptIds = apartments.map(a => a.id);
         
-        const tenants = await Tenant.find({ apartmentId: { $in: aptIds } }).lean();
+        const rawTenants = await Tenant.find({ $or: [ { userId: req.userId }, { apartmentId: { $in: aptIds } } ] }).lean();
+        const tenants = rawTenants.map(t => ({
+            ...t,
+            isAssigned: t.isAssigned !== undefined ? t.isAssigned : true
+        }));
         const tenantIds = tenants.map(t => t.id);
         
-        const [payments, settingsRows, unit_types, contracts, utilities] = await Promise.all([
+        const [payments, settingsRows, unit_types, rawContracts, utilities] = await Promise.all([
             Payment.find({ tenantId: { $in: tenantIds } }).sort({ date: -1 }).lean(),
             Setting.find({ userId: req.userId }).lean(),
             UnitType.find().lean(),
             Contract.find({ tenantId: { $in: tenantIds } }).lean(),
             Utility.find({ apartmentId: { $in: aptIds } }).lean()
         ]);
+
+        const contracts = rawContracts.map(c => ({
+            ...c,
+            agreedDay: c.agreedDay !== undefined ? c.agreedDay : c.agreedPaymentDay,
+            deposit: c.deposit !== undefined ? c.deposit : c.depositAmount,
+            notes: c.notes !== undefined ? c.notes : c.terms,
+            active: c.active !== undefined ? c.active : (c.status === 'Active')
+        }));
         
         const settings = {};
         settingsRows.forEach(row => settings[row.key] = row.value);
@@ -1002,9 +1043,18 @@ app.post('/api/payments', authMiddleware, async (req, res) => {
         if (!isConnected()) {
             const tenant = mockData.tenants.find(t => String(t.id) === String(tenantId));
             if (!tenant) return res.status(400).json({ error: 'Tenant not found.' });
-            const apt = mockData.apartments.find(a => String(a.id) === String(tenant.apartmentId));
-            const prop = apt ? mockData.properties.find(p => String(p.id) === String(apt.propertyId) && p.userId === req.userId) : null;
-            if (!prop) return res.status(403).json({ error: 'Tenant access denied.' });
+            
+            let hasAccess = false;
+            if (tenant.userId && tenant.userId === req.userId) {
+                hasAccess = true;
+            } else if (tenant.apartmentId) {
+                const apt = mockData.apartments.find(a => String(a.id) === String(tenant.apartmentId));
+                const prop = apt ? mockData.properties.find(p => String(p.id) === String(apt.propertyId) && p.userId === req.userId) : null;
+                if (prop) hasAccess = true;
+            } else {
+                hasAccess = true;
+            }
+            if (!hasAccess) return res.status(403).json({ error: 'Tenant access denied.' });
 
             mockPOST('payments', req.body); 
             return res.status(201).json({ status: 'success' }); 
@@ -1012,9 +1062,18 @@ app.post('/api/payments', authMiddleware, async (req, res) => {
         
         const tenant = await Tenant.findOne({ id: tenantId });
         if (!tenant) return res.status(400).json({ error: 'Tenant not found.' });
-        const apt = await Apartment.findOne({ id: tenant.apartmentId });
-        const prop = apt ? await Property.findOne({ id: apt.propertyId, userId: req.userId }) : null;
-        if (!prop) return res.status(403).json({ error: 'Tenant access denied.' });
+        
+        let hasAccess = false;
+        if (tenant.userId && tenant.userId === req.userId) {
+            hasAccess = true;
+        } else if (tenant.apartmentId) {
+            const apt = await Apartment.findOne({ id: tenant.apartmentId });
+            const prop = apt ? await Property.findOne({ id: apt.propertyId, userId: req.userId }) : null;
+            if (prop) hasAccess = true;
+        } else {
+            hasAccess = true;
+        }
+        if (!hasAccess) return res.status(403).json({ error: 'Tenant access denied.' });
 
         await Payment.create(req.body); 
         res.status(201).json({ status: 'success' }); 
@@ -1027,9 +1086,22 @@ app.delete('/api/payments/:id', authMiddleware, async (req, res) => {
             const payment = mockData.payments.find(p => String(p.id) === String(req.params.id));
             if (!payment) return res.status(404).json({ error: 'Payment not found.' });
             const tenant = mockData.tenants.find(t => String(t.id) === String(payment.tenantId));
-            const apt = tenant ? mockData.apartments.find(a => String(a.id) === String(tenant.apartmentId)) : null;
-            const prop = apt ? mockData.properties.find(p => String(p.id) === String(apt.propertyId) && p.userId === req.userId) : null;
-            if (!prop) return res.status(403).json({ error: 'Access denied.' });
+            
+            let hasAccess = false;
+            if (tenant) {
+                if (tenant.userId && tenant.userId === req.userId) {
+                    hasAccess = true;
+                } else if (tenant.apartmentId) {
+                    const apt = mockData.apartments.find(a => String(a.id) === String(tenant.apartmentId));
+                    const prop = apt ? mockData.properties.find(p => String(p.id) === String(apt.propertyId) && p.userId === req.userId) : null;
+                    if (prop) hasAccess = true;
+                } else {
+                    hasAccess = true;
+                }
+            } else {
+                hasAccess = true;
+            }
+            if (!hasAccess) return res.status(403).json({ error: 'Access denied.' });
 
             if (tenant) {
                 if (payment.type === 'Deposit') {
@@ -1047,18 +1119,31 @@ app.delete('/api/payments/:id', authMiddleware, async (req, res) => {
             }
 
             mockData.payments = mockData.payments.filter(p => String(p.id) !== String(req.params.id));
-            saveMock();
+            saveMock(); 
             return res.json({ status: 'success' });
         }
         
         const payment = await Payment.findOne({ id: req.params.id });
         if (!payment) return res.status(404).json({ error: 'Payment not found.' });
         const tenant = await Tenant.findOne({ id: payment.tenantId });
+        
+        let hasAccess = false;
         if (tenant) {
-            const apt = await Apartment.findOne({ id: tenant.apartmentId });
-            const prop = apt ? await Property.findOne({ id: apt.propertyId, userId: req.userId }) : null;
-            if (!prop) return res.status(403).json({ error: 'Access denied.' });
+            if (tenant.userId && tenant.userId === req.userId) {
+                hasAccess = true;
+            } else if (tenant.apartmentId) {
+                const apt = await Apartment.findOne({ id: tenant.apartmentId });
+                const prop = apt ? await Property.findOne({ id: apt.propertyId, userId: req.userId }) : null;
+                if (prop) hasAccess = true;
+            } else {
+                hasAccess = true;
+            }
+        } else {
+            hasAccess = true;
+        }
+        if (!hasAccess) return res.status(403).json({ error: 'Access denied.' });
 
+        if (tenant) {
             if (payment.type === 'Deposit') {
                 tenant.depositPaidAmount = Math.max(0, (tenant.depositPaidAmount || 0) - payment.amount);
                 tenant.depositMonthsPaid = Math.max(0, (tenant.depositMonthsPaid || 0) - (payment.depositMonths || 0));
@@ -1069,6 +1154,15 @@ app.delete('/api/payments/:id', authMiddleware, async (req, res) => {
                     type: { $ne: 'Deposit' } 
                 }).lean();
                 const latestMonth = remainingRentPayments.map(p => p.monthPaid).sort().pop() || '';
+                tenant.lastPaidMonth = latestMonth;
+            }
+            await tenant.save();
+        }
+
+        await Payment.findOneAndDelete({ id: req.params.id });
+        res.json({ status: 'success' });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});).sort().pop() || '';
                 tenant.lastPaidMonth = latestMonth;
             }
             await tenant.save();
@@ -1267,25 +1361,43 @@ app.delete('/api/apartments/:id', authMiddleware, async (req, res) => {
 app.post('/api/tenants', authMiddleware, async (req, res) => {
     const { apartmentId } = req.body;
     try {
-        if (!isConnected()) { 
-            const apt = mockData.apartments.find(a => String(a.id) === String(apartmentId));
-            const prop = apt ? mockData.properties.find(p => String(p.id) === String(apt.propertyId) && p.userId === req.userId) : null;
-            if (!prop) return res.status(403).json({ error: 'Apartment access denied.' });
+        if (apartmentId) {
+            if (!isConnected()) { 
+                const apt = mockData.apartments.find(a => String(a.id) === String(apartmentId));
+                const prop = apt ? mockData.properties.find(p => String(p.id) === String(apt.propertyId) && p.userId === req.userId) : null;
+                if (!prop) return res.status(403).json({ error: 'Apartment access denied.' });
+            } else {
+                const apt = await Apartment.findOne({ id: apartmentId });
+                const prop = apt ? await Property.findOne({ id: apt.propertyId, userId: req.userId }) : null;
+                if (!prop) return res.status(403).json({ error: 'Apartment access denied.' });
+            }
+        }
 
+        // Ensure active unit is not already occupied by another active tenant
+        const isAssigned = req.body.isAssigned !== false;
+        if (isAssigned && apartmentId) {
+            if (!isConnected()) {
+                const occupied = mockData.tenants.some(t => String(t.apartmentId) === String(apartmentId) && t.isAssigned !== false);
+                if (occupied) return res.status(400).json({ error: 'This unit is already occupied by an active tenant.' });
+            } else {
+                const occupied = await Tenant.findOne({ apartmentId, isAssigned: { $ne: false } });
+                if (occupied) return res.status(400).json({ error: 'This unit is already occupied by an active tenant.' });
+            }
+        }
+
+        if (!isConnected()) { 
             const newTenant = {
                 ...req.body,
+                userId: req.userId,
                 paymentToken: req.body.paymentToken || crypto.randomUUID()
             };
             mockPOST('tenants', newTenant); 
             return res.status(201).json({ status: 'success', tenant: newTenant }); 
         }
         
-        const apt = await Apartment.findOne({ id: apartmentId });
-        const prop = apt ? await Property.findOne({ id: apt.propertyId, userId: req.userId }) : null;
-        if (!prop) return res.status(403).json({ error: 'Apartment access denied.' });
-
         const tenantData = {
             ...req.body,
+            userId: req.userId,
             paymentToken: req.body.paymentToken || crypto.randomUUID()
         };
         const createdTenant = await Tenant.create(tenantData); 
@@ -1298,9 +1410,34 @@ app.put('/api/tenants/:id', authMiddleware, async (req, res) => {
         if (!isConnected()) {
             const tenant = mockData.tenants.find(t => String(t.id) === String(req.params.id));
             if (!tenant) return res.status(404).json({ error: 'Tenant not found.' });
-            const apt = mockData.apartments.find(a => String(a.id) === String(tenant.apartmentId));
-            const prop = apt ? mockData.properties.find(p => String(p.id) === String(apt.propertyId) && p.userId === req.userId) : null;
-            if (!prop) return res.status(403).json({ error: 'Access denied.' });
+
+            // Verify ownership of the existing tenant
+            let hasAccess = false;
+            if (tenant.userId && tenant.userId === req.userId) {
+                hasAccess = true;
+            } else if (tenant.apartmentId) {
+                const apt = mockData.apartments.find(a => String(a.id) === String(tenant.apartmentId));
+                const prop = apt ? mockData.properties.find(p => String(p.id) === String(apt.propertyId) && p.userId === req.userId) : null;
+                if (prop) hasAccess = true;
+            } else {
+                hasAccess = true;
+            }
+            if (!hasAccess) return res.status(403).json({ error: 'Access denied.' });
+
+            // Verify access to the new apartment if provided
+            if (req.body.apartmentId) {
+                const newApt = mockData.apartments.find(a => String(a.id) === String(req.body.apartmentId));
+                const newProp = newApt ? mockData.properties.find(p => String(p.id) === String(newApt.propertyId) && p.userId === req.userId) : null;
+                if (!newProp) return res.status(403).json({ error: 'Access denied to new apartment.' });
+            }
+
+            // Ensure active unit is not already occupied by another active tenant
+            const checkAssigned = req.body.isAssigned !== undefined ? (req.body.isAssigned !== false) : (tenant.isAssigned !== false);
+            const checkAptId = req.body.apartmentId !== undefined ? req.body.apartmentId : tenant.apartmentId;
+            if (checkAssigned && checkAptId) {
+                const occupied = mockData.tenants.some(t => String(t.apartmentId) === String(checkAptId) && t.isAssigned !== false && String(t.id) !== String(req.params.id));
+                if (occupied) return res.status(400).json({ error: 'The selected unit is currently occupied by another active tenant.' });
+            }
 
             mockData.tenants = mockData.tenants.map(t => String(t.id) === String(req.params.id) ? { ...t, ...req.body } : t);
             saveMock(); 
@@ -1309,9 +1446,34 @@ app.put('/api/tenants/:id', authMiddleware, async (req, res) => {
         
         const tenant = await Tenant.findOne({ id: req.params.id });
         if (!tenant) return res.status(404).json({ error: 'Tenant not found.' });
-        const apt = await Apartment.findOne({ id: tenant.apartmentId });
-        const prop = apt ? await Property.findOne({ id: apt.propertyId, userId: req.userId }) : null;
-        if (!prop) return res.status(403).json({ error: 'Access denied.' });
+
+        // Verify ownership of the existing tenant
+        let hasAccess = false;
+        if (tenant.userId && tenant.userId === req.userId) {
+            hasAccess = true;
+        } else if (tenant.apartmentId) {
+            const apt = await Apartment.findOne({ id: tenant.apartmentId });
+            const prop = apt ? await Property.findOne({ id: apt.propertyId, userId: req.userId }) : null;
+            if (prop) hasAccess = true;
+        } else {
+            hasAccess = true;
+        }
+        if (!hasAccess) return res.status(403).json({ error: 'Access denied.' });
+
+        // Verify access to the new apartment if provided
+        if (req.body.apartmentId) {
+            const newApt = await Apartment.findOne({ id: req.body.apartmentId });
+            const newProp = newApt ? await Property.findOne({ id: newApt.propertyId, userId: req.userId }) : null;
+            if (!newProp) return res.status(403).json({ error: 'Access denied to new apartment.' });
+        }
+
+        // Ensure active unit is not already occupied by another active tenant
+        const checkAssigned = req.body.isAssigned !== undefined ? (req.body.isAssigned !== false) : (tenant.isAssigned !== false);
+        const checkAptId = req.body.apartmentId !== undefined ? req.body.apartmentId : tenant.apartmentId;
+        if (checkAssigned && checkAptId) {
+            const occupied = await Tenant.findOne({ apartmentId: checkAptId, isAssigned: { $ne: false }, id: { $ne: req.params.id } });
+            if (occupied) return res.status(400).json({ error: 'The selected unit is currently occupied by another active tenant.' });
+        }
 
         await Tenant.findOneAndUpdate({ id: req.params.id }, req.body); 
         res.json({ status: 'success' }); 
@@ -1323,9 +1485,18 @@ app.delete('/api/tenants/:id', authMiddleware, async (req, res) => {
         if (!isConnected()) {
             const tenant = mockData.tenants.find(t => String(t.id) === String(req.params.id));
             if (!tenant) return res.status(404).json({ error: 'Tenant not found.' });
-            const apt = mockData.apartments.find(a => String(a.id) === String(tenant.apartmentId));
-            const prop = apt ? mockData.properties.find(p => String(p.id) === String(apt.propertyId) && p.userId === req.userId) : null;
-            if (!prop) return res.status(403).json({ error: 'Access denied.' });
+            
+            let hasAccess = false;
+            if (tenant.userId && tenant.userId === req.userId) {
+                hasAccess = true;
+            } else if (tenant.apartmentId) {
+                const apt = mockData.apartments.find(a => String(a.id) === String(tenant.apartmentId));
+                const prop = apt ? mockData.properties.find(p => String(p.id) === String(apt.propertyId) && p.userId === req.userId) : null;
+                if (prop) hasAccess = true;
+            } else {
+                hasAccess = true;
+            }
+            if (!hasAccess) return res.status(403).json({ error: 'Access denied.' });
 
             mockData.tenants = mockData.tenants.filter(t => String(t.id) !== String(req.params.id));
             saveMock(); 
@@ -1334,9 +1505,18 @@ app.delete('/api/tenants/:id', authMiddleware, async (req, res) => {
         
         const tenant = await Tenant.findOne({ id: req.params.id });
         if (!tenant) return res.status(404).json({ error: 'Tenant not found.' });
-        const apt = await Apartment.findOne({ id: tenant.apartmentId });
-        const prop = apt ? await Property.findOne({ id: apt.propertyId, userId: req.userId }) : null;
-        if (!prop) return res.status(403).json({ error: 'Access denied.' });
+        
+        let hasAccess = false;
+        if (tenant.userId && tenant.userId === req.userId) {
+            hasAccess = true;
+        } else if (tenant.apartmentId) {
+            const apt = await Apartment.findOne({ id: tenant.apartmentId });
+            const prop = apt ? await Property.findOne({ id: apt.propertyId, userId: req.userId }) : null;
+            if (prop) hasAccess = true;
+        } else {
+            hasAccess = true;
+        }
+        if (!hasAccess) return res.status(403).json({ error: 'Access denied.' });
 
         await Promise.all([
             Tenant.findOneAndDelete({ id: req.params.id }),
@@ -1357,9 +1537,18 @@ app.post('/api/contracts', authMiddleware, async (req, res) => {
         if (!isConnected()) { 
             const tenant = mockData.tenants.find(t => String(t.id) === String(tenantId));
             if (!tenant) return res.status(400).json({ error: 'Tenant not found.' });
-            const apt = mockData.apartments.find(a => String(a.id) === String(tenant.apartmentId));
-            const prop = apt ? mockData.properties.find(p => String(p.id) === String(apt.propertyId) && p.userId === req.userId) : null;
-            if (!prop) return res.status(403).json({ error: 'Tenant access denied.' });
+            
+            let hasAccess = false;
+            if (tenant.userId && tenant.userId === req.userId) {
+                hasAccess = true;
+            } else if (tenant.apartmentId) {
+                const apt = mockData.apartments.find(a => String(a.id) === String(tenant.apartmentId));
+                const prop = apt ? mockData.properties.find(p => String(p.id) === String(apt.propertyId) && p.userId === req.userId) : null;
+                if (prop) hasAccess = true;
+            } else {
+                hasAccess = true;
+            }
+            if (!hasAccess) return res.status(403).json({ error: 'Tenant access denied.' });
 
             mockPOST('contracts', req.body); 
             return res.status(201).json({ status: 'success' }); 
@@ -1367,11 +1556,28 @@ app.post('/api/contracts', authMiddleware, async (req, res) => {
         
         const tenant = await Tenant.findOne({ id: tenantId });
         if (!tenant) return res.status(400).json({ error: 'Tenant not found.' });
-        const apt = await Apartment.findOne({ id: tenant.apartmentId });
-        const prop = apt ? await Property.findOne({ id: apt.propertyId, userId: req.userId }) : null;
-        if (!prop) return res.status(403).json({ error: 'Tenant access denied.' });
+        
+        let hasAccess = false;
+        if (tenant.userId && tenant.userId === req.userId) {
+            hasAccess = true;
+        } else if (tenant.apartmentId) {
+            const apt = await Apartment.findOne({ id: tenant.apartmentId });
+            const prop = apt ? await Property.findOne({ id: apt.propertyId, userId: req.userId }) : null;
+            if (prop) hasAccess = true;
+        } else {
+            hasAccess = true;
+        }
+        if (!hasAccess) return res.status(403).json({ error: 'Tenant access denied.' });
 
-        await Contract.create(req.body); 
+        const contractData = {
+            ...req.body,
+            agreedPaymentDay: req.body.agreedDay !== undefined ? req.body.agreedDay : req.body.agreedPaymentDay,
+            depositAmount: req.body.deposit !== undefined ? req.body.deposit : req.body.depositAmount,
+            terms: req.body.notes !== undefined ? req.body.notes : req.body.terms,
+            status: req.body.active !== undefined ? (req.body.active ? 'Active' : 'Inactive') : req.body.status
+        };
+
+        await Contract.create(contractData); 
         res.status(201).json({ status: 'success' }); 
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -1382,9 +1588,22 @@ app.put('/api/contracts/:id', authMiddleware, async (req, res) => {
             const contract = mockData.contracts.find(c => String(c.id) === String(req.params.id));
             if (!contract) return res.status(404).json({ error: 'Contract not found.' });
             const tenant = mockData.tenants.find(t => String(t.id) === String(contract.tenantId));
-            const apt = tenant ? mockData.apartments.find(a => String(a.id) === String(tenant.apartmentId)) : null;
-            const prop = apt ? mockData.properties.find(p => String(p.id) === String(apt.propertyId) && p.userId === req.userId) : null;
-            if (!prop) return res.status(403).json({ error: 'Access denied.' });
+            
+            let hasAccess = false;
+            if (tenant) {
+                if (tenant.userId && tenant.userId === req.userId) {
+                    hasAccess = true;
+                } else if (tenant.apartmentId) {
+                    const apt = mockData.apartments.find(a => String(a.id) === String(tenant.apartmentId));
+                    const prop = apt ? mockData.properties.find(p => String(p.id) === String(apt.propertyId) && p.userId === req.userId) : null;
+                    if (prop) hasAccess = true;
+                } else {
+                    hasAccess = true;
+                }
+            } else {
+                hasAccess = true;
+            }
+            if (!hasAccess) return res.status(403).json({ error: 'Access denied.' });
 
             mockData.contracts = mockData.contracts.map(c => String(c.id) === String(req.params.id) ? { ...c, ...req.body } : c);
             saveMock(); 
@@ -1394,11 +1613,32 @@ app.put('/api/contracts/:id', authMiddleware, async (req, res) => {
         const contract = await Contract.findOne({ id: req.params.id });
         if (!contract) return res.status(404).json({ error: 'Contract not found.' });
         const tenant = await Tenant.findOne({ id: contract.tenantId });
-        const apt = tenant ? await Apartment.findOne({ id: tenant.apartmentId }) : null;
-        const prop = apt ? await Property.findOne({ id: apt.propertyId, userId: req.userId }) : null;
-        if (!prop) return res.status(403).json({ error: 'Access denied.' });
+        
+        let hasAccess = false;
+        if (tenant) {
+            if (tenant.userId && tenant.userId === req.userId) {
+                hasAccess = true;
+            } else if (tenant.apartmentId) {
+                const apt = await Apartment.findOne({ id: tenant.apartmentId });
+                const prop = apt ? await Property.findOne({ id: apt.propertyId, userId: req.userId }) : null;
+                if (prop) hasAccess = true;
+            } else {
+                hasAccess = true;
+            }
+        } else {
+            hasAccess = true;
+        }
+        if (!hasAccess) return res.status(403).json({ error: 'Access denied.' });
 
-        await Contract.findOneAndUpdate({ id: req.params.id }, req.body); 
+        const contractData = {
+            ...req.body,
+            agreedPaymentDay: req.body.agreedDay !== undefined ? req.body.agreedDay : req.body.agreedPaymentDay,
+            depositAmount: req.body.deposit !== undefined ? req.body.deposit : req.body.depositAmount,
+            terms: req.body.notes !== undefined ? req.body.notes : req.body.terms,
+            status: req.body.active !== undefined ? (req.body.active ? 'Active' : 'Inactive') : req.body.status
+        };
+
+        await Contract.findOneAndUpdate({ id: req.params.id }, contractData); 
         res.json({ status: 'success' }); 
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -1409,9 +1649,22 @@ app.delete('/api/contracts/:id', authMiddleware, async (req, res) => {
             const contract = mockData.contracts.find(c => String(c.id) === String(req.params.id));
             if (!contract) return res.status(404).json({ error: 'Contract not found.' });
             const tenant = mockData.tenants.find(t => String(t.id) === String(contract.tenantId));
-            const apt = tenant ? mockData.apartments.find(a => String(a.id) === String(tenant.apartmentId)) : null;
-            const prop = apt ? mockData.properties.find(p => String(p.id) === String(apt.propertyId) && p.userId === req.userId) : null;
-            if (!prop) return res.status(403).json({ error: 'Access denied.' });
+            
+            let hasAccess = false;
+            if (tenant) {
+                if (tenant.userId && tenant.userId === req.userId) {
+                    hasAccess = true;
+                } else if (tenant.apartmentId) {
+                    const apt = mockData.apartments.find(a => String(a.id) === String(tenant.apartmentId));
+                    const prop = apt ? mockData.properties.find(p => String(p.id) === String(apt.propertyId) && p.userId === req.userId) : null;
+                    if (prop) hasAccess = true;
+                } else {
+                    hasAccess = true;
+                }
+            } else {
+                hasAccess = true;
+            }
+            if (!hasAccess) return res.status(403).json({ error: 'Access denied.' });
 
             mockData.contracts = mockData.contracts.filter(c => String(c.id) !== String(req.params.id));
             saveMock(); 
@@ -1421,9 +1674,22 @@ app.delete('/api/contracts/:id', authMiddleware, async (req, res) => {
         const contract = await Contract.findOne({ id: req.params.id });
         if (!contract) return res.status(404).json({ error: 'Contract not found.' });
         const tenant = await Tenant.findOne({ id: contract.tenantId });
-        const apt = tenant ? await Apartment.findOne({ id: tenant.apartmentId }) : null;
-        const prop = apt ? await Property.findOne({ id: apt.propertyId, userId: req.userId }) : null;
-        if (!prop) return res.status(403).json({ error: 'Access denied.' });
+        
+        let hasAccess = false;
+        if (tenant) {
+            if (tenant.userId && tenant.userId === req.userId) {
+                hasAccess = true;
+            } else if (tenant.apartmentId) {
+                const apt = await Apartment.findOne({ id: tenant.apartmentId });
+                const prop = apt ? await Property.findOne({ id: apt.propertyId, userId: req.userId }) : null;
+                if (prop) hasAccess = true;
+            } else {
+                hasAccess = true;
+            }
+        } else {
+            hasAccess = true;
+        }
+        if (!hasAccess) return res.status(403).json({ error: 'Access denied.' });
 
         await Contract.findOneAndDelete({ id: req.params.id });
         res.json({ status: 'success' }); 

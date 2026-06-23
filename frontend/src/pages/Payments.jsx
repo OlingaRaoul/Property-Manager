@@ -55,7 +55,7 @@ const selectStyle = {
 };
 
 const Payments = () => {
-    const { state, setState, API_URL, loading } = useAppState();
+    const { state, setState, API_URL, loading, showTenantHistory } = useAppState();
     const [search, setSearch]           = useState('');
     const [expandedPanels, setExpandedPanels] = useState({});
     const lang = state.settings.lang || 'en';
@@ -503,7 +503,7 @@ const Payments = () => {
     };
 
     const openModal = () => {
-        const first = state.tenants[0];
+        const first = state.tenants.find(t => t.isAssigned !== false);
         setTenantId(first?.id || '');
         setSelectedMonths([]);
         setPayDate(TODAY);
@@ -808,7 +808,15 @@ const Payments = () => {
                             : '—';
                         return (
                             <tr key={p.id} className="payment-row">
-                                <td style={{ fontWeight: '600', color: '#343C6A', padding: '1rem 0' }}>{tenant ? tenant.name : 'Unknown'}</td>
+                                <td style={{ padding: '1rem 0' }}>
+                                    {tenant ? (
+                                        <span className="clickable-tenant" style={{ fontWeight: '600' }} onClick={() => showTenantHistory(tenant.id)}>
+                                            {tenant.name}
+                                        </span>
+                                    ) : (
+                                        <span style={{ fontWeight: '600', color: '#343C6A' }}>Unknown</span>
+                                    )}
+                                </td>
                                 <td style={{ fontWeight: '600', color: '#343C6A' }}>{apartment ? apartment.unitNumber : '—'}</td>
                                 <td>
                                     <span style={{ 
@@ -944,7 +952,7 @@ const Payments = () => {
                                         const prop = apt ? state.properties.find(p => String(p.id) === String(apt.propertyId)) : null;
                                         return (
                                             <option key={t.id} value={t.id}>
-                                                {t.name}{prop ? ` — ${prop.name}` : ''}{apt ? ` / ${apt.unitNumber}` : ''}
+                                                {t.name}{t.isAssigned === false ? ' (Contract Finished)' : ''}{prop ? ` — ${prop.name}` : ''}{apt ? ` / ${apt.unitNumber}` : ''}
                                             </option>
                                         );
                                     })}

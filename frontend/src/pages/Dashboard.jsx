@@ -26,12 +26,12 @@ const StatCard = ({ title, value, icon: Icon, colorClass, bgClass, subtext }) =>
 );
 
 const Dashboard = () => {
-    const { state, loading } = useAppState();
+    const { state, loading, showTenantHistory } = useAppState();
 
     if (loading) return <div className="loader">Loading dashboard...</div>;
 
     // Calculate metrics
-    const activeTenantsCount = state.tenants.length;
+    const activeTenantsCount = state.tenants.filter(t => t.isAssigned !== false).length;
     
     // Count only Rent payments
     const totalCollectedRent = state.payments
@@ -43,7 +43,7 @@ const Dashboard = () => {
         .filter(p => p.type === 'Deposit')
         .reduce((sum, p) => sum + p.amount, 0);
 
-    const totalDepositMonths = state.tenants.reduce((sum, t) => {
+    const totalDepositMonths = state.tenants.filter(t => t.isAssigned !== false).reduce((sum, t) => {
         return sum + (t.depositMonthsPaid || 0);
     }, 0);
 
@@ -54,7 +54,7 @@ const Dashboard = () => {
     let overdueCount = 0;
     let totalDue = 0;
 
-    state.tenants.forEach(tenant => {
+    state.tenants.filter(t => t.isAssigned !== false).forEach(tenant => {
         const year = today.getFullYear();
         const month = today.getMonth() + 1;
         const daysInMonth = new Date(year, month, 0).getDate();
@@ -142,7 +142,13 @@ const Dashboard = () => {
                                 <tr key={pay.id}>
                                     <td style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', borderTop: 'none' }}>
                                         <img src={`https://robohash.org/${tenant ? encodeURIComponent(tenant.name) : 'User'}?set=set4`} style={{ width: '28px', height: '28px', borderRadius: '50%', background: '#F5F7FA' }} alt="T" />
-                                        <span style={{ fontWeight: '500' }}>{tenant ? tenant.name : 'Unknown User'}</span>
+                                        {tenant ? (
+                                            <span className="clickable-tenant" style={{ fontWeight: '500' }} onClick={() => showTenantHistory(tenant.id)}>
+                                                {tenant.name}
+                                            </span>
+                                        ) : (
+                                            <span style={{ fontWeight: '500' }}>Unknown User</span>
+                                        )}
                                     </td>
                                     <td className="hide-mobile">
                                         <div style={{ display: 'flex', flexDirection: 'column' }}>

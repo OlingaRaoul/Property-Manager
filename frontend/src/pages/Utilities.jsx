@@ -57,7 +57,7 @@ const fieldLabel = (label) => (
 
 // ── Component ─────────────────────────────────────────────────────────
 const Utilities = () => {
-    const { state, setState, API_URL, loading } = useAppState();
+    const { state, setState, API_URL, loading, showTenantHistory } = useAppState();
     const lang = state.settings.lang || 'en';
 
     const [search, setSearch]             = useState('');
@@ -352,7 +352,13 @@ const Utilities = () => {
                                                         <Icon size={20} />
                                                     </div>
                                                     <div>
-                                                        <div style={{ fontWeight: '800', color: '#343C6A', fontSize: '0.95rem' }}>{tenant?.name || 'Unknown'}</div>
+                                                            {tenant ? (
+                                                                <div className="clickable-tenant" style={{ fontWeight: '800', fontSize: '0.95rem' }} onClick={() => showTenantHistory(tenant.id)}>
+                                                                    {tenant.name}
+                                                                </div>
+                                                            ) : (
+                                                                <div style={{ fontWeight: '800', color: '#343C6A', fontSize: '0.95rem' }}>Unknown</div>
+                                                            )}
                                                         <div style={{ fontSize: '0.75rem', color: '#718EBF' }}>Unit {apt?.unitNumber || '—'} • {typeMeta.label}</div>
                                                     </div>
                                                 </div>

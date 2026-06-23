@@ -2,7 +2,7 @@ import { useState } from 'react';
 import axios from 'axios';
 import { useAppState } from '../context/StateContext';
 import { formatMonth, calculateRentStatus, getMonthsDifference } from '../utils';
-import { UserPlus, Edit, DoorOpen, Trash2, X, AlertTriangle, Link } from 'lucide-react';
+import { UserPlus, Edit, Trash2, X, AlertTriangle, Link } from 'lucide-react';
 
 const EMPTY_FORM = {
     name: '',
@@ -13,7 +13,8 @@ const EMPTY_FORM = {
     rentAmount: '',
     dueDateDay: '1',
     lastPaidMonth: '',
-    depositMonths: '0'
+    depositMonths: '0',
+    isAssigned: 'true'
 };
 
 const btnBlue = (disabled) => ({
@@ -32,7 +33,7 @@ const selectStyle = {
 };
 
 const Tenants = () => {
-    const { state, setState, API_URL, loading } = useAppState();
+    const { state, setState, API_URL, loading, showTenantHistory } = useAppState();
     const lang = state.settings.lang || 'en';
 
     const [search, setSearch] = useState('');
@@ -49,6 +50,7 @@ const Tenants = () => {
     
     // Toast notification state
     const [toast, setToast] = useState('');
+    const [activeTab, setActiveTab] = useState('active'); // 'active' | 'unassigned'
 
     const copyPaymentLink = (tenant) => {
         if (!tenant.paymentToken) {
@@ -118,7 +120,7 @@ const Tenants = () => {
     const openCreate = () => {
         const defaultProp = state.properties[0]?.id || '';
         const defaultUnits = defaultProp ? state.apartments.filter(a => String(a.propertyId) === String(defaultProp)) : [];
-        setForm({ ...EMPTY_FORM, propertyId: defaultProp, apartmentId: defaultUnits[0]?.id || '' });
+        setForm({ ...EMPTY_FORM, propertyId: defaultProp, apartmentId: defaultUnits[0]?.id || '', isAssigned: 'true' });
         setError('');
         setModal('create');
     };
@@ -134,7 +136,8 @@ const Tenants = () => {
             rentAmount:    String(tenant.rentAmount || ''),
             dueDateDay:    String(tenant.dueDateDay || '1'),
             lastPaidMonth: tenant.lastPaidMonth || '',
-            depositMonths: String(tenant.depositMonths || '0')
+            depositMonths: String(tenant.depositMonths || '0'),
+            isAssigned:    tenant.isAssigned !== false ? 'true' : 'false'
         });
         setError('');
         setModal(tenant);
@@ -149,7 +152,18 @@ const Tenants = () => {
 
     const validate = () => {
         if (!form.name.trim())       return 'Tenant name is required.';
-        if (!form.apartmentId)       return 'Please select a unit.';
+        if (form.isAssigned === 'true') {
+            if (!form.apartmentId) return 'Please select a unit for active assignment.';
+            // Check if selected unit is occupied by another active tenant
+            const occupied = state.tenants.some(t => 
+                String(t.apartmentId) === String(form.apartmentId) && 
+                t.isAssigned !== false && 
+                String(t.id) !== String(modal?.id)
+            );
+            if (occupied) {
+                return 'The selected unit is currently occupied by another active tenant. Please select a vacant unit.';
+            }
+        }
         if (!form.rentAmount || isNaN(Number(form.rentAmount)) || Number(form.rentAmount) <= 0)
             return 'Enter a valid rent amount.';
         return null;
@@ -164,20 +178,44 @@ const Tenants = () => {
                 name:          form.name.trim(),
                 phone:         form.phone.trim(),
                 email:         form.email.trim(),
-                apartmentId:   form.apartmentId,
+                apartmentId:   form.apartmentId || null,
                 rentAmount:    Number(form.rentAmount),
                 dueDateDay:    Number(form.dueDateDay),
                 lastPaidMonth: form.lastPaidMonth || null,
                 depositMonths: Number(form.depositMonths || 0),
                 depositPaidAmount: modal === 'create' ? 0 : (modal.depositPaidAmount || 0),
-                depositMonthsPaid: modal === 'create' ? 0 : (modal.depositMonthsPaid || 0)
+                depositMonthsPaid: modal === 'create' ? 0 : (modal.depositMonthsPaid || 0),
+                isAssigned:    form.isAssigned === 'true'
             };
 
             if (modal === 'create') {
                 const newTenant = { id: `t${Date.now()}`, ...payload };
                 const response = await axios.post(`${API_URL}/tenants`, newTenant);
                 const savedTenant = response.data.tenant || newTenant;
-                setState(prev => ({ ...prev, tenants: [...prev.tenants, savedTenant] }));
+
+                // Automate open-ended contract creation
+                const contractPayload = {
+                    id: `c${Date.now()}`,
+                    tenantId: savedTenant.id,
+                    startDate: new Date().toISOString().split('T')[0],
+                    endDate: null,
+                    agreedDay: Number(savedTenant.dueDateDay) || 1,
+                    rentAmount: Number(savedTenant.rentAmount) || 0,
+                    deposit: (Number(savedTenant.depositMonths || 0) * Number(savedTenant.rentAmount || 0)) || 0,
+                    notes: "Open-ended contract created automatically at registration.",
+                    active: true
+                };
+                try {
+                    await axios.post(`${API_URL}/contracts`, contractPayload);
+                } catch (e) {
+                    console.error("Automatic contract creation failed", e);
+                }
+
+                setState(prev => ({ 
+                    ...prev, 
+                    tenants: [...prev.tenants, savedTenant],
+                    contracts: [...prev.contracts, contractPayload]
+                }));
             } else {
                 await axios.put(`${API_URL}/tenants/${modal.id}`, payload);
                 setState(prev => ({
@@ -202,14 +240,22 @@ const Tenants = () => {
 
     if (loading) return <div className="loader">Loading tenants...</div>;
 
-    const filteredTenants = state.tenants.filter(t =>
+    const assignedTenants = state.tenants.filter(t => t.isAssigned !== false);
+    const unassignedTenants = state.tenants.filter(t => t.isAssigned === false);
+
+    const filteredAssigned = assignedTenants.filter(t =>
+        t.name.toLowerCase().includes(search.toLowerCase()) ||
+        (t.email || '').toLowerCase().includes(search.toLowerCase())
+    );
+
+    const filteredUnassigned = unassignedTenants.filter(t =>
         t.name.toLowerCase().includes(search.toLowerCase()) ||
         (t.email || '').toLowerCase().includes(search.toLowerCase())
     );
 
     return (
         <div className="view-container animate-fade-in" style={{ paddingTop: '1.25rem' }}>
-            <div className="view-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2.5rem', flexWrap: 'wrap', gap: '1.5rem' }}>
+            <div className="view-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1.5rem' }}>
                 {/* Left: title + add button */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', flexWrap: 'wrap', width: '100%', justifyContent: 'space-between' }}>
                     <h2 style={{ 
@@ -220,7 +266,7 @@ const Tenants = () => {
                         fontFamily: '"Sora", "Outfit", sans-serif',
                         letterSpacing: '-0.5px',
                         lineHeight: 1.1,
-                    }}>
+                      }}>
                         Tenant Registry
                     </h2>
                     <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
@@ -234,14 +280,36 @@ const Tenants = () => {
                 </div>
             </div>
 
+            {/* Tab Selector */}
+            <div style={{ display: 'flex', gap: '1rem', borderBottom: '1px solid #E6EFF5', marginBottom: '2rem', paddingBottom: '0.5rem' }}>
+                <button onClick={() => setActiveTab('active')} style={{
+                    background: 'none', border: 'none', padding: '0.5rem 1rem', fontSize: '0.95rem', fontWeight: '700',
+                    color: activeTab === 'active' ? '#2D60FF' : '#718EBF',
+                    borderBottom: activeTab === 'active' ? '3px solid #2D60FF' : '3px solid transparent',
+                    cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', transition: 'all 0.2s'
+                }}>
+                    Active Occupants ({assignedTenants.length})
+                </button>
+                <button onClick={() => setActiveTab('unassigned')} style={{
+                    background: 'none', border: 'none', padding: '0.5rem 1rem', fontSize: '0.95rem', fontWeight: '700',
+                    color: activeTab === 'unassigned' ? '#2D60FF' : '#718EBF',
+                    borderBottom: activeTab === 'unassigned' ? '3px solid #2D60FF' : '3px solid transparent',
+                    cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', transition: 'all 0.2s'
+                }}>
+                    Contract Finished / Unassigned ({unassignedTenants.length})
+                </button>
+            </div>
+
             {/* ── Tenant cards ── */}
-            {filteredTenants.length === 0 && (
-                <div style={{ textAlign: 'center', padding: '4rem', color: '#B1B1B1' }}>
-                    No tenants found. Click <strong>Add Tenant</strong> to get started.
+            {((activeTab === 'active' ? filteredAssigned : filteredUnassigned).length === 0) && (
+                <div style={{ textAlign: 'center', padding: '4rem', color: '#B1B1B1', width: '100%', gridColumn: '1/-1' }}>
+                    {activeTab === 'active' 
+                        ? 'No active tenants found. Click Add Tenant to get started.' 
+                        : 'No unassigned tenants found.'}
                 </div>
             )}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1.5rem' }}>
-                {filteredTenants.map(tenantObj => {
+                {(activeTab === 'active' ? filteredAssigned : filteredUnassigned).map(tenantObj => {
                     const apartment = state.apartments.find(a => String(a.id) === String(tenantObj.apartmentId));
                     const property  = apartment ? state.properties.find(p => String(p.id) === String(apartment.propertyId)) : null;
                     const rentStatus = calculateRentStatus(tenantObj, state.settings);
@@ -294,7 +362,9 @@ const Tenants = () => {
                                         <img src={`https://robohash.org/${encodeURIComponent(tenantObj.name)}?set=set4`} style={{ width: '100%', height: '100%', objectFit: 'cover', background: '#F5F7FA' }} alt="Avatar" />
                                     </div>
                                     <div>
-                                        <div style={{ fontWeight: '700', color: '#343C6A', fontSize: '1rem' }}>{tenantObj.name}</div>
+                                        <div className="clickable-tenant" style={{ fontWeight: '700', fontSize: '1rem' }} onClick={() => showTenantHistory(tenantObj.id)}>
+                                            {tenantObj.name}
+                                        </div>
                                         <div style={{ fontSize: '0.75rem', color: rentStatus.color || (rentStatus.isPaid ? 'var(--success)' : 'var(--error)'), fontWeight: '700', textTransform: 'uppercase' }}>
                                             {rentStatus.status}
                                         </div>
@@ -309,11 +379,17 @@ const Tenants = () => {
 
                             {/* Rent info */}
                             <div style={{ margin: '1.25rem 0' }}>
-                                <div className="stat-value" style={{ fontSize: '1.5rem' }}>
+                                <div style={{ fontSize: '1.5rem' }}>
                                     {(tenantObj.rentAmount || 0).toLocaleString()} {state.settings.currency}
                                 </div>
                                 <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: '500' }}>
-                                    {property ? property.name : 'Unassigned'} • {apartment ? apartment.unitNumber : 'No unit'}
+                                    {tenantObj.isAssigned !== false ? (
+                                        `${property ? property.name : 'Unassigned'} • ${apartment ? apartment.unitNumber : 'No unit'}`
+                                    ) : (
+                                        <span style={{ color: '#D97706', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                                            ⚠️ Previous Unit: {property ? property.name : '—'} • {apartment ? apartment.unitNumber : '—'}
+                                        </span>
+                                    )}
                                 </div>
                                 <div style={{ fontSize: '0.8rem', color: '#718EBF', marginTop: '0.35rem', fontWeight: '600' }}>
                                     Deposit: {tenantObj.depositMonthsPaid || 0} / {tenantObj.depositMonths || 0} Months Paid
@@ -423,28 +499,44 @@ const Tenants = () => {
                             </div>
 
                             <div>
-                                <label>Property *</label>
+                                <label>Property</label>
                                 <select value={form.propertyId} onChange={e => handlePropertyChange(e.target.value)} style={selectStyle}>
-                                    <option value="">— Select property —</option>
+                                    <option value="">— Unassigned —</option>
                                     {state.properties.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                                 </select>
                             </div>
 
                             <div>
-                                <label>Unit *</label>
-                                <select value={form.apartmentId} onChange={e => setForm(f => ({ ...f, apartmentId: e.target.value }))} style={selectStyle} disabled={!form.propertyId}>
-                                    <option value="">— Select unit —</option>
+                                <label>Unit</label>
+                                <select value={form.apartmentId} onChange={e => {
+                                    const val = e.target.value;
+                                    setForm(f => ({ ...f, apartmentId: val, propertyId: val ? f.propertyId : '' }));
+                                }} style={selectStyle} disabled={!form.propertyId}>
+                                    <option value="">— Unassigned —</option>
                                     {availableUnits.map(a => {
-                                        const occupied = state.tenants.some(t => String(t.apartmentId) === String(a.id) && (modal === 'create' || String(t.id) !== String(modal?.id)));
+                                        const occupied = state.tenants.some(t => String(t.apartmentId) === String(a.id) && t.isAssigned !== false && (modal === 'create' || String(t.id) !== String(modal?.id)));
                                         return <option key={a.id} value={a.id} disabled={occupied}>{a.unitNumber} ({a.type}){occupied ? ' — Occupied' : ''}</option>;
                                     })}
                                 </select>
+                                {form.apartmentId && state.tenants.some(t => String(t.apartmentId) === String(form.apartmentId) && t.isAssigned !== false && String(t.id) !== String(modal?.id)) && (
+                                    <div style={{ fontSize: '0.75rem', color: '#B91C1C', fontWeight: '600', marginTop: '5px' }}>
+                                        ⚠ This unit is occupied by another active tenant.
+                                    </div>
+                                )}
                             </div>
 
                             <div>
                                 <label>Monthly Rent ({state.settings.currency}) *</label>
                                 <input type="number" placeholder="e.g. 1500" min="0" value={form.rentAmount}
                                     onChange={e => setForm(f => ({ ...f, rentAmount: e.target.value }))} style={inputStyle} />
+                            </div>
+
+                            <div>
+                                <label>Assignment Status</label>
+                                <select value={form.isAssigned} onChange={e => setForm(f => ({ ...f, isAssigned: e.target.value }))} style={selectStyle}>
+                                    <option value="true">Active (Occupying Unit)</option>
+                                    <option value="false">Unassigned (Contract Finished)</option>
+                                </select>
                             </div>
 
                             <div>
@@ -507,6 +599,7 @@ const Tenants = () => {
                     </div>
                 </div>
             )}
+
             {/* Toast Notification */}
             {toast && (
                 <div className="toast animate-fade-in" style={{

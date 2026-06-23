@@ -42,7 +42,9 @@ const TenantSchema = new mongoose.Schema({
     depositMonths: { type: Number, default: 0 },
     depositPaidAmount: { type: Number, default: 0 },
     depositMonthsPaid: { type: Number, default: 0 },
-    paymentToken: { type: String, unique: true }
+    paymentToken: { type: String, unique: true },
+    userId: { type: String, ref: 'User' },
+    isAssigned: { type: Boolean, default: true }
 });
 
 // Payment Schema
@@ -79,7 +81,12 @@ const ContractSchema = new mongoose.Schema({
     depositAmount: { type: Number },
     agreedPaymentDay: { type: Number },
     terms: { type: String },
-    status: { type: String, default: 'Active' }
+    status: { type: String, default: 'Active' },
+    // Frontend compatibility fields
+    agreedDay: { type: Number },
+    deposit: { type: Number },
+    notes: { type: String },
+    active: { type: Boolean, default: true }
 });
 
 // Utility Schema

@@ -19,6 +19,8 @@ export const StateProvider = ({ children }) => {
         settings: { currency: 'CFA', lang: 'en', notificationThresholdDays: 3 }
     });
     const [loading, setLoading] = useState(true);
+    const [activeTenantHistoryId, setActiveTenantHistoryId] = useState(null);
+    const showTenantHistory = (id) => setActiveTenantHistoryId(id);
 
     const API_URL = import.meta.env.VITE_API_URL || '/api';
 
@@ -77,7 +79,7 @@ export const StateProvider = ({ children }) => {
     }, [token]);
 
     return (
-        <StateContext.Provider value={{ state, setState, API_URL, loading, refreshData }}>
+        <StateContext.Provider value={{ state, setState, API_URL, loading, refreshData, activeTenantHistoryId, setActiveTenantHistoryId, showTenantHistory }}>
             {children}
         </StateContext.Provider>
     );

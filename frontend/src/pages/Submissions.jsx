@@ -6,7 +6,7 @@ import { CheckCircle2, XCircle, Eye, Download, Search, FileText, X } from 'lucid
 import { formatMonth } from '../utils';
 
 const Submissions = () => {
-    const { state, refreshData, API_URL, loading } = useAppState();
+    const { state, refreshData, API_URL, loading, showTenantHistory } = useAppState();
     const { token } = useAuth();
     const lang = state?.settings?.lang || 'en';
 
@@ -222,7 +222,13 @@ const Submissions = () => {
                                             <img src={`https://robohash.org/${encodeURIComponent(tenant?.name || 'User')}?set=set4`} style={{ width: '100%', height: '100%', objectFit: 'cover', background: '#F5F7FA' }} alt="Avatar" />
                                         </div>
                                         <div>
-                                            <h4 style={{ margin: 0, color: '#343C6A', fontWeight: '700', fontSize: '0.95rem' }}>{tenant?.name || 'Unknown Tenant'}</h4>
+                                            {tenant ? (
+                                                <h4 className="clickable-tenant" style={{ margin: 0, fontWeight: '700', fontSize: '0.95rem' }} onClick={() => showTenantHistory(tenant.id)}>
+                                                    {tenant.name}
+                                                </h4>
+                                            ) : (
+                                                <h4 style={{ margin: 0, color: '#343C6A', fontWeight: '700', fontSize: '0.95rem' }}>Unknown Tenant</h4>
+                                            )}
                                             <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
                                                 {property ? property.name : 'Unknown Property'} {apartment ? `• Unit ${apartment.unitNumber}` : ''}
                                             </span>
