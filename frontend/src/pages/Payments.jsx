@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import axios from 'axios';
 import { useAppState } from '../context/StateContext';
 import { formatMonth } from '../utils';
-import { Receipt, PlusCircle, Building2, ChevronDown, MapPin, Printer, Trash2, X, CheckCircle2, Lock, CalendarDays, Edit } from 'lucide-react';
+import { Receipt, PlusCircle, Building2, ChevronDown, MapPin, Printer, Trash2, X, CheckCircle2, Lock, CalendarDays, Edit, Search } from 'lucide-react';
 
 
 const TODAY      = new Date().toISOString().split('T')[0];
@@ -92,6 +92,7 @@ const Payments = () => {
     const [paymentMode, setPaymentMode] = useState('Rent'); // 'Rent' | 'Deposit'
     const [depositAmountMonths, setDepositAmountMonths] = useState(0);
     const [activeYear, setActiveYear] = useState(new Date().getFullYear());
+    const [currentPages, setCurrentPages] = useState({});
 
     const scrollContainerRef = useRef(null);
 
@@ -767,7 +768,7 @@ const Payments = () => {
         return tenant && tenant.name.toLowerCase().includes(search.toLowerCase());
     });
 
-    const renderPaymentTable = (payments) => {
+    const renderPaymentTable = (payments, propId) => {
         const grouped = payments.reduce((acc, p) => {
             const key = `${p.tenantId}-${p.date}`;
             if (!acc[key]) {
@@ -832,149 +833,183 @@ const Payments = () => {
             return 0;
         });
 
-        return (
-            <table className="data-table" style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>
-                <thead>
-                    <tr>
-                        <th 
-                            style={{ borderBottom: '1px solid var(--border-light)', padding: '1rem 0', textAlign: 'left', cursor: 'pointer', userSelect: 'none' }}
-                            onClick={() => handleSort('name')}
-                        >
-                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                                Tenant
-                                <span style={{ fontSize: '10px', opacity: sortField === 'name' ? 1 : 0.4 }}>
-                                    {sortField === 'name' ? (sortDirection === 'asc' ? '▲' : '▼') : '↕'}
-                                </span>
-                            </span>
-                        </th>
-                        <th 
-                            style={{ borderBottom: '1px solid var(--border-light)', textAlign: 'left', cursor: 'pointer', userSelect: 'none' }}
-                            onClick={() => handleSort('room')}
-                        >
-                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                                {lang === 'fr' ? 'Chambre' : 'Room'}
-                                <span style={{ fontSize: '10px', opacity: sortField === 'room' ? 1 : 0.4 }}>
-                                    {sortField === 'room' ? (sortDirection === 'asc' ? '▲' : '▼') : '↕'}
-                                </span>
-                            </span>
-                        </th>
-                        <th 
-                            style={{ borderBottom: '1px solid var(--border-light)', textAlign: 'left', cursor: 'pointer', userSelect: 'none' }}
-                            onClick={() => handleSort('type')}
-                        >
-                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                                Type
-                                <span style={{ fontSize: '10px', opacity: sortField === 'type' ? 1 : 0.4 }}>
-                                    {sortField === 'type' ? (sortDirection === 'asc' ? '▲' : '▼') : '↕'}
-                                </span>
-                            </span>
-                        </th>
-                        <th style={{ borderBottom: '1px solid var(--border-light)', textAlign: 'left' }}>Month(s) Covered</th>
-                        <th 
-                            style={{ borderBottom: '1px solid var(--border-light)', textAlign: 'left', cursor: 'pointer', userSelect: 'none' }}
-                            onClick={() => handleSort('date')}
-                        >
-                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                                Payment Date
-                                <span style={{ fontSize: '10px', opacity: sortField === 'date' ? 1 : 0.4 }}>
-                                    {sortField === 'date' ? (sortDirection === 'asc' ? '▲' : '▼') : '↕'}
-                                </span>
-                            </span>
-                        </th>
-                        <th style={{ borderBottom: '1px solid var(--border-light)', textAlign: 'left' }}>Amount</th>
-                        <th style={{ borderBottom: '1px solid var(--border-light)', textAlign: 'right' }}>Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {sortedPayments.map(p => {
-                        const tenant = state.tenants.find(t => String(t.id) === String(p.tenantId));
-                        const apartment = state.apartments.find(a => String(a.id) === String(p.apartmentId || tenant?.apartmentId));
-                        
-                        // Determine payment types display
-                        let typeLabel = 'Rent';
-                        let typeBg = '#EFF6FF';
-                        let typeColor = '#1D4ED8';
-                        let typeBorder = '1px solid #DBEAFE';
-                        
-                        if (p.types.has('Rent') && p.types.has('Deposit')) {
-                            typeLabel = 'Rent & Deposit';
-                            typeBg = '#F5F3FF';
-                            typeColor = '#6D28D9';
-                            typeBorder = '1px solid #EDE9FE';
-                        } else if (p.types.has('Deposit')) {
-                            typeLabel = 'Deposit';
-                            typeBg = '#EEF2FF';
-                            typeColor = '#4F46E5';
-                            typeBorder = '1px solid #E0E7FF';
-                        }
+        const PAGE_SIZE = 10;
+        const currentPage = currentPages[propId] || 1;
+        const totalPages = Math.ceil(sortedPayments.length / PAGE_SIZE) || 1;
+        const paginatedPayments = sortedPayments.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
-                        const monthDisplay = p.monthList.length > 0 
-                            ? p.monthList.map(m => formatMonth(m, lang)).reverse().join(', ') 
-                            : '—';
-                        return (
-                            <tr key={p.id} className="payment-row">
-                                <td style={{ padding: '1rem 0' }}>
-                                    {tenant ? (
-                                        <span className="clickable-tenant" style={{ fontWeight: '600' }} onClick={() => showTenantHistory(tenant.id)}>
-                                            {tenant.name}
-                                        </span>
-                                    ) : (
-                                        <span style={{ fontWeight: '600', color: '#343C6A' }}>Unknown</span>
-                                    )}
-                                </td>
-                                <td style={{ fontWeight: '600', color: '#343C6A' }}>{apartment ? apartment.unitNumber : '—'}</td>
-                                <td>
-                                    <span style={{ 
-                                        display: 'inline-flex',
-                                        alignItems: 'center',
-                                        padding: '0.25rem 0.6rem',
-                                        borderRadius: '6px',
-                                        fontSize: '0.75rem',
-                                        fontWeight: '600',
-                                        background: typeBg,
-                                        color: typeColor,
-                                        border: typeBorder
-                                    }}>
-                                        {typeLabel}
+        return (
+            <div>
+                <table className="data-table" style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>
+                    <thead>
+                        <tr>
+                            <th 
+                                style={{ borderBottom: '1px solid var(--border-light)', padding: '1rem 0', textAlign: 'left', cursor: 'pointer', userSelect: 'none' }}
+                                onClick={() => handleSort('name')}
+                            >
+                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                    Tenant
+                                    <span style={{ fontSize: '10px', opacity: sortField === 'name' ? 1 : 0.4 }}>
+                                        {sortField === 'name' ? (sortDirection === 'asc' ? '▲' : '▼') : '↕'}
                                     </span>
-                                </td>
-                                <td><span className="status-pill" style={{ fontSize: '0.75rem', background: '#F5F7FA', color: 'var(--secondary)', minWidth: 'auto' }}>{monthDisplay}</span></td>
-                                <td style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>{p.date}</td>
-                                <td style={{ fontWeight: 'bold', color: 'var(--success)' }}>{p.totalAmount.toLocaleString()} {state.settings.currency}</td>
-                                <td style={{ textAlign: 'right' }}>
-                                    <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
-                                        <button className="btn-icon" title="Print Receipt"
-                                            style={{ color: 'var(--primary)', background: 'none', border: 'none', cursor: 'pointer' }}
-                                            onClick={() => openReceipt(p, tenant)}>
-                                            <Printer size={14}/>
-                                        </button>
-                                        <button className="btn-icon" title="Edit"
-                                            style={{ color: 'var(--primary)', background: 'none', border: 'none', cursor: 'pointer' }}
-                                            onClick={() => openEditGroup(p)}>
-                                            <Edit size={14}/>
-                                        </button>
-                                        <button className="btn-icon" title="Delete" 
-                                            style={{ color: 'var(--error)', background: 'none', border: 'none', cursor: 'pointer' }}
-                                            onClick={() => handleDeleteGroup(p)}>
-                                            <Trash2 size={14}/>
-                                        </button>
-                                    </div>
-                                </td>
-                            </tr>
-                        );
-                    })}
-                </tbody>
-            </table>
+                                </span>
+                            </th>
+                            <th 
+                                style={{ borderBottom: '1px solid var(--border-light)', textAlign: 'left', cursor: 'pointer', userSelect: 'none' }}
+                                onClick={() => handleSort('room')}
+                            >
+                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                    {lang === 'fr' ? 'Chambre' : 'Room'}
+                                    <span style={{ fontSize: '10px', opacity: sortField === 'room' ? 1 : 0.4 }}>
+                                        {sortField === 'room' ? (sortDirection === 'asc' ? '▲' : '▼') : '↕'}
+                                    </span>
+                                </span>
+                            </th>
+                            <th 
+                                style={{ borderBottom: '1px solid var(--border-light)', textAlign: 'left', cursor: 'pointer', userSelect: 'none' }}
+                                onClick={() => handleSort('type')}
+                            >
+                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                    Type
+                                    <span style={{ fontSize: '10px', opacity: sortField === 'type' ? 1 : 0.4 }}>
+                                        {sortField === 'type' ? (sortDirection === 'asc' ? '▲' : '▼') : '↕'}
+                                    </span>
+                                </span>
+                            </th>
+                            <th style={{ borderBottom: '1px solid var(--border-light)', textAlign: 'left' }}>Month(s) Covered</th>
+                            <th 
+                                style={{ borderBottom: '1px solid var(--border-light)', textAlign: 'left', cursor: 'pointer', userSelect: 'none' }}
+                                onClick={() => handleSort('date')}
+                            >
+                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                    Payment Date
+                                    <span style={{ fontSize: '10px', opacity: sortField === 'date' ? 1 : 0.4 }}>
+                                        {sortField === 'date' ? (sortDirection === 'asc' ? '▲' : '▼') : '↕'}
+                                    </span>
+                                </span>
+                            </th>
+                            <th style={{ borderBottom: '1px solid var(--border-light)', textAlign: 'left' }}>Amount</th>
+                            <th style={{ borderBottom: '1px solid var(--border-light)', textAlign: 'right' }}>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {paginatedPayments.map(p => {
+                            const tenant = state.tenants.find(t => String(t.id) === String(p.tenantId));
+                            const apartment = state.apartments.find(a => String(a.id) === String(p.apartmentId || tenant?.apartmentId));
+                            
+                            // Determine payment types display
+                            let typeLabel = 'Rent';
+                            let typeBg = '#EFF6FF';
+                            let typeColor = '#1D4ED8';
+                            let typeBorder = '1px solid #DBEAFE';
+                            
+                            if (p.types.has('Rent') && p.types.has('Deposit')) {
+                                typeLabel = 'Rent & Deposit';
+                                typeBg = '#F5F3FF';
+                                typeColor = '#6D28D9';
+                                typeBorder = '1px solid #EDE9FE';
+                            } else if (p.types.has('Deposit')) {
+                                typeLabel = 'Deposit';
+                                typeBg = '#EEF2FF';
+                                typeColor = '#4F46E5';
+                                typeBorder = '1px solid #E0E7FF';
+                            }
+
+                            const monthDisplay = p.monthList.length > 0 
+                                ? p.monthList.map(m => formatMonth(m, lang)).reverse().join(', ') 
+                                : '—';
+                            return (
+                                <tr key={p.id} className="payment-row">
+                                    <td style={{ padding: '1rem 0' }}>
+                                        {tenant ? (
+                                            <span className="clickable-tenant" style={{ fontWeight: '600' }} onClick={() => showTenantHistory(tenant.id)}>
+                                                {tenant.name}
+                                            </span>
+                                        ) : (
+                                            <span style={{ fontWeight: '600', color: '#343C6A' }}>Unknown</span>
+                                        )}
+                                    </td>
+                                    <td style={{ fontWeight: '600', color: '#343C6A' }}>{apartment ? apartment.unitNumber : '—'}</td>
+                                    <td>
+                                        <span style={{ 
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            padding: '0.25rem 0.6rem',
+                                            borderRadius: '6px',
+                                            fontSize: '0.75rem',
+                                            fontWeight: '600',
+                                            background: typeBg,
+                                            color: typeColor,
+                                            border: typeBorder
+                                        }}>
+                                            {typeLabel}
+                                        </span>
+                                    </td>
+                                    <td><span className="status-pill" style={{ fontSize: '0.75rem', background: '#F5F7FA', color: 'var(--secondary)', minWidth: 'auto' }}>{monthDisplay}</span></td>
+                                    <td style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>{p.date}</td>
+                                    <td style={{ fontWeight: 'bold', color: 'var(--success)' }}>{p.totalAmount.toLocaleString()} {state.settings.currency}</td>
+                                    <td style={{ textAlign: 'right' }}>
+                                        <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+                                            <button className="btn-icon" title="Print Receipt"
+                                                style={{ color: 'var(--primary)', background: 'none', border: 'none', cursor: 'pointer' }}
+                                                onClick={() => openReceipt(p, tenant)}>
+                                                <Printer size={14}/>
+                                            </button>
+                                            <button className="btn-icon" title="Edit"
+                                                style={{ color: 'var(--primary)', background: 'none', border: 'none', cursor: 'pointer' }}
+                                                onClick={() => openEditGroup(p)}>
+                                                <Edit size={14}/>
+                                            </button>
+                                            <button className="btn-icon" title="Delete" 
+                                                style={{ color: 'var(--error)', background: 'none', border: 'none', cursor: 'pointer' }}
+                                                onClick={() => handleDeleteGroup(p)}>
+                                                <Trash2 size={14}/>
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            );
+                        })}
+                    </tbody>
+                </table>
+                
+                {totalPages > 1 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1rem', padding: '0.5rem 0', flexWrap: 'wrap', gap: '1rem' }}>
+                        <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                            Page {currentPage} of {totalPages} ({sortedPayments.length} records)
+                        </span>
+                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                            <button 
+                                className="btn-secondary" 
+                                style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem', borderRadius: '8px', cursor: currentPage === 1 ? 'not-allowed' : 'pointer', opacity: currentPage === 1 ? 0.5 : 1 }}
+                                disabled={currentPage === 1}
+                                onClick={() => setCurrentPages(prev => ({ ...prev, [propId]: currentPage - 1 }))}
+                            >
+                                Previous
+                            </button>
+                            <button 
+                                className="btn-secondary" 
+                                style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem', borderRadius: '8px', cursor: currentPage === totalPages ? 'not-allowed' : 'pointer', opacity: currentPage === totalPages ? 0.5 : 1 }}
+                                disabled={currentPage === totalPages}
+                                onClick={() => setCurrentPages(prev => ({ ...prev, [propId]: currentPage + 1 }))}
+                            >
+                                Next
+                            </button>
+                        </div>
+                    </div>
+                )}
+            </div>
         );
     };
 
     return (
-        <div className="animate-fade-in view-container" style={{ paddingTop: '1.25rem' }}>
+        <div className="animate-fade-in view-container" style={{ paddingTop: '0.25rem' }}>
             {/* ── Header ── */}
-            <div className="view-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2.5rem', flexWrap: 'wrap', gap: '1.5rem' }}>
+            <div className="view-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '1.5rem' }}>
                 <h2 style={{ fontSize: '1.25rem', fontWeight: '800', color: '#343C6A', margin: 0, fontFamily: 'Outfit' }}>Payment Ledger History</h2>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
                     <div className="search-box">
+                        <Search size={18} />
                         <input type="text" placeholder="Filter by tenant..." value={search} onChange={e => setSearch(e.target.value)} />
                     </div>
                     <button className="btn" style={{ ...btnBlue(false), whiteSpace: 'nowrap' }} onClick={openModal}>
@@ -1022,7 +1057,7 @@ const Payments = () => {
                                 </div>
                                 {isExpanded && (
                                     <div style={{ padding: '0 1.25rem 1.25rem', borderTop: '1px solid var(--border-light)' }}>
-                                        {renderPaymentTable(propPayments)}
+                                        {renderPaymentTable(propPayments, prop.id)}
                                     </div>
                                 )}
                             </div>

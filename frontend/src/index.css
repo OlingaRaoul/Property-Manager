@@ -336,7 +336,7 @@ body {
         flex-direction: column !important;
         align-items: flex-start !important;
         gap: 1.25rem !important;
-        margin-bottom: 2rem !important;
+        margin-bottom: 1rem !important;
     }
 
     .view-header > div {
@@ -634,12 +634,18 @@ body {
     display: flex;
     align-items: center;
     gap: 0.75rem;
-    background: #F5F7FA;
-    border: none;
-    padding: 0.75rem 1.5rem;
+    background: #FFFFFF;
+    border: 1.5px solid #E6EFF5;
+    padding: 0.6rem 1.25rem;
     border-radius: 40px;
     width: 320px;
-    transition: all 0.3s ease;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.search-box:focus-within {
+    border-color: #2D60FF;
+    background: #FFFFFF;
+    box-shadow: 0 4px 14px rgba(45, 96, 255, 0.08);
 }
 
 .search-box svg {
