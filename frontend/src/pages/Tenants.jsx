@@ -32,6 +32,112 @@ const selectStyle = {
     background: '#FFFFFF', color: '#343C6A', fontSize: '0.95rem', outline: 'none',
 };
 
+const CircleProgress = ({ depositMonthsPaid = 0, rentRemaining = 0, size = 70, strokeWidth = 9, label = "Coverage" }) => {
+    const radius = (size - strokeWidth) / 2;
+    const circumference = radius * 2 * Math.PI;
+
+    // Deposit component (max 2 months)
+    const depositMonths = Math.min(2, depositMonthsPaid);
+    const depositLength = (depositMonths / 12) * circumference;
+
+    // Rent component (max 10 months)
+    const rentMonths = Math.min(10, rentRemaining);
+    const rentLength = (rentMonths / 12) * circumference;
+
+    // Rent color is based on rent remaining:
+    // - Green (#10B981) if rentRemaining >= 3 (representing monthsLeft >= 2)
+    // - Yellow (#FFBB38) if rentRemaining <= 2 (representing monthsLeft <= 1)
+    let rentColor = '#10B981';
+    if (rentRemaining <= 2) {
+        rentColor = '#FFBB38';
+    }
+
+    const totalMonths = depositMonths + rentMonths;
+    const percentage = (totalMonths / 12) * 100;
+
+    return (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ position: 'relative', width: size, height: size }}>
+                <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
+                    {/* Deposit Background Slot (first 2/12 - 16.67%) */}
+                    <circle
+                        cx={size / 2}
+                        cy={size / 2}
+                        r={radius}
+                        fill="transparent"
+                        stroke="#FEE2E2"
+                        strokeWidth={strokeWidth}
+                        strokeDasharray={`${circumference * 0.1667} ${circumference}`}
+                        strokeLinecap="round"
+                    />
+                    {/* Rent Background Slot (remaining 10/12 - 83.33%) */}
+                    <circle
+                        cx={size / 2}
+                        cy={size / 2}
+                        r={radius}
+                        fill="transparent"
+                        stroke="#E7EDFF"
+                        strokeWidth={strokeWidth}
+                        strokeDasharray={`${circumference * 0.8333} ${circumference}`}
+                        strokeDashoffset={-circumference * 0.1667}
+                        strokeLinecap="round"
+                    />
+                    
+                    {/* Deposit Filled Progressive circle (Red) */}
+                    {depositMonths > 0 && (
+                        <circle
+                            cx={size / 2}
+                            cy={size / 2}
+                            r={radius}
+                            fill="transparent"
+                            stroke="#FF4B4A"
+                            strokeWidth={strokeWidth}
+                            strokeDasharray={`${depositLength} ${circumference}`}
+                            strokeLinecap="round"
+                            style={{ transition: 'stroke-dashoffset 0.5s ease-in-out' }}
+                        />
+                    )}
+
+                    {/* Rent Filled Progressive circle (Green or Yellow) */}
+                    {rentMonths > 0 && (
+                        <circle
+                            cx={size / 2}
+                            cy={size / 2}
+                            r={radius}
+                            fill="transparent"
+                            stroke={rentColor}
+                            strokeWidth={strokeWidth}
+                            strokeDasharray={`${rentLength} ${circumference}`}
+                            strokeDashoffset={-circumference * 0.1667}
+                            strokeLinecap="round"
+                            style={{ transition: 'stroke-dashoffset 0.5s ease-in-out' }}
+                        />
+                    )}
+                </svg>
+                <div style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    height: '100%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontWeight: '800',
+                    fontSize: `${size * 0.22}px`,
+                    color: '#343C6A',
+                    fontFamily: 'Outfit, sans-serif'
+                }}>
+                    {Math.round(percentage)}%
+                </div>
+            </div>
+            <span style={{ fontSize: '0.6rem', fontWeight: '700', color: 'var(--text-muted)', marginTop: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                {label} ({totalMonths}/12)
+            </span>
+        </div>
+    );
+};
+
 const Tenants = () => {
     const { state, setState, API_URL, loading, showTenantHistory } = useAppState();
     const lang = state.settings.lang || 'en';
@@ -51,6 +157,7 @@ const Tenants = () => {
     // Toast notification state
     const [toast, setToast] = useState('');
     const [activeTab, setActiveTab] = useState('active'); // 'active' | 'unassigned'
+    const [sortBy, setSortBy]       = useState('name'); // 'name' | 'urgency' | 'property'
 
     const copyPaymentLink = (tenant) => {
         if (!tenant.paymentToken) {
@@ -248,6 +355,43 @@ const Tenants = () => {
         (t.email || '').toLowerCase().includes(search.toLowerCase())
     );
 
+    const getUrgencyScore = (tenant) => {
+        const rentStatus = calculateRentStatus(tenant, state.settings);
+        const cls = rentStatus.class.toLowerCase();
+        const status = rentStatus.status.toLowerCase();
+        
+        if (cls === 'overdue') return 0;
+        if (status.includes('deposit') || status.includes('dépôt')) return 1;
+        if (status.includes('soon') || status.includes('bientôt')) return 2;
+        if (status.includes('upcoming') || status.includes('à venir')) return 3;
+        return 4; // Paid
+    };
+
+    const getPropertyAndUnit = (tenant) => {
+        const apartment = state.apartments.find(a => String(a.id) === String(tenant.apartmentId));
+        const property  = apartment ? state.properties.find(p => String(p.id) === String(apartment.propertyId)) : null;
+        return {
+            propertyName: property ? property.name.toLowerCase() : '',
+            unitNumber: apartment ? apartment.unitNumber : ''
+        };
+    };
+
+    const sortedAssigned = [...filteredAssigned].sort((a, b) => {
+        if (sortBy === 'urgency') {
+            const diff = getUrgencyScore(a) - getUrgencyScore(b);
+            if (diff !== 0) return diff;
+            return a.name.localeCompare(b.name);
+        }
+        if (sortBy === 'property') {
+            const infoA = getPropertyAndUnit(a);
+            const infoB = getPropertyAndUnit(b);
+            const propCompare = infoA.propertyName.localeCompare(infoB.propertyName);
+            if (propCompare !== 0) return propCompare;
+            return infoA.unitNumber.localeCompare(infoB.unitNumber, undefined, { numeric: true, sensitivity: 'base' });
+        }
+        return a.name.localeCompare(b.name);
+    });
+
     const filteredUnassigned = unassignedTenants.filter(t =>
         t.name.toLowerCase().includes(search.toLowerCase()) ||
         (t.email || '').toLowerCase().includes(search.toLowerCase())
@@ -300,8 +444,68 @@ const Tenants = () => {
                 </button>
             </div>
 
+            {/* Sort Options (only visible for active occupants) */}
+            {activeTab === 'active' && (
+                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: '0.75rem', fontWeight: '700', color: '#718EBF', marginRight: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                        Sort By:
+                    </span>
+                    <button 
+                        onClick={() => setSortBy('name')} 
+                        style={{
+                            padding: '0.45rem 1rem',
+                            fontSize: '0.8rem',
+                            borderRadius: '12px',
+                            border: '1px solid #E6EFF5',
+                            background: sortBy === 'name' ? '#2D60FF' : '#FFFFFF',
+                            color: sortBy === 'name' ? '#FFFFFF' : '#718EBF',
+                            fontWeight: '700',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s',
+                            boxShadow: sortBy === 'name' ? '0 4px 10px rgba(45,96,255,0.2)' : 'none',
+                        }}
+                    >
+                        Name
+                    </button>
+                    <button 
+                        onClick={() => setSortBy('urgency')} 
+                        style={{
+                            padding: '0.45rem 1rem',
+                            fontSize: '0.8rem',
+                            borderRadius: '12px',
+                            border: '1px solid #E6EFF5',
+                            background: sortBy === 'urgency' ? '#2D60FF' : '#FFFFFF',
+                            color: sortBy === 'urgency' ? '#FFFFFF' : '#718EBF',
+                            fontWeight: '700',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s',
+                            boxShadow: sortBy === 'urgency' ? '0 4px 10px rgba(45,96,255,0.2)' : 'none',
+                        }}
+                    >
+                        ⚠️ Rent Urgency
+                    </button>
+                    <button 
+                        onClick={() => setSortBy('property')} 
+                        style={{
+                            padding: '0.45rem 1rem',
+                            fontSize: '0.8rem',
+                            borderRadius: '12px',
+                            border: '1px solid #E6EFF5',
+                            background: sortBy === 'property' ? '#2D60FF' : '#FFFFFF',
+                            color: sortBy === 'property' ? '#FFFFFF' : '#718EBF',
+                            fontWeight: '700',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s',
+                            boxShadow: sortBy === 'property' ? '0 4px 10px rgba(45,96,255,0.2)' : 'none',
+                        }}
+                    >
+                        🏢 Property & Room
+                    </button>
+                </div>
+            )}
+
             {/* ── Tenant cards ── */}
-            {((activeTab === 'active' ? filteredAssigned : filteredUnassigned).length === 0) && (
+            {((activeTab === 'active' ? sortedAssigned : filteredUnassigned).length === 0) && (
                 <div style={{ textAlign: 'center', padding: '4rem', color: '#B1B1B1', width: '100%', gridColumn: '1/-1' }}>
                     {activeTab === 'active' 
                         ? 'No active tenants found. Click Add Tenant to get started.' 
@@ -309,7 +513,7 @@ const Tenants = () => {
                 </div>
             )}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1.5rem' }}>
-                {(activeTab === 'active' ? filteredAssigned : filteredUnassigned).map(tenantObj => {
+                {(activeTab === 'active' ? sortedAssigned : filteredUnassigned).map(tenantObj => {
                     const apartment = state.apartments.find(a => String(a.id) === String(tenantObj.apartmentId));
                     const property  = apartment ? state.properties.find(p => String(p.id) === String(apartment.propertyId)) : null;
                     const rentStatus = calculateRentStatus(tenantObj, state.settings);
@@ -378,24 +582,41 @@ const Tenants = () => {
                             </div>
 
                             {/* Rent info */}
-                            <div style={{ margin: '1.25rem 0' }}>
-                                <div style={{ fontSize: '1.5rem' }}>
-                                    {(tenantObj.rentAmount || 0).toLocaleString()} {state.settings.currency}
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '1.25rem 0' }}>
+                                <div style={{ minWidth: 0, flex: 1 }}>
+                                    <div style={{ fontSize: '1.5rem', fontWeight: '800', color: '#343C6A' }}>
+                                        {(tenantObj.rentAmount || 0).toLocaleString()} {state.settings.currency}
+                                    </div>
+                                    <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: '500', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                        {tenantObj.isAssigned !== false ? (
+                                            `${property ? property.name : 'Unassigned'} • ${apartment ? apartment.unitNumber : 'No unit'}`
+                                        ) : (
+                                            <span style={{ color: '#D97706', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                                                ⚠️ Previous Unit: {property ? property.name : '—'} • {apartment ? apartment.unitNumber : '—'}
+                                            </span>
+                                        )}
+                                    </div>
+                                    <div style={{ fontSize: '0.8rem', color: '#718EBF', marginTop: '0.35rem', fontWeight: '600' }}>
+                                        Deposit: {tenantObj.depositMonthsPaid || 0} / {tenantObj.depositMonths || 0} Months Paid
+                                    </div>
+                                    {tenantObj.phone && <div style={{ fontSize: '0.8rem', color: '#718EBF', marginTop: '0.35rem' }}>📞 {tenantObj.phone}</div>}
+                                    {tenantObj.email && <div style={{ fontSize: '0.8rem', color: '#718EBF' }}>✉️ {tenantObj.email}</div>}
                                 </div>
-                                <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: '500' }}>
-                                    {tenantObj.isAssigned !== false ? (
-                                        `${property ? property.name : 'Unassigned'} • ${apartment ? apartment.unitNumber : 'No unit'}`
-                                    ) : (
-                                        <span style={{ color: '#D97706', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                                            ⚠️ Previous Unit: {property ? property.name : '—'} • {apartment ? apartment.unitNumber : '—'}
-                                        </span>
-                                    )}
+                                <div style={{ flexShrink: 0, marginLeft: '1rem' }}>
+                                    {(() => {
+                                        const rentRemaining = tenantObj.lastPaidMonth && tenantObj.lastPaidMonth >= currentMonthStr
+                                            ? getMonthsDifference(currentMonthStr, tenantObj.lastPaidMonth) + 1
+                                            : 0;
+
+                                        return (
+                                            <CircleProgress 
+                                                depositMonthsPaid={tenantObj.depositMonthsPaid || 0}
+                                                rentRemaining={rentRemaining}
+                                                label={lang === 'fr' ? 'Couverture' : 'Coverage'}
+                                            />
+                                        );
+                                    })()}
                                 </div>
-                                <div style={{ fontSize: '0.8rem', color: '#718EBF', marginTop: '0.35rem', fontWeight: '600' }}>
-                                    Deposit: {tenantObj.depositMonthsPaid || 0} / {tenantObj.depositMonths || 0} Months Paid
-                                </div>
-                                {tenantObj.phone && <div style={{ fontSize: '0.8rem', color: '#718EBF', marginTop: '0.35rem' }}>📞 {tenantObj.phone}</div>}
-                                {tenantObj.email && <div style={{ fontSize: '0.8rem', color: '#718EBF' }}>✉️ {tenantObj.email}</div>}
                             </div>
 
                             {/* Payment status breakdown */}

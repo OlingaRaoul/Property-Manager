@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import axios from 'axios';
 import { useAppState } from '../context/StateContext';
@@ -334,7 +335,7 @@ const Payments = () => {
 
     ${depositInfoHtml}
 
-    <div class="footer">
+    <div class="footer" style="display: flex; justify-content: space-between; align-items: flex-end; border-top: 1px dashed #E6EFF5; padding-top: 8px; margin-top: 15px;">
       ${signature ? `
         <div class="signature-container" style="text-align: left;">
           <img src="${signature}" style="max-height: 40px; max-width: 150px; display: block; margin-bottom: 2px;" alt="Landlord Signature" />
@@ -345,7 +346,10 @@ const Payments = () => {
           <div style="font-size: 8px; color: #718EBF; text-transform: uppercase; border-top: 1px dashed #B1B1B1; display: inline-block; width: 120px; padding-top: 2px; font-weight: bold;">Landlord Signature</div>
         </div>
       `}
-      <div class="footer-status">&#10003; PAYMENT CONFIRMED</div>
+      <div class="footer-status" style="font-size: 10px; color: #2D60FF; font-weight: 700; padding-bottom: 5px;">&#10003; PAYMENT CONFIRMED</div>
+      <div class="signature-container" style="text-align: right; padding-top: 20px;">
+        <div style="font-size: 8px; color: #718EBF; text-transform: uppercase; border-top: 1px dashed #B1B1B1; display: inline-block; width: 120px; padding-top: 2px; font-weight: bold;">Tenant Signature</div>
+      </div>
     </div>
   </div>
   <script>window.onload = function() { window.print(); window.onafterprint = function() { window.close(); }; }<\/script>
@@ -758,6 +762,25 @@ const Payments = () => {
         setEditGroup(group);
         setShowModal(true);
     };
+
+    const location = useLocation();
+    useEffect(() => {
+        if (location.state && location.state.editPaymentGroupDate && location.state.editPaymentGroupTenantId) {
+            const groupPayments = state.payments.filter(p =>
+                String(p.tenantId) === String(location.state.editPaymentGroupTenantId) &&
+                p.date === location.state.editPaymentGroupDate
+            );
+            if (groupPayments.length > 0) {
+                const group = {
+                    tenantId: location.state.editPaymentGroupTenantId,
+                    date: location.state.editPaymentGroupDate,
+                    note: groupPayments[0].note || ''
+                };
+                openEditGroup(group);
+                window.history.replaceState({}, document.title);
+            }
+        }
+    }, [location.state, state.payments]);
 
     if (loading) return <div className="loader">Loading payments...</div>;
 
@@ -1663,7 +1686,7 @@ const Payments = () => {
                             )}
 
                             {/* Footer */}
-                             <div style={{ borderTop: '1px dashed #E6EFF5', paddingTop: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                             <div style={{ borderTop: '1px dashed #E6EFF5', paddingTop: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
                                  {state.settings.signature ? (
                                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
                                          <img src={state.settings.signature} style={{ maxHeight: '40px', maxWidth: '150px', display: 'block', marginBottom: '2px' }} alt="Landlord Signature" />
@@ -1674,7 +1697,10 @@ const Payments = () => {
                                          <div style={{ fontSize: '0.65rem', color: '#B1B1B1', textTransform: 'uppercase', borderTop: '1px dashed #B1B1B1', display: 'inline-block', width: '120px', paddingTop: '1px', fontWeight: 'bold' }}>Landlord Signature</div>
                                      </div>
                                  )}
-                                 <div style={{ fontSize: '10px', color: '#2D60FF', fontWeight: '700' }}>✓ PAYMENT CONFIRMED</div>
+                                 <div style={{ fontSize: '10px', color: '#2D60FF', fontWeight: '700', paddingBottom: '5px' }}>✓ PAYMENT CONFIRMED</div>
+                                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', paddingTop: '8px' }}>
+                                     <div style={{ fontSize: '0.65rem', color: '#B1B1B1', textTransform: 'uppercase', borderTop: '1px dashed #B1B1B1', display: 'inline-block', width: '120px', paddingTop: '1px', fontWeight: 'bold', textAlign: 'right' }}>Tenant Signature</div>
+                                 </div>
                              </div>
                         </div>
                     </div>
@@ -1833,19 +1859,22 @@ const Payments = () => {
                                     )}
 
                                     {/* Footer note / Signature */}
-                                    <div style={{ borderTop: '1px dashed #E6EFF5', paddingTop: '6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                        {state.settings.signature ? (
-                                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
-                                                <img src={state.settings.signature} style={{ maxHeight: '30px', maxWidth: '120px', display: 'block', marginBottom: '1px' }} alt="Landlord Signature" />
-                                                <div style={{ fontSize: '0.6rem', color: '#718EBF', textTransform: 'uppercase', borderTop: '1px solid #E6EFF5', display: 'inline-block', width: '100px', paddingTop: '1px', fontWeight: 'bold' }}>Landlord Signature</div>
-                                            </div>
-                                        ) : (
-                                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', paddingTop: '5px' }}>
-                                                <div style={{ fontSize: '0.6rem', color: '#B1B1B1', textTransform: 'uppercase', borderTop: '1px dashed #B1B1B1', display: 'inline-block', width: '100px', paddingTop: '1px', fontWeight: 'bold' }}>Landlord Signature</div>
-                                            </div>
-                                        )}
-                                        <div style={{ fontSize: '0.7rem', color: '#15803D', fontWeight: '700' }}>✓ PAYMENT CONFIRMED</div>
-                                    </div>
+                                     <div style={{ borderTop: '1px dashed #E6EFF5', paddingTop: '6px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+                                         {state.settings.signature ? (
+                                             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+                                                 <img src={state.settings.signature} style={{ maxHeight: '30px', maxWidth: '120px', display: 'block', marginBottom: '1px' }} alt="Landlord Signature" />
+                                                 <div style={{ fontSize: '0.6rem', color: '#718EBF', textTransform: 'uppercase', borderTop: '1px solid #E6EFF5', display: 'inline-block', width: '100px', paddingTop: '1px', fontWeight: 'bold' }}>Landlord Signature</div>
+                                             </div>
+                                         ) : (
+                                             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', paddingTop: '5px' }}>
+                                                 <div style={{ fontSize: '0.6rem', color: '#B1B1B1', textTransform: 'uppercase', borderTop: '1px dashed #B1B1B1', display: 'inline-block', width: '100px', paddingTop: '1px', fontWeight: 'bold' }}>Landlord Signature</div>
+                                             </div>
+                                         )}
+                                         <div style={{ fontSize: '0.7rem', color: '#15803D', fontWeight: '700', paddingBottom: '3px' }}>✓ PAYMENT CONFIRMED</div>
+                                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', paddingTop: '5px' }}>
+                                             <div style={{ fontSize: '0.6rem', color: '#B1B1B1', textTransform: 'uppercase', borderTop: '1px dashed #B1B1B1', display: 'inline-block', width: '100px', paddingTop: '1px', fontWeight: 'bold', textAlign: 'right' }}>Tenant Signature</div>
+                                         </div>
+                                     </div>
                                 </div>
                             </div>
 
