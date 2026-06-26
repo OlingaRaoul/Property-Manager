@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAppState } from '../context/StateContext';
 import { useNavigate } from 'react-router-dom';
-import { Users, Building, Wallet, AlertCircle, Shield, FileText, ClipboardList, PlusCircle, DollarSign, CheckCircle2 } from 'lucide-react';
+import { Users, Building, Wallet, AlertCircle, Shield, FileText, ClipboardList, PlusCircle, DollarSign, CheckCircle2, X } from 'lucide-react';
 import { getMonthsDifference, formatMonth } from '../utils';
 
 const StatCard = ({ title, value, icon: Icon, colorClass, bgClass, subtext }) => {
@@ -413,6 +413,7 @@ const Dashboard = () => {
     const [printStartDate, setPrintStartDate] = useState(sixMonthsAgoStr);
     const [printEndDate, setPrintEndDate] = useState(todayStr);
     const [selectedReportPropertyId, setSelectedReportPropertyId] = useState('');
+    const [showUnpaidModal, setShowUnpaidModal] = useState(false);
 
     // Generate collection months list (last 12 months)
     const collectionMonthsList = [];
@@ -601,6 +602,61 @@ const Dashboard = () => {
             totalDue += netOverdue * (tenant.rentAmount || 0);
         }
     });
+
+    // Helper to calculate the list of unpaid months for a given tenant
+    const getUnpaidMonthsList = (tenant) => {
+        let startDateStr = '';
+        const tenantContracts = state.contracts.filter(c => String(c.tenantId) === String(tenant.id));
+        if (tenantContracts.length > 0) {
+            const sortedContracts = [...tenantContracts].sort((a, b) => a.startDate.localeCompare(b.startDate));
+            startDateStr = sortedContracts[0].startDate.slice(0, 7);
+        } else {
+            const tenantPayments = state.payments.filter(p => String(p.tenantId) === String(tenant.id));
+            if (tenantPayments.length > 0) {
+                const sortedPayments = [...tenantPayments].sort((a, b) => a.date.localeCompare(b.date));
+                startDateStr = sortedPayments[0].date.slice(0, 7);
+            } else {
+                startDateStr = `${today.getFullYear()}-01`;
+            }
+        }
+
+        if (startDateStr > currentMonthStr) {
+            return [];
+        }
+
+        const allMonths = getMonthsInRange(startDateStr, currentMonthStr);
+        
+        const paidMonths = state.payments
+            .filter(p => String(p.tenantId) === String(tenant.id) && p.type === 'Rent')
+            .reduce((acc, p) => {
+                if (p.monthPaid) acc.add(p.monthPaid);
+                if (p.monthList) p.monthList.forEach(m => acc.add(m));
+                return acc;
+            }, new Set());
+
+        return allMonths.filter(m => !paidMonths.has(m));
+    };
+
+    const unpaidTenantsList = state.tenants
+        .filter(t => t.isAssigned !== false)
+        .map(t => {
+            const unpaidMonths = getUnpaidMonthsList(t);
+            const apartment = state.apartments.find(a => String(a.id) === String(t.apartmentId));
+            const property = apartment ? state.properties.find(p => String(p.id) === String(apartment.propertyId)) : null;
+            
+            const tenantPayments = state.payments.filter(p => String(p.tenantId) === String(t.id));
+            const sortedPayments = [...tenantPayments].sort((a, b) => b.date.localeCompare(a.date));
+            const lastPaymentDate = sortedPayments.length > 0 ? sortedPayments[0].date : '—';
+
+            return {
+                tenant: t,
+                propertyName: property ? property.name : '—',
+                roomNumber: apartment ? apartment.unitNumber : '—',
+                lastPaymentDate,
+                unpaidMonths
+            };
+        })
+        .filter(item => item.unpaidMonths.length > 0);
 
 
 
@@ -1154,7 +1210,7 @@ const Dashboard = () => {
                                         </div>
                                     )}
                                 </div>
-                                <span style={{ fontSize: '0.72rem', color: '#2D60FF', fontWeight: '800', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '2px' }} onClick={() => navigate('/payments')}>
+                                <span style={{ fontSize: '0.72rem', color: '#2D60FF', fontWeight: '800', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '2px' }} onClick={() => setShowUnpaidModal(true)}>
                                     View All
                                 </span>
                             </div>
@@ -1356,6 +1412,160 @@ const Dashboard = () => {
                     </div>
                 </div>
             </div>
+
+            {/* Unpaid Invoices Modal */}
+            {showUnpaidModal && (
+                <div style={{
+                    position: 'fixed',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    background: 'rgba(0, 0, 0, 0.4)',
+                    backdropFilter: 'blur(5px)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    zIndex: 1000,
+                    padding: '1rem',
+                }}>
+                    <div style={{
+                        background: '#FFFFFF',
+                        borderRadius: '16px',
+                        width: '90%',
+                        maxWidth: '850px',
+                        maxHeight: '90vh',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        boxShadow: '0 10px 30px rgba(0, 0, 0, 0.15)',
+                        overflow: 'hidden'
+                    }}>
+                        {/* Modal Header */}
+                        <div style={{
+                            padding: '1.25rem 1.5rem',
+                            borderBottom: '1px solid #E6EFF5',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center'
+                        }}>
+                            <div>
+                                <h3 style={{ margin: 0, color: '#343C6A', fontSize: '1.1rem', fontWeight: '800', fontFamily: 'Outfit' }}>
+                                    Outstanding Invoices & Unpaid Coverage
+                                </h3>
+                                <p style={{ margin: '4px 0 0 0', color: '#718EBF', fontSize: '0.75rem', fontWeight: '500' }}>
+                                    List of active tenants with outstanding monthly rent balances
+                                </p>
+                            </div>
+                            <button 
+                                onClick={() => setShowUnpaidModal(false)}
+                                style={{
+                                    background: 'transparent',
+                                    border: 'none',
+                                    cursor: 'pointer',
+                                    color: '#718EBF',
+                                    padding: '4px',
+                                    borderRadius: '50%',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                }}
+                            >
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        {/* Modal Body */}
+                        <div style={{
+                            padding: '1.5rem',
+                            overflowY: 'auto',
+                            flex: 1
+                        }}>
+                            {unpaidTenantsList.length === 0 ? (
+                                <div style={{
+                                    textAlign: 'center',
+                                    padding: '3rem 1.5rem',
+                                    color: '#10B981',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    alignItems: 'center',
+                                    gap: '12px'
+                                }}>
+                                    <CheckCircle2 size={48} />
+                                    <span style={{ fontWeight: '800', fontSize: '1rem', color: '#343C6A' }}>All Clear!</span>
+                                    <span style={{ fontSize: '0.85rem', color: '#718EBF' }}>No active tenants have unpaid monthly invoices.</span>
+                                </div>
+                            ) : (
+                                <div style={{ overflowX: 'auto' }}>
+                                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                        <thead>
+                                            <tr>
+                                                <th style={{ textAlign: 'left', padding: '10px 12px', background: '#F5F7FA', color: '#718EBF', fontSize: '0.75rem', fontWeight: '700', borderBottom: '2px solid #E6EFF5' }}>Tenant Name</th>
+                                                <th style={{ textAlign: 'left', padding: '10px 12px', background: '#F5F7FA', color: '#718EBF', fontSize: '0.75rem', fontWeight: '700', borderBottom: '2px solid #E6EFF5' }}>Property</th>
+                                                <th style={{ textAlign: 'left', padding: '10px 12px', background: '#F5F7FA', color: '#718EBF', fontSize: '0.75rem', fontWeight: '700', borderBottom: '2px solid #E6EFF5' }}>Room Number</th>
+                                                <th style={{ textAlign: 'left', padding: '10px 12px', background: '#F5F7FA', color: '#718EBF', fontSize: '0.75rem', fontWeight: '700', borderBottom: '2px solid #E6EFF5' }}>Last Payment Date</th>
+                                                <th style={{ textAlign: 'left', padding: '10px 12px', background: '#F5F7FA', color: '#718EBF', fontSize: '0.75rem', fontWeight: '700', borderBottom: '2px solid #E6EFF5' }}>Months Unpaid</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {unpaidTenantsList.map((item, idx) => (
+                                                <tr key={item.tenant.id || idx} style={{ borderBottom: '1px solid #E6EFF5' }}>
+                                                    <td style={{ padding: '12px', fontSize: '0.8rem', fontWeight: '700', color: '#343C6A' }}>{item.tenant.name}</td>
+                                                    <td style={{ padding: '12px', fontSize: '0.8rem', fontWeight: '500', color: '#718EBF' }}>{item.propertyName}</td>
+                                                    <td style={{ padding: '12px', fontSize: '0.8rem', fontWeight: '500', color: '#718EBF' }}>{item.roomNumber}</td>
+                                                    <td style={{ padding: '12px', fontSize: '0.8rem', fontWeight: '600', color: '#343C6A' }}>{item.lastPaymentDate}</td>
+                                                    <td style={{ padding: '12px' }}>
+                                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                                                            {item.unpaidMonths.map(m => (
+                                                                <span key={m} style={{
+                                                                    background: '#FFE5E5',
+                                                                    color: '#FF4B4A',
+                                                                    padding: '2px 8px',
+                                                                    borderRadius: '12px',
+                                                                    fontSize: '0.7rem',
+                                                                    fontWeight: '800',
+                                                                    display: 'inline-block'
+                                                                }}>
+                                                                    {formatMonth(m, state.settings.lang || 'en')}
+                                                                </span>
+                                                            ))}
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Modal Footer */}
+                        <div style={{
+                            padding: '1rem 1.5rem',
+                            borderTop: '1px solid #E6EFF5',
+                            display: 'flex',
+                            justifyContent: 'flex-end',
+                            background: '#F5F7FA'
+                        }}>
+                            <button 
+                                onClick={() => setShowUnpaidModal(false)}
+                                style={{
+                                    padding: '0.5rem 1.25rem',
+                                    borderRadius: '8px',
+                                    border: '1px solid #E6EFF5',
+                                    background: '#FFFFFF',
+                                    color: '#718EBF',
+                                    fontWeight: '700',
+                                    fontSize: '0.78rem',
+                                    cursor: 'pointer',
+                                    boxShadow: '0 2px 4px rgba(0,0,0,0.02)',
+                                }}
+                            >
+                                Close
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
