@@ -494,8 +494,12 @@ const Dashboard = () => {
 
     if (loading) return <div className="loader">Loading dashboard...</div>;
 
+    // Filter tenants to ONLY those belonging to the current user's apartments
+    const userApartmentIds = new Set(state.apartments.map(a => String(a.id)));
+    const userTenants = state.tenants.filter(t => t.apartmentId && userApartmentIds.has(String(t.apartmentId)));
+
     // Innago collection calculations
-    const activeTenantsInMonth = state.tenants.filter(t => t.isAssigned !== false && isTenantActiveInMonth(t, selectedCollectionMonth));
+    const activeTenantsInMonth = userTenants.filter(t => t.isAssigned !== false && isTenantActiveInMonth(t, selectedCollectionMonth));
     const expectedRentInMonth = activeTenantsInMonth.reduce((s, t) => s + (t.rentAmount || 0), 0);
     const collectedRentInMonth = state.payments
         .filter(p => p.type === 'Rent' && (p.monthPaid === selectedCollectionMonth || (p.monthList && p.monthList.includes(selectedCollectionMonth))))
@@ -536,7 +540,7 @@ const Dashboard = () => {
         const pastMonthsOnly = pastMonths.filter(m => m !== selectedCollectionMonth);
         
         pastMonthsOnly.forEach(mStr => {
-            const expected = state.tenants
+            const expected = userTenants
                 .filter(t => t.isAssigned !== false && isTenantActiveInMonth(t, mStr))
                 .reduce((s, t) => s + (t.rentAmount || 0), 0);
             const collected = state.payments
@@ -551,13 +555,13 @@ const Dashboard = () => {
     // Occupancy statistics
     const totalUnitsCount = state.apartments.length;
     const occupiedUnitsCount = state.apartments.filter(a => 
-        state.tenants.some(t => String(t.apartmentId) === String(a.id) && t.isAssigned !== false)
+        userTenants.some(t => String(t.apartmentId) === String(a.id) && t.isAssigned !== false)
     ).length;
     const vacantUnitsCount = totalUnitsCount - occupiedUnitsCount;
     const occupancyPct = totalUnitsCount > 0 ? Math.round((occupiedUnitsCount / totalUnitsCount) * 100) : 0;
 
     // Calculate metrics for top stats bar
-    const activeTenantsCount = state.tenants.filter(t => t.isAssigned !== false).length;
+    const activeTenantsCount = userTenants.filter(t => t.isAssigned !== false).length;
     
     const totalCollectedRent = state.payments
         .filter(p => p.type === 'Rent')
@@ -567,7 +571,7 @@ const Dashboard = () => {
         .filter(p => p.type === 'Deposit')
         .reduce((sum, p) => sum + p.amount, 0);
 
-    const totalDepositMonths = state.tenants.filter(t => t.isAssigned !== false).reduce((sum, t) => {
+    const totalDepositMonths = userTenants.filter(t => t.isAssigned !== false).reduce((sum, t) => {
         return sum + (t.depositMonthsPaid || 0);
     }, 0);
 
@@ -578,7 +582,7 @@ const Dashboard = () => {
     let overdueCount = 0;
     let totalDue = 0;
 
-    state.tenants.filter(t => t.isAssigned !== false).forEach(tenant => {
+    userTenants.filter(t => t.isAssigned !== false).forEach(tenant => {
         const year = today.getFullYear();
         const month = today.getMonth() + 1;
         const daysInMonth = new Date(year, month, 0).getDate();
@@ -637,7 +641,7 @@ const Dashboard = () => {
         return allMonths.filter(m => !paidMonths.has(m));
     };
 
-    const unpaidTenantsList = state.tenants
+    const unpaidTenantsList = userTenants
         .filter(t => t.isAssigned !== false)
         .map(t => {
             const unpaidMonths = getUnpaidMonthsList(t);
@@ -673,7 +677,7 @@ const Dashboard = () => {
         const property = state.properties.find(p => String(p.id) === String(propId));
         const propApts = state.apartments.filter(a => String(a.propertyId) === String(propId));
         const propAptIds = propApts.map(a => String(a.id));
-        const propTenants = state.tenants.filter(t => propAptIds.includes(String(t.apartmentId)));
+        const propTenants = userTenants.filter(t => propAptIds.includes(String(t.apartmentId)));
         const propTenantIds = propTenants.map(t => String(t.id));
         
         const reportPayments = state.payments.filter(p => 
@@ -965,7 +969,7 @@ const Dashboard = () => {
                         icon={Users}
                         colorClass="yellow"
                         bgClass="yellow"
-                        subtext={`${state.apartments.filter(a => state.tenants.some(t => String(t.apartmentId) === String(a.id) && t.isAssigned !== false)).length} Occupied Units`}
+                        subtext={`${state.apartments.filter(a => userTenants.some(t => String(t.apartmentId) === String(a.id) && t.isAssigned !== false)).length} Occupied Units`}
                     />
                     <StatCard 
                         title="COLLECTED RENT" 
