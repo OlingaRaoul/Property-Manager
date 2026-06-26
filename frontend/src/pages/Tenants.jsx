@@ -163,7 +163,8 @@ const Tenants = () => {
     // Toast notification state
     const [toast, setToast] = useState('');
     const [activeTab, setActiveTab] = useState('active'); // 'active' | 'unassigned'
-    const [sortBy, setSortBy]       = useState('name'); // 'name' | 'urgency' | 'property'
+    const [sortBy, setSortBy]       = useState('urgency'); // 'name' | 'urgency' | 'property'
+
 
     const copyPaymentLink = (tenant) => {
         if (!tenant.paymentToken) {
@@ -353,6 +354,9 @@ const Tenants = () => {
 
     if (loading) return <div className="loader">Loading tenants...</div>;
 
+    const today = new Date();
+    const currentMonthStr = today.toISOString().slice(0, 7);
+
     const assignedTenants = state.tenants.filter(t => t.isAssigned !== false);
     const unassignedTenants = state.tenants.filter(t => t.isAssigned === false);
 
@@ -384,8 +388,11 @@ const Tenants = () => {
 
     const sortedAssigned = [...filteredAssigned].sort((a, b) => {
         if (sortBy === 'urgency') {
-            const diff = getUrgencyScore(a) - getUrgencyScore(b);
-            if (diff !== 0) return diff;
+            const monthsLeftA = a.lastPaidMonth ? getMonthsDifference(currentMonthStr, a.lastPaidMonth) : -1;
+            const monthsLeftB = b.lastPaidMonth ? getMonthsDifference(currentMonthStr, b.lastPaidMonth) : -1;
+            if (monthsLeftA !== monthsLeftB) {
+                return monthsLeftA - monthsLeftB; // Smallest to biggest
+            }
             return a.name.localeCompare(b.name);
         }
         if (sortBy === 'property') {
@@ -488,7 +495,7 @@ const Tenants = () => {
                             boxShadow: sortBy === 'urgency' ? '0 4px 10px rgba(45,96,255,0.2)' : 'none',
                         }}
                     >
-                        ⚠️ Rent Urgency
+                        ⚠️ Paid Months Left
                     </button>
                     <button 
                         onClick={() => setSortBy('property')} 
@@ -559,8 +566,6 @@ const Tenants = () => {
                     const nextDueDate = getDueDateForMonth(tenantObj.dueDateDay, nextUnpaidMonth);
 
                     // 3. Number of months left before next payment
-                    const today = new Date();
-                    const currentMonthStr = today.toISOString().slice(0, 7);
                     const monthsLeft = Math.max(0, getMonthsDifference(currentMonthStr, tenantObj.lastPaidMonth));
 
                     return (

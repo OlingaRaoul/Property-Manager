@@ -38,6 +38,7 @@ We have successfully redesigned the property manager dashboard, replacing the pr
   * **Negative value (e.g. `-1`)**: Indicates late payment / unpaid current month, displayed in bold red.
   * **Zero value (`0`)**: Indicates paid current month, but no future months covered, displayed in yellow.
   * **Positive value (e.g. `1`)**: Indicates advanced payment coverage (months paid ahead), displayed in green.
+* **Ascending Months Left Sorting**: Updated default tenant sorting configuration to automatically order tenants by their circular chart months-left coverage value from smallest to largest (ascending). The "Urgency" sort button was renamed to **Paid Months Left** to match. This pushes overdue tenants (-1, -2, etc.) to the top of the list.
 
 ---
 
