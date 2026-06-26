@@ -1529,7 +1529,7 @@ const Dashboard = () => {
                                                                     fontWeight: '800',
                                                                     display: 'inline-block'
                                                                 }}>
-                                                                    {formatMonth(m, state.settings.lang || 'en')}
+                                                                    {`${formatMonth(m, state.settings.lang || 'en')} ${m.split('-')[0]}`}
                                                                 </span>
                                                             ))}
                                                         </div>
