@@ -32,7 +32,7 @@ const selectStyle = {
     background: '#FFFFFF', color: '#343C6A', fontSize: '0.95rem', outline: 'none',
 };
 
-const CircleProgress = ({ depositMonthsPaid = 0, rentRemaining = 0, size = 70, strokeWidth = 9, label = "Coverage" }) => {
+const CircleProgress = ({ depositMonthsPaid = 0, rentRemaining = 0, size = 70, strokeWidth = 9, label = "Coverage", monthsLeft = 0 }) => {
     const radius = (size - strokeWidth) / 2;
     const circumference = radius * 2 * Math.PI;
 
@@ -53,7 +53,13 @@ const CircleProgress = ({ depositMonthsPaid = 0, rentRemaining = 0, size = 70, s
     }
 
     const totalMonths = depositMonths + rentMonths;
-    const percentage = (totalMonths / 12) * 100;
+
+    let centerColor = '#10B981';
+    if (monthsLeft < 0) {
+        centerColor = '#FF4B4A';
+    } else if (monthsLeft === 0) {
+        centerColor = '#FFBB38';
+    }
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
@@ -123,12 +129,12 @@ const CircleProgress = ({ depositMonthsPaid = 0, rentRemaining = 0, size = 70, s
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    fontWeight: '800',
-                    fontSize: `${size * 0.22}px`,
-                    color: '#343C6A',
+                    fontWeight: '900',
+                    fontSize: `${size * 0.28}px`,
+                    color: centerColor,
                     fontFamily: 'Outfit, sans-serif'
                 }}>
-                    {Math.round(percentage)}%
+                    {monthsLeft}
                 </div>
             </div>
             <span style={{ fontSize: '0.6rem', fontWeight: '700', color: 'var(--text-muted)', marginTop: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
@@ -607,11 +613,16 @@ const Tenants = () => {
                                         const rentRemaining = tenantObj.lastPaidMonth && tenantObj.lastPaidMonth >= currentMonthStr
                                             ? getMonthsDifference(currentMonthStr, tenantObj.lastPaidMonth) + 1
                                             : 0;
+                                        
+                                        const monthsLeftVal = tenantObj.lastPaidMonth
+                                            ? getMonthsDifference(currentMonthStr, tenantObj.lastPaidMonth)
+                                            : -1;
 
                                         return (
                                             <CircleProgress 
                                                 depositMonthsPaid={tenantObj.depositMonthsPaid || 0}
                                                 rentRemaining={rentRemaining}
+                                                monthsLeft={monthsLeftVal}
                                                 label={lang === 'fr' ? 'Couverture' : 'Coverage'}
                                             />
                                         );

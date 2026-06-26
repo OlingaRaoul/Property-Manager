@@ -1,32 +1,36 @@
 import { useState, useEffect } from 'react';
 import { useAppState } from '../context/StateContext';
-import { Users, Building, Wallet, AlertCircle, Shield } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Users, Building, Wallet, AlertCircle, Shield, FileText, ClipboardList, PlusCircle, DollarSign, CheckCircle2 } from 'lucide-react';
 import { getMonthsDifference, formatMonth } from '../utils';
 
-const StatCard = ({ title, value, icon: Icon, colorClass, bgClass, subtext }) => (
-    <div className="stat-card" style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '1rem', padding: '1.25rem' }}>
-        <div className="stat-icon-bg" style={{ 
-            width: '45px', 
-            height: '45px', 
-            borderRadius: '50%', 
-            background: `var(--bd-${bgClass}-soft)`, 
-            color: `var(--bd-${colorClass})`,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            flexShrink: 0
-        }}>
-            <Icon size={20} />
+const StatCard = ({ title, value, icon: Icon, colorClass, bgClass, subtext }) => {
+    if (!Icon) return null;
+    return (
+        <div className="stat-card" style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '1rem', padding: '1.25rem' }}>
+            <div className="stat-icon-bg" style={{ 
+                width: '45px', 
+                height: '45px', 
+                borderRadius: '50%', 
+                background: `var(--bd-${bgClass}-soft)`, 
+                color: `var(--bd-${colorClass})`,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0
+            }}>
+                <Icon size={20} />
+            </div>
+            <div>
+                <div className="stat-label" style={{ color: '#718EBF', fontSize: '0.75rem', fontWeight: '500', marginBottom: '0.2rem', letterSpacing: '0.5px' }}>{title}</div>
+                <div className="stat-value" style={{ fontSize: '1.3rem', fontWeight: '800', color: '#343C6A' }}>{value}</div>
+                {subtext && <div style={{ fontSize: '0.7rem', color: '#718EBF', marginTop: '0.1rem', fontWeight: '500' }}>{subtext}</div>}
+            </div>
         </div>
-        <div>
-            <div className="stat-label" style={{ color: '#718EBF', fontSize: '0.75rem', fontWeight: '500', marginBottom: '0.2rem', letterSpacing: '0.5px' }}>{title}</div>
-            <div className="stat-value" style={{ fontSize: '1.3rem', fontWeight: '800', color: '#343C6A' }}>{value}</div>
-            {subtext && <div style={{ fontSize: '0.7rem', color: '#718EBF', marginTop: '0.1rem', fontWeight: '500' }}>{subtext}</div>}
-        </div>
-    </div>
-);
+    );
+};
 
-const LineChart = ({ data, W, H, paddingLeft, paddingRight, paddingTop, paddingBottom, maxVal, cleanMax, currency }) => {
+const LineChart = ({ data, W, H, paddingLeft, paddingRight, paddingTop, paddingBottom, cleanMax, currency }) => {
     const chartWidth = W - paddingLeft - paddingRight;
     const chartHeight = H - paddingTop - paddingBottom;
     const [hoveredIndex, setHoveredIndex] = useState(null);
@@ -140,7 +144,7 @@ const LineChart = ({ data, W, H, paddingLeft, paddingRight, paddingTop, paddingB
     );
 };
 
-const BarChart = ({ data, W, H, paddingLeft, paddingRight, paddingTop, paddingBottom, maxVal, cleanMax, currency }) => {
+const BarChart = ({ data, W, H, paddingLeft, paddingRight, paddingTop, paddingBottom, cleanMax, currency }) => {
     const chartWidth = W - paddingLeft - paddingRight;
     const chartHeight = H - paddingTop - paddingBottom;
     const [hoveredIndex, setHoveredIndex] = useState(null);
@@ -395,49 +399,41 @@ const ForecastChart = ({ data, W, H, paddingLeft, paddingRight, paddingTop, padd
 };
 
 const Dashboard = () => {
-    const { state, loading, showTenantHistory } = useAppState();
+    const { state, loading } = useAppState();
+    const navigate = useNavigate();
 
     const todayStr = new Date().toISOString().split('T')[0];
     const sixMonthsAgo = new Date();
     sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
     const sixMonthsAgoStr = sixMonthsAgo.toISOString().split('T')[0];
 
-    const [startDate, setStartDate] = useState(sixMonthsAgoStr);
-    const [endDate, setEndDate] = useState(todayStr);
+    const todayMonthStr = new Date().toISOString().slice(0, 7); // e.g. "2026-06"
+    const [selectedCollectionMonth, setSelectedCollectionMonth] = useState(todayMonthStr);
+
     const [printStartDate, setPrintStartDate] = useState(sixMonthsAgoStr);
     const [printEndDate, setPrintEndDate] = useState(todayStr);
-    const [txPage, setTxPage] = useState(1);
     const [selectedReportPropertyId, setSelectedReportPropertyId] = useState('');
+
+    // Generate collection months list (last 12 months)
+    const collectionMonthsList = [];
+    const todayValForMonths = new Date();
+    for (let i = 0; i < 12; i++) {
+        const d = new Date(todayValForMonths.getFullYear(), todayValForMonths.getMonth() - i, 1);
+        const val = d.toISOString().slice(0, 7); // YYYY-MM
+        const label = d.toLocaleDateString('default', { month: 'long', year: 'numeric' });
+        collectionMonthsList.push({ val, label });
+    }
+
+    const [selYear, selMonth] = selectedCollectionMonth.split('-');
+    const tempDate = new Date(parseInt(selYear), parseInt(selMonth) - 1, 1);
+    const monthLabelShort = tempDate.toLocaleDateString('default', { month: 'long' });
+    const selY = selYear;
 
     useEffect(() => {
         if (state.properties.length > 0 && !selectedReportPropertyId) {
             setSelectedReportPropertyId(state.properties[0].id);
         }
     }, [state.properties, selectedReportPropertyId]);
-
-    const setPreset = (presetName) => {
-        const todayVal = new Date();
-        const todayValStr = todayVal.toISOString().split('T')[0];
-        let start = new Date();
-        
-        if (presetName === '30days') {
-            start.setDate(todayVal.getDate() - 30);
-        } else if (presetName === '6months') {
-            start.setMonth(todayVal.getMonth() - 6);
-        } else if (presetName === 'year') {
-            start.setFullYear(todayVal.getFullYear(), 0, 1);
-        } else if (presetName === 'all') {
-            if (state.payments.length > 0) {
-                const sorted = [...state.payments].sort((a, b) => a.date.localeCompare(b.date));
-                setStartDate(sorted[0].date);
-                setEndDate(todayValStr);
-                return;
-            }
-            start.setFullYear(todayVal.getFullYear() - 1);
-        }
-        setStartDate(start.toISOString().split('T')[0]);
-        setEndDate(todayValStr);
-    };
 
     // Helper to get all months between two dates (inclusive)
     const getMonthsInRange = (start, end) => {
@@ -461,18 +457,7 @@ const Dashboard = () => {
         return months;
     };
 
-    // Helper to get all dates between two dates (inclusive)
-    const getDatesInRange = (start, end) => {
-        const startDateObj = new Date(start);
-        const endDateObj = new Date(end);
-        const dates = [];
-        let curr = new Date(startDateObj);
-        while (curr <= endDateObj) {
-            dates.push(curr.toISOString().split('T')[0]);
-            curr.setDate(curr.getDate() + 1);
-        }
-        return dates;
-    };
+
 
     // Helper to determine if tenant was active in a given month (YYYY-MM)
     const isTenantActiveInMonth = (tenant, mStr) => {
@@ -504,253 +489,79 @@ const Dashboard = () => {
         return mStr === currentMonth;
     };
 
-    // Helper to check if a rent payment was on-time based on tenant's dueDateDay
-    const checkIsPaymentOnTime = (pay, tenant) => {
-        const monthPaid = pay.monthPaid || (pay.date && typeof pay.date === 'string' ? pay.date.slice(0, 7) : '');
-        if (!monthPaid || !monthPaid.includes('-')) return true;
-        const [year, month] = monthPaid.split('-').map(Number);
-        const daysInMonth = new Date(year, month, 0).getDate();
-        const actualDueDay = Math.min(tenant.dueDateDay || 1, daysInMonth);
-        const dueDateStr = `${monthPaid}-${String(actualDueDay).padStart(2, '0')}`;
-        return pay.date && typeof pay.date === 'string' ? pay.date <= dueDateStr : true;
-    };
 
-    // Helper to calculate days late for a rent payment
-    const calculateDaysLate = (pay, tenant) => {
-        const monthPaid = pay.monthPaid || (pay.date && typeof pay.date === 'string' ? pay.date.slice(0, 7) : '');
-        if (!monthPaid || !monthPaid.includes('-')) return 0;
-        const [year, month] = monthPaid.split('-').map(Number);
-        const daysInMonth = new Date(year, month, 0).getDate();
-        const actualDueDay = Math.min(tenant.dueDateDay || 1, daysInMonth);
-        const dueDateStr = `${monthPaid}-${String(actualDueDay).padStart(2, '0')}`;
-        if (!pay.date || typeof pay.date !== 'string' || pay.date <= dueDateStr) return 0;
-        
-        const d1 = new Date(pay.date);
-        const d2 = new Date(dueDateStr);
-        const diffTime = d1 - d2;
-        return Math.max(0, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
-    };
 
     if (loading) return <div className="loader">Loading dashboard...</div>;
 
-    // Filter payments inside date range
-    const periodPayments = state.payments.filter(p => p.date >= startDate && p.date <= endDate);
-    const periodTotal = periodPayments.reduce((s, p) => s + p.amount, 0);
-    const periodRent = periodPayments.filter(p => p.type === 'Rent').reduce((s, p) => s + p.amount, 0);
-    const periodDeposit = periodPayments.filter(p => p.type === 'Deposit').reduce((s, p) => s + p.amount, 0);
-    const periodCount = periodPayments.length;
-
-    // Build chart data
-    const diffTime = Math.abs(new Date(endDate) - new Date(startDate));
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-    let chartData = [];
-    if (diffDays <= 31) {
-        const dates = getDatesInRange(startDate, endDate);
-        chartData = dates.map(dStr => {
-            const dayPayments = state.payments.filter(p => p.date === dStr);
-            const rent = dayPayments.filter(p => p.type === 'Rent').reduce((s, p) => s + p.amount, 0);
-            const deposit = dayPayments.filter(p => p.type === 'Deposit').reduce((s, p) => s + p.amount, 0);
-            
-            const [y, m, d] = dStr.split('-');
-            const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-            const label = `${monthNames[parseInt(m) - 1]} ${d}`;
-            
-            return {
-                label,
-                rawLabel: dStr,
-                rent,
-                deposit,
-                total: rent + deposit
-            };
-        });
-    } else {
-        const months = getMonthsInRange(startDate, endDate);
-        chartData = months.map(mStr => {
-            const monthPayments = state.payments.filter(p => p.date >= startDate && p.date <= endDate && p.date.startsWith(mStr));
-            const rent = monthPayments.filter(p => p.type === 'Rent').reduce((s, p) => s + p.amount, 0);
-            const deposit = monthPayments.filter(p => p.type === 'Deposit').reduce((s, p) => s + p.amount, 0);
-            
-            const [y, m] = mStr.split('-');
-            const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-            const label = `${monthNames[parseInt(m) - 1]} ${y}`;
-            
-            return {
-                label,
-                rawLabel: mStr,
-                rent,
-                deposit,
-                total: rent + deposit
-            };
-        });
-    }
-
-    const maxVal = Math.max(...chartData.map(d => Math.max(d.total, d.rent, d.deposit)), 1000);
-    const getCleanMax = (val) => {
-        if (val <= 0) return 1000;
-        const digits = Math.floor(Math.log10(val));
-        const scale = Math.pow(10, Math.max(1, digits));
-        return Math.ceil(val / scale) * scale;
-    };
-    const cleanMax = getCleanMax(maxVal);
-
-    // 1. Property Performance & Yield Calculations
-    const propertyPerformance = state.properties.map(prop => {
-        const propApts = state.apartments.filter(a => String(a.propertyId) === String(prop.id));
-        const propAptIds = propApts.map(a => String(a.id));
-        const propTenants = state.tenants.filter(t => t.isAssigned !== false && propAptIds.includes(String(t.apartmentId)));
-        
-        const totalUnits = propApts.length;
-        const occupiedUnits = propApts.filter(a => a.tenantId).length;
-        const occupancyRate = totalUnits > 0 ? Math.round((occupiedUnits / totalUnits) * 100) : 0;
-        
-        const months = getMonthsInRange(startDate, endDate);
-        let totalExpected = 0;
-        months.forEach(mStr => {
-            const monthlyExpected = propTenants
-                .filter(t => isTenantActiveInMonth(t, mStr))
-                .reduce((s, t) => s + (t.rentAmount || 0), 0);
-            totalExpected += monthlyExpected;
-        });
-        
-        const actualRent = state.payments
-            .filter(p => p.type === 'Rent' && p.date >= startDate && p.date <= endDate && propTenants.some(t => String(t.id) === String(p.tenantId)))
-            .reduce((s, p) => s + p.amount, 0);
-            
-        return {
-            id: prop.id,
-            name: prop.name,
-            occupancyRate,
-            occupiedUnits,
-            totalUnits,
-            expected: totalExpected,
-            actual: actualRent,
-            pct: totalExpected > 0 ? Math.round((actualRent / totalExpected) * 100) : 0
-        };
-    });
-
-    // 2. Tenant Payment Risk & Reliability Calculations
-    const activeTenantsRisk = state.tenants
-        .filter(t => t.isAssigned !== false)
-        .map(tenant => {
-            const tenantRentPayments = state.payments.filter(p => String(p.tenantId) === String(tenant.id) && p.type === 'Rent');
-            const totalPayments = tenantRentPayments.length;
-            const onTimePayments = tenantRentPayments.filter(p => checkIsPaymentOnTime(p, tenant)).length;
-            const onTimeRate = totalPayments > 0 ? Math.round((onTimePayments / totalPayments) * 100) : 100;
-            
-            const latePayments = tenantRentPayments.filter(p => !checkIsPaymentOnTime(p, tenant));
-            const totalDaysLate = latePayments.reduce((sum, p) => sum + calculateDaysLate(p, tenant), 0);
-            const avgDaysLate = latePayments.length > 0 ? parseFloat((totalDaysLate / latePayments.length).toFixed(1)) : 0.0;
-            
-            const today = new Date();
-            const currentMonthStr = today.toISOString().slice(0, 7);
-            const currentDay = today.getDate();
-            const year = today.getFullYear();
-            const month = today.getMonth() + 1;
-            const daysInMonth = new Date(year, month, 0).getDate();
-            const actualDueDay = Math.min(tenant.dueDateDay || 1, daysInMonth);
-            
-            let overdueMonths = 0;
-            if (tenant.lastPaidMonth && typeof tenant.lastPaidMonth === 'string' && tenant.lastPaidMonth.includes('-')) {
-                overdueMonths = getMonthsDifference(tenant.lastPaidMonth, currentMonthStr);
-                if (currentDay <= actualDueDay) {
-                    overdueMonths = Math.max(0, overdueMonths - 1);
-                }
-            } else if (currentDay > actualDueDay) {
-                overdueMonths = 1;
-            }
-            
-            const depositPaidMonths = tenant.depositMonthsPaid || 0;
-            const netOverdue = Math.max(0, overdueMonths - depositPaidMonths);
-            
-            let riskLevel = 'Low';
-            if (netOverdue >= 2) {
-                riskLevel = 'High';
-            } else if (netOverdue === 1 || (overdueMonths > 0 && overdueMonths <= depositPaidMonths) || (totalPayments > 0 && onTimeRate < 50)) {
-                riskLevel = 'Medium';
-            }
-            
-            const apt = state.apartments.find(a => String(a.id) === String(tenant.apartmentId));
-            const prop = apt ? state.properties.find(p => String(p.id) === String(apt.propertyId)) : null;
-            
-            return {
-                id: tenant.id,
-                name: tenant.name,
-                propertyName: prop ? prop.name : 'Unknown Property',
-                unitNumber: apt ? apt.unitNumber : '?',
-                onTimeRate,
-                avgDaysLate,
-                riskLevel,
-                netOverdue
-            };
-        })
-        .sort((a, b) => {
-            const riskWeight = { High: 3, Medium: 2, Low: 1 };
-            if (riskWeight[a.riskLevel] !== riskWeight[b.riskLevel]) {
-                return riskWeight[b.riskLevel] - riskWeight[a.riskLevel];
-            }
-            return a.onTimeRate - b.onTimeRate;
-        });
-
-    // 3. 6-Month Cash Flow Forecasting Calculations
-    const rateMonths = [];
-    for (let i = -6; i <= -1; i++) {
-        const d = new Date();
-        d.setDate(1);
-        d.setMonth(d.getMonth() + i);
-        rateMonths.push(d.toISOString().slice(0, 7));
-    }
+    // Innago collection calculations
+    const activeTenantsInMonth = state.tenants.filter(t => t.isAssigned !== false && isTenantActiveInMonth(t, selectedCollectionMonth));
+    const expectedRentInMonth = activeTenantsInMonth.reduce((s, t) => s + (t.rentAmount || 0), 0);
+    const collectedRentInMonth = state.payments
+        .filter(p => p.type === 'Rent' && (p.monthPaid === selectedCollectionMonth || (p.monthList && p.monthList.includes(selectedCollectionMonth))))
+        .reduce((s, p) => s + p.amount, 0);
+    const outstandingRent = Math.max(0, expectedRentInMonth - collectedRentInMonth);
+    const collectedPct = expectedRentInMonth > 0 ? Math.min(100, Math.max(0, Math.round((collectedRentInMonth / expectedRentInMonth) * 100))) : 100;
+    const unpaidPct = 100 - collectedPct;
     
-    let totalExpectedRent = 0;
-    let totalActualRent = 0;
-    rateMonths.forEach(mStr => {
-        const expected = state.tenants.reduce((sum, t) => sum + (isTenantActiveInMonth(t, mStr) ? (t.rentAmount || 0) : 0), 0);
-        const actual = state.payments.filter(p => p.type === 'Rent' && (p.monthPaid || (p.date && typeof p.date === 'string' ? p.date.slice(0, 7) : '')) === mStr).reduce((sum, p) => sum + p.amount, 0);
-        totalExpectedRent += expected;
-        totalActualRent += actual;
-    });
-    const collectionRate = totalExpectedRent > 0 ? Math.max(0.5, Math.min(1.0, totalActualRent / totalExpectedRent)) : 0.95;
+    const processingRentInMonth = state.payments
+        .filter(p => p.type === 'Rent' && p.status === 'Pending' && (p.monthPaid === selectedCollectionMonth || (p.monthList && p.monthList.includes(selectedCollectionMonth))))
+        .reduce((s, p) => s + p.amount, 0);
+
+    // Units with invoices paid vs due
+    let invoicesPaidCount = 0;
+    let invoicesDueCount = 0;
+    const paidTenants = [];
+    const dueTenants = [];
     
-    const forecastTimeline = [];
-    for (let i = -2; i <= 3; i++) {
-        const d = new Date();
-        d.setDate(1);
-        d.setMonth(d.getMonth() + i);
-        const mStr = d.toISOString().slice(0, 7);
-        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-        const label = `${monthNames[d.getMonth()]} ${d.getFullYear().toString().slice(-2)}`;
-        
-        let total = 0;
-        const isForecast = i > 0;
-        
-        if (!isForecast) {
-            total = state.payments
-                .filter(p => p.date && typeof p.date === 'string' && p.date.startsWith(mStr))
-                .reduce((sum, p) => sum + p.amount, 0);
+    activeTenantsInMonth.forEach(t => {
+        const hasPaid = state.payments.some(p => 
+            String(p.tenantId) === String(t.id) && 
+            p.type === 'Rent' && 
+            (p.monthPaid === selectedCollectionMonth || (p.monthList && p.monthList.includes(selectedCollectionMonth)))
+        );
+        if (hasPaid) {
+            invoicesPaidCount++;
+            paidTenants.push(t);
         } else {
-            const baseExpected = state.tenants
-                .filter(t => isTenantActiveInMonth(t, mStr))
-                .reduce((sum, t) => sum + (t.rentAmount || 0), 0);
-            total = Math.round(baseExpected * collectionRate);
+            invoicesDueCount++;
+            dueTenants.push(t);
         }
-        
-        forecastTimeline.push({
-            label,
-            mStr,
-            total,
-            isForecast
-        });
-    }
+    });
 
-    // Calculate metrics
+    // Past outstanding
+    const getPastOutstanding = () => {
+        let sum = 0;
+        const pastMonths = getMonthsInRange("2024-01", selectedCollectionMonth);
+        const pastMonthsOnly = pastMonths.filter(m => m !== selectedCollectionMonth);
+        
+        pastMonthsOnly.forEach(mStr => {
+            const expected = state.tenants
+                .filter(t => t.isAssigned !== false && isTenantActiveInMonth(t, mStr))
+                .reduce((s, t) => s + (t.rentAmount || 0), 0);
+            const collected = state.payments
+                .filter(p => p.type === 'Rent' && (p.monthPaid === mStr || (p.monthList && p.monthList.includes(mStr))))
+                .reduce((s, p) => s + p.amount, 0);
+            sum += Math.max(0, expected - collected);
+        });
+        return sum;
+    };
+    const pastOutstanding = getPastOutstanding();
+
+    // Occupancy statistics
+    const totalUnitsCount = state.apartments.length;
+    const occupiedUnitsCount = state.apartments.filter(a => 
+        state.tenants.some(t => String(t.apartmentId) === String(a.id) && t.isAssigned !== false)
+    ).length;
+    const vacantUnitsCount = totalUnitsCount - occupiedUnitsCount;
+    const occupancyPct = totalUnitsCount > 0 ? Math.round((occupiedUnitsCount / totalUnitsCount) * 100) : 0;
+
+    // Calculate metrics for top stats bar
     const activeTenantsCount = state.tenants.filter(t => t.isAssigned !== false).length;
     
-    // Count only Rent payments
     const totalCollectedRent = state.payments
         .filter(p => p.type === 'Rent')
         .reduce((sum, p) => sum + p.amount, 0);
 
-    // Count only Deposit payments
     const totalCollectedDeposits = state.payments
         .filter(p => p.type === 'Deposit')
         .reduce((sum, p) => sum + p.amount, 0);
@@ -791,43 +602,9 @@ const Dashboard = () => {
         }
     });
 
-    // Group all payments by tenantId and date (similar to payment ledger history)
-    const groupedPayments = state.payments.reduce((acc, p) => {
-        const key = `${p.tenantId}-${p.date}`;
-        if (!acc[key]) {
-            acc[key] = {
-                ...p,
-                monthList: p.monthPaid ? [p.monthPaid] : [],
-                totalAmount: p.amount,
-                types: new Set([p.type])
-            };
-        } else {
-            if (p.monthPaid && !acc[key].monthList.includes(p.monthPaid)) {
-                acc[key].monthList.push(p.monthPaid);
-            }
-            acc[key].totalAmount += p.amount;
-            acc[key].types.add(p.type);
-        }
-        return acc;
-    }, {});
 
-    const groupedPaymentsArray = Object.values(groupedPayments).map(p => {
-        let typeLabel = 'Rent';
-        if (p.types.has('Rent') && p.types.has('Deposit')) {
-            typeLabel = 'Rent & Deposit';
-        } else if (p.types.has('Deposit')) {
-            typeLabel = 'Deposit';
-        }
-        return {
-            ...p,
-            typeLabel
-        };
-    }).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
 
-    // Pagination for recent transactions
-    const txPageSize = 5;
-    const totalTxPages = Math.ceil(groupedPaymentsArray.length / txPageSize);
-    const paginatedTx = groupedPaymentsArray.slice((txPage - 1) * txPageSize, txPage * txPageSize);
+
 
     const handlePrintPDF = () => {
         const signature = state.settings.signature || '';
@@ -1132,7 +909,7 @@ const Dashboard = () => {
                         icon={Users}
                         colorClass="yellow"
                         bgClass="yellow"
-                        subtext={`${state.apartments.filter(a => a.tenantId).length} Occupied Units`}
+                        subtext={`${state.apartments.filter(a => state.tenants.some(t => String(t.apartmentId) === String(a.id) && t.isAssigned !== false)).length} Occupied Units`}
                     />
                     <StatCard 
                         title="COLLECTED RENT" 
@@ -1263,406 +1040,322 @@ const Dashboard = () => {
                 </div>
             </div>
 
-            <div className="data-table-container animate-slide-in" style={{ marginBottom: '2.5rem' }}>
-                <div className="table-header" style={{ marginBottom: '1.5rem' }}>
-                    <h2 style={{ color: '#343C6A', fontWeight: '700', fontSize: '1.1rem' }}>Recent Transactions</h2>
-                </div>
-                <table className="data-table">
-                    <thead>
-                        <tr>
-                            <th>Tenant</th>
-                            <th className="hide-mobile">Unit</th>
-                            <th className="hide-mobile">Type</th>
-                            <th className="hide-mobile">month</th>
-                            <th className="hide-mobile">date_paid</th>
-                            <th>Amount</th>
-                            <th>Status</th>
-                            <th className="hide-mobile">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {paginatedTx.map(pay => {
-                            const tenant = state.tenants.find(t => String(t.id) === String(pay.tenantId));
-                            const apartment = tenant ? state.apartments.find(a => String(a.id) === String(pay.apartmentId || tenant.apartmentId)) : null;
-                            const property = apartment ? state.properties.find(p => String(p.id) === String(apartment.propertyId)) : null;
 
-                            return (
-                                <tr key={pay.id}>
-                                    <td style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', borderTop: 'none' }}>
-                                        <img src={`https://robohash.org/${tenant ? encodeURIComponent(tenant.name) : 'User'}?set=set4`} style={{ width: '28px', height: '28px', borderRadius: '50%', background: '#F5F7FA' }} alt="T" />
-                                        {tenant ? (
-                                            <span className="clickable-tenant" style={{ fontWeight: '500' }} onClick={() => showTenantHistory(tenant.id)}>
-                                                {tenant.name}
-                                            </span>
-                                        ) : (
-                                            <span style={{ fontWeight: '500' }}>Unknown User</span>
-                                        )}
-                                    </td>
-                                    <td className="hide-mobile">
-                                        <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                            <span style={{ fontWeight: '600', color: '#343C6A' }}>{property ? property.name : 'Property'}</span>
-                                            <span style={{ fontSize: '0.75rem', color: '#718EBF' }}>{apartment ? `Apt ${apartment.unitNumber}` : 'Unit'}</span>
-                                        </div>
-                                    </td>
-                                    <td className="hide-mobile">
-                                        <span style={{ 
-                                            fontWeight: '700', 
-                                            fontSize: '0.75rem',
-                                            color: pay.typeLabel === 'Deposit' ? '#10B981' : (pay.typeLabel === 'Rent' ? '#2D60FF' : '#8B5CF6') 
-                                        }}>
-                                            {pay.typeLabel}
-                                        </span>
-                                    </td>
-                                    <td className="hide-mobile">
-                                        <span className="status-pill" style={{ fontSize: '0.75rem', background: '#F5F7FA', color: 'var(--secondary)', minWidth: 'auto' }}>
-                                            {pay.monthList.length > 0 
-                                                ? pay.monthList.map(m => formatMonth(m, state.settings.lang || 'en')).reverse().join(', ') 
-                                                : '—'}
-                                        </span>
-                                    </td>
-                                    <td className="hide-mobile" style={{ color: '#718EBF' }}>{pay.date}</td>
-                                    <td style={{ fontWeight: '700', color: '#343C6A' }}>{pay.totalAmount.toLocaleString()} {state.settings.currency}</td>
-                                    <td>
-                                        <span className="status-pill paid" style={{ background: '#EDF9F0', color: '#41D433', fontSize: '0.75rem', padding: '0.4rem 1rem' }}>Paid</span>
-                                    </td>
-                                    <td className="hide-mobile">
-                                        <div style={{ display: 'flex', gap: '0.75rem', color: '#2D60FF' }}>
-                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#41D433" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2D60FF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
-                                        </div>
-                                    </td>
-                                </tr>
-                            )
-                        })}
-                        {groupedPaymentsArray.length === 0 && <tr><td colSpan="8" style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>No recent transactions found.</td></tr>}
-                    </tbody>
-                </table>
 
-                {/* Table Pagination */}
-                {totalTxPages > 1 && (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1rem', padding: '0.5rem 0', flexWrap: 'wrap', gap: '1rem' }}>
-                        <span style={{ fontSize: '0.85rem', color: '#718EBF' }}>
-                            Page {txPage} of {totalTxPages} ({groupedPaymentsArray.length} records)
-                        </span>
-                        <div style={{ display: 'flex', gap: '0.5rem' }}>
-                            <button 
-                                className="btn-secondary" 
-                                style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem', borderRadius: '8px', cursor: txPage === 1 ? 'not-allowed' : 'pointer', opacity: txPage === 1 ? 0.5 : 1 }}
-                                disabled={txPage === 1}
-                                onClick={() => setTxPage(prev => Math.max(1, prev - 1))}
-                            >
-                                Previous
-                            </button>
-                            <button 
-                                className="btn-secondary" 
-                                style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem', borderRadius: '8px', cursor: txPage === totalTxPages ? 'not-allowed' : 'pointer', opacity: txPage === totalTxPages ? 0.5 : 1 }}
-                                disabled={txPage === totalTxPages}
-                                onClick={() => setTxPage(prev => Math.min(totalTxPages, prev + 1))}
-                            >
-                                Next
-                            </button>
-                        </div>
-                    </div>
-                )}
-            </div>
-
-            {/* ── Financial Report Card ── */}
-            <div className="stat-card animate-slide-in" style={{ padding: '1.5rem', marginBottom: '2.5rem', display: 'block', height: 'auto' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
-                    <div>
-                        <h2 style={{ color: '#343C6A', fontWeight: '800', fontSize: '1.15rem', margin: 0, fontFamily: 'Outfit' }}>Financial Analytics Report</h2>
-                        <p style={{ color: '#718EBF', fontSize: '0.75rem', margin: '4px 0 0', fontWeight: '500' }}>Cash flow trend and transaction analysis</p>
-                    </div>
-                    
-                    {/* Period selectors and quick preset pills */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
-                        <div style={{ display: 'flex', gap: '0.35rem', background: '#F5F7FA', padding: '0.25rem', borderRadius: '10px', border: '1px solid #E6EFF5' }}>
-                            <button onClick={() => setPreset('30days')} style={{ border: 'none', background: 'transparent', padding: '0.35rem 0.65rem', fontSize: '0.72rem', fontWeight: '700', borderRadius: '7px', cursor: 'pointer', color: '#718EBF' }}>30D</button>
-                            <button onClick={() => setPreset('6months')} style={{ border: 'none', background: 'transparent', padding: '0.35rem 0.65rem', fontSize: '0.72rem', fontWeight: '700', borderRadius: '7px', cursor: 'pointer', color: '#718EBF' }}>6M</button>
-                            <button onClick={() => setPreset('year')} style={{ border: 'none', background: 'transparent', padding: '0.35rem 0.65rem', fontSize: '0.72rem', fontWeight: '700', borderRadius: '7px', cursor: 'pointer', color: '#718EBF' }}>YTD</button>
-                            <button onClick={() => setPreset('all')} style={{ border: 'none', background: 'transparent', padding: '0.35rem 0.65rem', fontSize: '0.72rem', fontWeight: '700', borderRadius: '7px', cursor: 'pointer', color: '#718EBF' }}>ALL</button>
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                            <input 
-                                type="date" 
-                                value={startDate} 
-                                onChange={e => setStartDate(e.target.value)} 
-                                style={{
-                                    padding: '0.45rem 0.65rem',
-                                    borderRadius: '10px',
-                                    border: '1px solid #E6EFF5',
-                                    fontSize: '0.78rem',
-                                    fontWeight: '700',
-                                    color: '#343C6A',
-                                    outline: 'none',
-                                    cursor: 'pointer',
-                                    fontFamily: 'Outfit, sans-serif'
-                                }}
-                            />
-                            <span style={{ fontSize: '0.75rem', fontWeight: '700', color: '#718EBF' }}>to</span>
-                            <input 
-                                type="date" 
-                                value={endDate} 
-                                onChange={e => setEndDate(e.target.value)} 
-                                style={{
-                                    padding: '0.45rem 0.65rem',
-                                    borderRadius: '10px',
-                                    border: '1px solid #E6EFF5',
-                                    fontSize: '0.78rem',
-                                    fontWeight: '700',
-                                    color: '#343C6A',
-                                    outline: 'none',
-                                    cursor: 'pointer',
-                                    fontFamily: 'Outfit, sans-serif'
-                                }}
-                            />
-                        </div>
-                    </div>
-                </div>
-
-                {/* Aggregated Stats Row inside the period */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '1rem', background: '#F5F7FA', padding: '1rem', borderRadius: '15px', border: '1px solid #E6EFF5', marginBottom: '1.5rem' }}>
-                    <div>
-                        <div style={{ fontSize: '0.65rem', color: '#718EBF', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '3px' }}>Period Revenue</div>
-                        <div style={{ fontSize: '1.15rem', fontWeight: '800', color: '#343C6A' }}>{periodTotal.toLocaleString()} {state.settings.currency}</div>
-                    </div>
-                    <div>
-                        <div style={{ fontSize: '0.65rem', color: '#2D60FF', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '3px' }}>Rent Collected</div>
-                        <div style={{ fontSize: '1.15rem', fontWeight: '800', color: '#2D60FF' }}>{periodRent.toLocaleString()} {state.settings.currency}</div>
-                    </div>
-                    <div>
-                        <div style={{ fontSize: '0.65rem', color: '#10B981', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '3px' }}>Deposits Collected</div>
-                        <div style={{ fontSize: '1.15rem', fontWeight: '800', color: '#10B981' }}>{periodDeposit.toLocaleString()} {state.settings.currency}</div>
-                    </div>
-                    <div>
-                        <div style={{ fontSize: '0.65rem', color: '#718EBF', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '3px' }}>Transaction Count</div>
-                        <div style={{ fontSize: '1.15rem', fontWeight: '800', color: '#343C6A' }}>{periodCount} Payments</div>
-                    </div>
-                </div>
-
-                {/* Charts Layout */}
-                {chartData.length === 0 ? (
-                    <div style={{ padding: '3rem 1rem', textAlign: 'center', color: '#718EBF', fontSize: '0.88rem' }}>
-                        No transactions recorded for the selected period ({startDate} to {endDate}). Try selecting a different range.
-                    </div>
-                ) : (
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '2rem', marginTop: '1rem' }}>
-                        {/* Line Chart Box */}
-                        <div>
-                            <div style={{ display: 'flex', alignItems: 'center', marginBottom: '0.75rem' }}>
-                                <h3 style={{ fontSize: '0.85rem', fontWeight: '800', color: '#343C6A', textTransform: 'uppercase', letterSpacing: '0.5px', margin: 0 }}>Revenue Trend</h3>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginLeft: 'auto' }}>
-                                    <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#2D60FF', display: 'inline-block' }} />
-                                    <span style={{ fontSize: '0.68rem', fontWeight: '700', color: '#718EBF' }}>Total Inflow</span>
-                                </div>
-                            </div>
-                            <LineChart 
-                                data={chartData} 
-                                W={600} 
-                                H={260} 
-                                paddingLeft={60} 
-                                paddingRight={20} 
-                                paddingTop={30} 
-                                paddingBottom={40} 
-                                maxVal={maxVal} 
-                                cleanMax={cleanMax} 
-                                currency={state.settings.currency}
-                            />
-                        </div>
-
-                        {/* Bar Chart Box */}
-                        <div>
-                            <div style={{ display: 'flex', alignItems: 'center', marginBottom: '0.75rem' }}>
-                                <h3 style={{ fontSize: '0.85rem', fontWeight: '800', color: '#343C6A', textTransform: 'uppercase', letterSpacing: '0.5px', margin: 0 }}>Rent vs Deposit</h3>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginLeft: 'auto' }}>
-                                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.68rem', fontWeight: '700', color: '#718EBF' }}>
-                                        <span style={{ width: '8px', height: '8px', borderRadius: '3px', background: '#2D60FF', display: 'inline-block' }} /> Rent
-                                    </span>
-                                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.68rem', fontWeight: '700', color: '#718EBF' }}>
-                                        <span style={{ width: '8px', height: '8px', borderRadius: '3px', background: '#10B981', display: 'inline-block' }} /> Deposit
-                                    </span>
-                                </div>
-                            </div>
-                            <BarChart 
-                                data={chartData} 
-                                W={600} 
-                                H={260} 
-                                paddingLeft={60} 
-                                paddingRight={20} 
-                                paddingTop={30} 
-                                paddingBottom={40} 
-                                maxVal={maxVal} 
-                                cleanMax={cleanMax} 
-                                currency={state.settings.currency}
-                            />
-                        </div>
-                    </div>
-                )}
-            </div>
-
-            {/* ── Property Performance & Tenant Risk Grid ── */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '2rem', marginBottom: '2.5rem' }}>
+            {/* ── Innago Inspired Dashboard Layout ── */}
+            <div style={{ display: 'flex', flexDirection: 'row', gap: '1.5rem', flexWrap: 'wrap', marginTop: '1.5rem', alignItems: 'flex-start' }}>
                 
-                {/* Property Yield & Performance */}
-                <div className="stat-card animate-slide-in" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column' }}>
-                    <div style={{ marginBottom: '1.25rem' }}>
-                        <h2 style={{ color: '#343C6A', fontWeight: '800', fontSize: '1.1rem', margin: 0, fontFamily: 'Outfit' }}>Property Performance & Yield</h2>
-                        <p style={{ color: '#718EBF', fontSize: '0.75rem', margin: '4px 0 0', fontWeight: '500' }}>Expected vs. actual collections & occupancy rates</p>
-                    </div>
-
-                    <div style={{ flex: 1, overflowY: 'auto', maxHeight: '350px', paddingRight: '4px' }}>
-                        {propertyPerformance.length === 0 ? (
-                            <div style={{ padding: '2rem', textAlign: 'center', color: '#718EBF', fontSize: '0.8rem' }}>No properties found.</div>
-                        ) : (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-                                {propertyPerformance.map(prop => {
-                                    // Progress bar color based on collection pct
-                                    let barColor = '#41D433'; // green
-                                    if (prop.pct < 70) barColor = '#FF4B4A'; // red
-                                    else if (prop.pct < 90) barColor = '#FEAA09'; // yellow
-                                    
-                                    return (
-                                        <div key={prop.id} style={{ borderBottom: '1px solid #F5F7FA', paddingBottom: '1rem' }}>
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                                                <div>
-                                                    <span style={{ fontWeight: '700', color: '#343C6A', fontSize: '0.85rem' }}>{prop.name}</span>
-                                                    <span style={{ 
-                                                        marginLeft: '8px', 
-                                                        fontSize: '0.7rem', 
-                                                        fontWeight: '700', 
-                                                        padding: '2px 8px', 
-                                                        borderRadius: '20px',
-                                                        background: prop.occupancyRate >= 80 ? '#E6F4EA' : (prop.occupancyRate >= 50 ? '#FFF5D9' : '#FFE5E5'),
-                                                        color: prop.occupancyRate >= 80 ? '#10B981' : (prop.occupancyRate >= 50 ? '#FFBB38' : '#FF4B4A')
-                                                    }}>
-                                                        {prop.occupancyRate}% Occupied ({prop.occupiedUnits}/{prop.totalUnits})
-                                                    </span>
-                                                </div>
-                                                <div style={{ textAlign: 'right' }}>
-                                                    <span style={{ fontSize: '0.75rem', fontWeight: '800', color: '#343C6A' }}>
-                                                        {prop.actual.toLocaleString()} / {prop.expected.toLocaleString()} {state.settings.currency}
-                                                    </span>
-                                                </div>
-                                            </div>
-
-                                            {/* Custom comparison progress bar */}
-                                            <div style={{ width: '100%', height: '8px', borderRadius: '4px', background: '#F3F4F6', overflow: 'hidden', position: 'relative' }}>
-                                                <div style={{ 
-                                                    width: `${Math.min(100, prop.pct)}%`, 
-                                                    height: '100%', 
-                                                    background: barColor, 
-                                                    borderRadius: '4px',
-                                                    transition: 'width 0.5s ease-out'
-                                                }} />
-                                            </div>
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '4px', fontSize: '0.68rem', color: '#718EBF' }}>
-                                                <span>Yield Target: {prop.pct}%</span>
-                                                <span>{prop.expected > 0 ? 'Monthly Collections' : 'No active expected rent'}</span>
-                                            </div>
-                                        </div>
-                                    );
-                                })}
+                {/* LEFT COLUMN: Collection Card + Unsigned Documents & Applications Row */}
+                <div style={{ flex: '2 1 600px', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                    
+                    {/* Collection Card */}
+                    <div className="stat-card animate-slide-in" style={{ padding: '1.75rem', display: 'flex', flexDirection: 'column', height: 'auto', margin: 0 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem', borderBottom: '1px solid #E6EFF5', paddingBottom: '1rem' }}>
+                            <div>
+                                <h2 style={{ color: '#343C6A', fontWeight: '800', fontSize: '1.2rem', margin: 0, fontFamily: 'Outfit' }}>
+                                    Collection - {monthLabelShort}
+                                </h2>
+                                <p style={{ color: '#718EBF', fontSize: '0.72rem', margin: '4px 0 0', fontWeight: '500' }}>Monthly Rent collection summary and statuses</p>
                             </div>
-                        )}
-                    </div>
-                </div>
-
-                {/* Tenant Payment Performance & Risk Index */}
-                <div className="stat-card animate-slide-in" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column' }}>
-                    <div style={{ marginBottom: '1.25rem' }}>
-                        <h2 style={{ color: '#343C6A', fontWeight: '800', fontSize: '1.1rem', margin: 0, fontFamily: 'Outfit' }}>Tenant Risk & Reliability Index</h2>
-                        <p style={{ color: '#718EBF', fontSize: '0.75rem', margin: '4px 0 0', fontWeight: '500' }}>Active tenants ranked by risk & payment speeds</p>
-                    </div>
-
-                    <div style={{ flex: 1, overflowY: 'auto', maxHeight: '350px', paddingRight: '4px' }}>
-                        {activeTenantsRisk.length === 0 ? (
-                            <div style={{ padding: '2rem', textAlign: 'center', color: '#718EBF', fontSize: '0.8rem' }}>No active tenants.</div>
-                        ) : (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                                {activeTenantsRisk.map(item => {
-                                    // Risk badge colors
-                                    let badgeBg = '#E6F4EA';
-                                    let badgeColor = '#10B981';
-                                    if (item.riskLevel === 'High') {
-                                        badgeBg = '#FFE5E5';
-                                        badgeColor = '#FF4B4A';
-                                    } else if (item.riskLevel === 'Medium') {
-                                        badgeBg = '#FFF5D9';
-                                        badgeColor = '#FFBB38';
-                                    }
-
-                                    return (
-                                        <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', borderBottom: '1px solid #F5F7FA', paddingBottom: '0.75rem' }}>
-                                            <img src={`https://robohash.org/${encodeURIComponent(item.name)}?set=set4`} style={{ width: '32px', height: '32px', borderRadius: '50%', background: '#F5F7FA' }} alt="Avatar" />
-                                            <div style={{ flex: 1 }}>
-                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                    <span 
-                                                        className="clickable-tenant" 
-                                                        style={{ fontWeight: '700', color: '#343C6A', fontSize: '0.82rem', cursor: 'pointer' }}
-                                                        onClick={() => showTenantHistory(item.id)}
-                                                    >
-                                                        {item.name}
-                                                    </span>
-                                                    <span style={{ 
-                                                        fontSize: '0.65rem', 
-                                                        fontWeight: '800', 
-                                                        padding: '2px 8px', 
-                                                        borderRadius: '20px',
-                                                        background: badgeBg,
-                                                        color: badgeColor
-                                                    }}>
-                                                        {item.riskLevel} Risk
-                                                    </span>
-                                                </div>
-                                                <div style={{ fontSize: '0.7rem', color: '#718EBF', marginTop: '2px', display: 'flex', justifyContent: 'space-between' }}>
-                                                    <span>{item.propertyName} (Apt {item.unitNumber})</span>
-                                                    <span>On-time: <strong style={{ color: '#343C6A' }}>{item.onTimeRate}%</strong> | Late: <strong style={{ color: '#343C6A' }}>{item.avgDaysLate}d avg</strong></span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    );
-                                })}
+                            
+                            {/* Show By Dropdown */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <span style={{ fontSize: '0.72rem', fontWeight: '700', color: '#718EBF' }}>Show By:</span>
+                                <select 
+                                    value={selectedCollectionMonth} 
+                                    onChange={e => setSelectedCollectionMonth(e.target.value)}
+                                    style={{
+                                        padding: '0.4rem 0.75rem',
+                                        borderRadius: '8px',
+                                        border: '1px solid #E6EFF5',
+                                        fontSize: '0.75rem',
+                                        fontWeight: '700',
+                                        color: '#343C6A',
+                                        outline: 'none',
+                                        cursor: 'pointer',
+                                        fontFamily: 'Outfit, sans-serif',
+                                        background: '#fff'
+                                    }}
+                                >
+                                    {collectionMonthsList.map(m => (
+                                        <option key={m.val} value={m.val}>{m.label}</option>
+                                    ))}
+                                </select>
                             </div>
-                        )}
+                        </div>
+
+                        {/* Top half: Collected vs Outstanding */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '1.5rem 0', gap: '1rem', flexWrap: 'wrap' }}>
+                            {/* Outstanding info */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', flex: '1 1 200px', minWidth: '180px' }}>
+                                <div>
+                                    <div style={{ fontSize: '0.75rem', color: '#718EBF', fontWeight: '600' }}>Outstanding</div>
+                                    <div style={{ fontSize: '1.8rem', fontWeight: '900', color: '#FF4B4A', margin: '4px 0' }}>
+                                        {outstandingRent.toLocaleString()} {state.settings.currency}
+                                    </div>
+                                </div>
+                                <div style={{ textAlign: 'center' }}>
+                                    <div style={{ fontSize: '1.35rem', fontWeight: '900', color: '#FF4B4A', lineHeight: 1 }}>{unpaidPct}%</div>
+                                    <div style={{ fontSize: '0.6rem', color: '#FF4B4A', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.5px', marginTop: '2px' }}>UNPAID</div>
+                                </div>
+                            </div>
+                            
+                            {/* Donut chart */}
+                            <div style={{ display: 'flex', justifyContent: 'center', flexShrink: 0 }}>
+                                <div style={{ position: 'relative', width: '130px', height: '130px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                    <svg width="130" height="130" viewBox="0 0 120 120" style={{ transform: 'rotate(-90deg)' }}>
+                                        <circle cx="60" cy="60" r="45" fill="none" stroke="#FFE5E5" strokeWidth="9" />
+                                        <circle cx="60" cy="60" r="45" fill="none" stroke="#10B981" strokeWidth="9"
+                                            strokeDasharray={2 * Math.PI * 45}
+                                            strokeDashoffset={(2 * Math.PI * 45) * (1 - collectedPct / 100)}
+                                            strokeLinecap="round"
+                                        />
+                                    </svg>
+                                    <div style={{ position: 'absolute', textAlign: 'center', fontFamily: 'Outfit, sans-serif' }}>
+                                        <div style={{ fontSize: '0.85rem', fontWeight: '800', color: '#343C6A', lineHeight: 1.2 }}>{monthLabelShort}</div>
+                                        <div style={{ fontSize: '0.75rem', fontWeight: '700', color: '#718EBF', marginTop: '4px' }}>{selY}</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Collected info */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', flex: '1 1 200px', minWidth: '180px', justifyContent: 'flex-end' }}>
+                                <div style={{ textAlign: 'center' }}>
+                                    <div style={{ fontSize: '1.35rem', fontWeight: '900', color: '#10B981', lineHeight: 1 }}>{collectedPct}%</div>
+                                    <div style={{ fontSize: '0.6rem', color: '#10B981', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.5px', marginTop: '2px' }}>COLLECTED</div>
+                                </div>
+                                <div style={{ textAlign: 'right' }}>
+                                    <div style={{ fontSize: '0.75rem', color: '#718EBF', fontWeight: '600' }}>Collected</div>
+                                    <div style={{ fontSize: '1.8rem', fontWeight: '900', color: '#10B981', margin: '4px 0' }}>
+                                        {collectedRentInMonth.toLocaleString()} {state.settings.currency}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Paid vs Due row */}
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '2rem', borderTop: '1px solid #E6EFF5', paddingTop: '1.5rem', marginBottom: '1.5rem' }}>
+                            {/* Due units list */}
+                            <div style={{ borderRight: '1px solid #E6EFF5', paddingRight: '1rem' }}>
+                                <div style={{ fontSize: '0.75rem', color: '#718EBF', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>Units with Invoices Due</div>
+                                <div style={{ fontSize: '1.35rem', fontWeight: '800', color: '#343C6A' }}>
+                                    {invoicesDueCount} / {totalUnitsCount}
+                                </div>
+                                {/* Property avatars representing due units */}
+                                <div style={{ display: 'flex', gap: '8px', margin: '10px 0', flexWrap: 'wrap' }}>
+                                    {dueTenants.slice(0, 4).map((t, idx) => (
+                                        <div key={t.id || idx} title={t.name} style={{ width: '32px', height: '32px', borderRadius: '6px', background: '#FFE5E5', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid #FFCDCD' }}>
+                                            <Building size={14} style={{ color: '#FF4B4A' }} />
+                                        </div>
+                                    ))}
+                                    {invoicesDueCount === 0 && (
+                                        <div style={{ fontSize: '0.72rem', color: '#10B981', fontWeight: '700', padding: '6px 0', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                            <CheckCircle2 size={12} /> All invoices paid!
+                                        </div>
+                                    )}
+                                </div>
+                                <span style={{ fontSize: '0.72rem', color: '#2D60FF', fontWeight: '800', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '2px' }} onClick={() => navigate('/payments')}>
+                                    View All
+                                </span>
+                            </div>
+
+                            {/* Paid units list */}
+                            <div>
+                                <div style={{ fontSize: '0.75rem', color: '#718EBF', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>Units with Invoices Paid</div>
+                                <div style={{ fontSize: '1.35rem', fontWeight: '800', color: '#343C6A' }}>
+                                    {invoicesPaidCount} / {totalUnitsCount}
+                                </div>
+                                {/* Property avatars representing paid units */}
+                                <div style={{ display: 'flex', gap: '8px', margin: '10px 0', flexWrap: 'wrap' }}>
+                                    {paidTenants.slice(0, 4).map((t, idx) => (
+                                        <div key={t.id || idx} title={t.name} style={{ width: '32px', height: '32px', borderRadius: '6px', background: '#E6F4EA', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid #B7E4C7' }}>
+                                            <Building size={14} style={{ color: '#10B981' }} />
+                                        </div>
+                                    ))}
+                                    {invoicesPaidCount === 0 && (
+                                        <div style={{ fontSize: '0.72rem', color: '#718EBF', fontWeight: '600', padding: '6px 0' }}>No paid invoices this month.</div>
+                                    )}
+                                </div>
+                                <span style={{ fontSize: '0.72rem', color: '#2D60FF', fontWeight: '800', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '2px' }} onClick={() => navigate('/payments')}>
+                                    View All
+                                </span>
+                            </div>
+                        </div>
+
+                        {/* Bottom stats row */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #E6EFF5', paddingTop: '1.25rem', flexWrap: 'wrap', gap: '1rem' }}>
+                            <div>
+                                <span style={{ fontSize: '0.72rem', color: '#718EBF', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Processing: </span>
+                                <strong style={{ color: '#343C6A', fontSize: '0.88rem' }}>{processingRentInMonth.toLocaleString()} {state.settings.currency}</strong>
+                            </div>
+                            <div>
+                                <span style={{ fontSize: '0.72rem', color: '#718EBF', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total Expected: </span>
+                                <strong style={{ color: '#343C6A', fontSize: '0.88rem' }}>{expectedRentInMonth.toLocaleString()} {state.settings.currency}</strong>
+                            </div>
+                            <div>
+                                <span style={{ fontSize: '0.72rem', color: '#718EBF', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Past Outstanding: </span>
+                                <strong style={{ color: '#FFBB38', fontSize: '0.88rem' }}>{pastOutstanding.toLocaleString()} {state.settings.currency}</strong>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Inner two column row: Unsigned Documents & Applications */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.5rem' }}>
+                        
+                        {/* Unsigned Documents Card */}
+                        <div className="stat-card animate-slide-in" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', minHeight: '220px', margin: 0 }}>
+                            <h3 style={{ color: '#343C6A', fontWeight: '800', fontSize: '0.95rem', margin: '0 0 1rem 0', display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid #F5F7FA', paddingBottom: '0.75rem', fontFamily: 'Outfit' }}>
+                                <FileText size={16} style={{ color: '#718EBF' }} /> UNSIGNED DOCUMENTS
+                            </h3>
+                            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#718EBF', padding: '1rem' }}>
+                                <ClipboardList size={38} style={{ strokeWidth: 1.5, color: '#B1B1B1', marginBottom: '8px' }} />
+                                <span style={{ fontSize: '0.78rem', fontWeight: '700', color: '#718EBF' }}>No Records Found</span>
+                            </div>
+                        </div>
+
+                        {/* Applications Processing Card */}
+                        <div className="stat-card animate-slide-in" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', minHeight: '220px', margin: 0 }}>
+                            <h3 style={{ color: '#343C6A', fontWeight: '800', fontSize: '0.95rem', margin: '0 0 1rem 0', display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid #F5F7FA', paddingBottom: '0.75rem', fontFamily: 'Outfit' }}>
+                                <Users size={16} style={{ color: '#718EBF' }} /> APPLICATIONS PROCESSING
+                            </h3>
+                            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#718EBF', padding: '1rem' }}>
+                                <Users size={38} style={{ strokeWidth: 1.5, color: '#B1B1B1', marginBottom: '8px' }} />
+                                <span style={{ fontSize: '0.78rem', fontWeight: '700', color: '#718EBF' }}>No Records Found</span>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
+                {/* RIGHT COLUMN: Actions Row + Occupancy Stats + Open Maintenance Requests */}
+                <div style={{ flex: '1 1 300px', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                    
+                    {/* Action buttons */}
+                    <div style={{ display: 'flex', gap: '10px', width: '100%' }}>
+                        <button 
+                            onClick={() => navigate('/payments')} 
+                            style={{
+                                flex: 1,
+                                padding: '0.7rem 0.5rem',
+                                background: '#2D60FF',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '10px',
+                                fontWeight: '700',
+                                fontSize: '0.78rem',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '6px',
+                                boxShadow: '0 4px 10px rgba(45, 96, 255, 0.15)'
+                            }}
+                        >
+                            <DollarSign size={14} /> Record Payment
+                        </button>
+                        <button 
+                            onClick={() => navigate('/tenants')} 
+                            style={{
+                                flex: 1,
+                                padding: '0.7rem 0.5rem',
+                                background: '#10B981',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '10px',
+                                fontWeight: '700',
+                                fontSize: '0.78rem',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '6px',
+                                boxShadow: '0 4px 10px rgba(16, 185, 129, 0.15)'
+                            }}
+                        >
+                            <PlusCircle size={14} /> Add Tenant
+                        </button>
+                    </div>
+
+                    {/* Occupancy Statistics Card */}
+                    <div className="stat-card animate-slide-in" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', margin: 0 }}>
+                        <h3 style={{ color: '#343C6A', fontWeight: '800', fontSize: '0.95rem', margin: '0 0 1.25rem 0', borderBottom: '1px solid #F5F7FA', paddingBottom: '0.75rem', fontFamily: 'Outfit' }}>OCCUPANCY STATISTICS</h3>
+                        
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem' }}>
+                            {/* Values */}
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                <div>
+                                    <span style={{ fontSize: '1.6rem', fontWeight: '900', color: '#FF4B4A', display: 'block', lineHeight: 1 }}>{vacantUnitsCount}</span>
+                                    <span style={{ fontSize: '0.7rem', color: '#718EBF', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Vacant Units</span>
+                                </div>
+                                <div>
+                                    <span style={{ fontSize: '1.6rem', fontWeight: '900', color: '#10B981', display: 'block', lineHeight: 1 }}>{occupiedUnitsCount}</span>
+                                    <span style={{ fontSize: '0.7rem', color: '#718EBF', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Occupied Units</span>
+                                </div>
+                            </div>
+
+                            {/* Donut graphic */}
+                            <div style={{ position: 'relative', width: '90px', height: '90px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                <svg width="90" height="90" viewBox="0 0 100 100" style={{ transform: 'rotate(-90deg)' }}>
+                                    <circle cx="50" cy="50" r="38" fill="none" stroke="#FFE5E5" strokeWidth="8" />
+                                    <circle cx="50" cy="50" r="38" fill="none" stroke="#10B981" strokeWidth="8"
+                                        strokeDasharray={2 * Math.PI * 38}
+                                        strokeDashoffset={(2 * Math.PI * 38) * (1 - occupancyPct / 100)}
+                                        strokeLinecap="round"
+                                    />
+                                </svg>
+                                <div style={{ position: 'absolute', textAlign: 'center', fontFamily: 'Outfit, sans-serif' }}>
+                                    <div style={{ fontSize: '1.2rem', fontWeight: '900', color: '#343C6A', lineHeight: 1 }}>{totalUnitsCount}</div>
+                                    <div style={{ fontSize: '0.55rem', color: '#718EBF', fontWeight: '700', textTransform: 'uppercase', marginTop: '2px' }}>Total</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Open Maintenance Requests Card */}
+                    <div className="stat-card animate-slide-in" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', margin: 0 }}>
+                        <h3 style={{ color: '#343C6A', fontWeight: '800', fontSize: '0.95rem', margin: '0 0 1.25rem 0', borderBottom: '1px solid #F5F7FA', paddingBottom: '0.75rem', fontFamily: 'Outfit' }}>OPEN MAINTENANCE REQUESTS</h3>
+                        
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '1.25rem' }}>
+                            <div style={{ background: '#E6F7F8', border: '1px solid #B3EBF2', borderRadius: '8px', padding: '8px', textAlign: 'center' }}>
+                                <span style={{ fontSize: '1.35rem', fontWeight: '900', color: '#00ACC1', display: 'block', lineHeight: 1 }}>1</span>
+                                <span style={{ fontSize: '0.65rem', color: '#00838F', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.2px' }}>New Request</span>
+                            </div>
+                            <div style={{ background: '#FFE5E5', border: '1px solid #FFCDCD', borderRadius: '8px', padding: '8px', textAlign: 'center' }}>
+                                <span style={{ fontSize: '1.35rem', fontWeight: '900', color: '#FF4B4A', display: 'block', lineHeight: 1 }}>1</span>
+                                <span style={{ fontSize: '0.65rem', color: '#B71C1C', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.2px' }}>Urgent</span>
+                            </div>
+                        </div>
+
+                        {/* Request categories vertical bars */}
+                        <div>
+                            <span style={{ fontSize: '0.7rem', color: '#718EBF', fontWeight: '700', display: 'block', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>By Category</span>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                <div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.68rem', fontWeight: '700', color: '#343C6A', marginBottom: '2px' }}>
+                                        <span>Plumbing</span>
+                                        <span>1</span>
+                                    </div>
+                                    <div style={{ height: '6px', background: '#F5F7FA', borderRadius: '3px', overflow: 'hidden' }}>
+                                        <div style={{ width: '50%', height: '100%', background: '#FFBB38', borderRadius: '3px' }} />
+                                    </div>
+                                </div>
+                                <div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.68rem', fontWeight: '700', color: '#343C6A', marginBottom: '2px' }}>
+                                        <span>Appliances</span>
+                                        <span>1</span>
+                                    </div>
+                                    <div style={{ height: '6px', background: '#F5F7FA', borderRadius: '3px', overflow: 'hidden' }}>
+                                        <div style={{ width: '50%', height: '100%', background: '#FFBB38', borderRadius: '3px' }} />
+                                    </div>
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.65rem', color: '#718EBF', fontWeight: '600' }}>
+                                    <span>Other Categories</span>
+                                    <span>0</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
-
-            {/* ── Future Cash Flow Forecasting ── */}
-            <div className="stat-card animate-slide-in" style={{ padding: '1.5rem', marginBottom: '2.5rem', display: 'block', height: 'auto' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
-                    <div>
-                        <h2 style={{ color: '#343C6A', fontWeight: '800', fontSize: '1.15rem', margin: 0, fontFamily: 'Outfit' }}>Future Cash Flow Forecasting</h2>
-                        <p style={{ color: '#718EBF', fontSize: '0.75rem', margin: '4px 0 0', fontWeight: '500' }}>
-                            6-Month trajectory: Transitioning from Actual Revenue (past 3 months) to Contract-Based Projections (next 3 months) adjusted by historical collection rate (<strong style={{ color: '#2D60FF' }}>{Math.round(collectionRate * 100)}%</strong>)
-                        </p>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.68rem', fontWeight: '700', color: '#718EBF' }}>
-                            <span style={{ width: '12px', height: '3px', background: '#2D60FF', display: 'inline-block' }} /> Actual Cash Inflow
-                        </span>
-                        <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.68rem', fontWeight: '700', color: '#718EBF' }}>
-                            <span style={{ width: '12px', height: '3px', borderTop: '3px dashed #FFBB38', display: 'inline-block' }} /> Projected Collections
-                        </span>
-                    </div>
-                </div>
-
-                <div style={{ marginTop: '1rem' }}>
-                    <ForecastChart 
-                        data={forecastTimeline} 
-                        W={600} 
-                        H={240} 
-                        paddingLeft={60} 
-                        paddingRight={20} 
-                        paddingTop={30} 
-                        paddingBottom={40} 
-                        currency={state.settings.currency}
-                    />
-                </div>
-            </div>
-
-
         </div>
     );
 };
