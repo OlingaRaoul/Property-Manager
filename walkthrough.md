@@ -14,7 +14,8 @@ We have successfully redesigned the property manager dashboard, replacing the pr
 * **Due vs. Paid Units**: 
   * Displays counts of "Units with Invoices Due" and "Units with Invoices Paid" against the total portfolio count.
   * Shows visual building avatars representing the tenants in each category.
-  * Includes a **View All** link redirecting directly to the payments ledger.
+  * Clicking **View All** on the **Units with Invoices Due** card opens a custom modal displaying a table with: `tenant name`, `property`, `room number`, `last payment date`, and the `list of months unpaid` (rendered as red pills, e.g., Jan, Feb, etc.).
+  * Clicking **View All** on the **Units with Invoices Paid** card navigates to the payments registry.
 * **Collections Footer**: Displays the pending processing rent amount, total expected rent in the month, and a calculation of past outstanding debt.
 
 ### 2. 🗂️ Documents & Applications Cards
