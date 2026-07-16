@@ -1,20 +1,23 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Building2, Mail, Lock, Loader2, ArrowRight } from 'lucide-react';
 
 const Login = () => {
     const { login, loginWithGoogle } = useAuth();
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
 
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
+    const [timeoutMessage, setTimeoutMessage] = useState('');
 
     const handleGoogleCredentialResponse = async (response) => {
         setLoading(true);
         setError('');
+        setTimeoutMessage('');
         try {
             await loginWithGoogle(response.credential);
             navigate('/');
@@ -24,6 +27,12 @@ const Login = () => {
             setLoading(false);
         }
     };
+
+    useEffect(() => {
+        if (searchParams.get('reason') === 'timeout') {
+            setTimeoutMessage('Your session has timed out due to inactivity. Please sign in again.');
+        }
+    }, [searchParams]);
 
     useEffect(() => {
         const initGoogle = () => {
@@ -57,6 +66,7 @@ const Login = () => {
         }
         setLoading(true);
         setError('');
+        setTimeoutMessage('');
         try {
             await login(email.trim(), password.trim());
             navigate('/');
@@ -112,6 +122,22 @@ const Login = () => {
                     <h2 style={{ fontSize: '1.8rem', fontWeight: '800', letterSpacing: '-0.5px', marginBottom: '0.4rem', fontFamily: 'Sora' }}>Property Manager</h2>
                     <p style={{ color: '#94A3B8', fontSize: '0.88rem', fontWeight: '500' }}>Sign in to manage your premium portfolio</p>
                 </div>
+
+                {timeoutMessage && !error && (
+                    <div style={{
+                        background: 'rgba(245, 158, 11, 0.1)',
+                        border: '1px solid rgba(245, 158, 11, 0.25)',
+                        color: '#FDE047',
+                        padding: '0.85rem 1.1rem',
+                        borderRadius: '12px',
+                        fontSize: '0.85rem',
+                        fontWeight: '600',
+                        marginBottom: '1.5rem',
+                        textAlign: 'center'
+                    }}>
+                        {timeoutMessage}
+                    </div>
+                )}
 
                 {error && (
                     <div style={{
