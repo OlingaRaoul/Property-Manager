@@ -18,7 +18,7 @@ services:
       - "3000:3000"
     environment:
       - PORT=3000
-      - MONGODB_URI=mongodb://mongodb:27017/property_manager
+      - MONGODB_URI=${MONGODB_URI:-mongodb://mongodb:27017/property_manager}
       - JWT_SECRET=pm_super_secret_key_production_2026
     depends_on:
       - mongodb

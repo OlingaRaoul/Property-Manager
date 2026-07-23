@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAppState } from '../context/StateContext';
 import { useNavigate } from 'react-router-dom';
-import { Users, Building, Wallet, AlertCircle, Shield, FileText, ClipboardList, PlusCircle, DollarSign, CheckCircle2, X } from 'lucide-react';
+import { Users, Building, Wallet, AlertCircle, Shield, FileText, ClipboardList, PlusCircle, DollarSign, CheckCircle2, X, Printer } from 'lucide-react';
 import { getMonthsDifference, formatMonth } from '../utils';
 
 const StatCard = ({ title, value, icon: Icon, colorClass, bgClass, subtext }) => {
@@ -398,6 +398,29 @@ const ForecastChart = ({ data, W, H, paddingLeft, paddingRight, paddingTop, padd
     );
 };
 
+const getNextMonth = (monthStr) => {
+    if (!monthStr || !monthStr.includes('-')) {
+        const today = new Date();
+        return today.toISOString().slice(0, 7);
+    }
+    const [y, m] = monthStr.split('-').map(Number);
+    let nextY = y;
+    let nextM = m + 1;
+    if (nextM > 12) {
+        nextM = 1;
+        nextY += 1;
+    }
+    return `${nextY}-${String(nextM).padStart(2, '0')}`;
+};
+
+const getDueDateForMonth = (dueDateDay, monthStr) => {
+    if (!monthStr || !monthStr.includes('-')) return '';
+    const [y, m] = monthStr.split('-').map(Number);
+    const daysInMonth = new Date(y, m, 0).getDate();
+    const cappedDay = Math.min(dueDateDay || 1, daysInMonth);
+    return `${monthStr}-${String(cappedDay).padStart(2, '0')}`;
+};
+
 const Dashboard = () => {
     const { state, loading } = useAppState();
     const navigate = useNavigate();
@@ -435,6 +458,231 @@ const Dashboard = () => {
             setSelectedReportPropertyId(state.properties[0].id);
         }
     }, [state.properties, selectedReportPropertyId]);
+
+    const printTenantStatement = (tenantObj) => {
+        const lang = state.settings.lang || 'en';
+        const currentMonthStr = new Date().toISOString().slice(0, 7); // YYYY-MM
+        const apartment = state.apartments.find(a => String(a.id) === String(tenantObj.apartmentId));
+        const property  = apartment ? state.properties.find(p => String(p.id) === String(apartment.propertyId)) : null;
+        
+        const propName = property ? property.name : (lang === 'fr' ? 'Non assigné' : 'Unassigned');
+        const unitNumber = apartment ? apartment.unitNumber : (lang === 'fr' ? 'Aucune' : 'None');
+        const currency = state.settings.currency || '$';
+        const signature = state.settings.signature;
+
+        // 1. Date of Last Payment
+        const tenantPayments = state.payments.filter(p => String(p.tenantId) === String(tenantObj.id));
+        const sortedPayments = [...tenantPayments].sort((a, b) => b.date.localeCompare(a.date));
+        const lastPaymentDate = sortedPayments.length > 0 ? sortedPayments[0].date : (lang === 'fr' ? 'Aucun paiement' : 'No payments');
+
+        // 2. Agreed contract/due date
+        const tenantContract = state.contracts ? state.contracts.find(c => String(c.tenantId) === String(tenantObj.id) && c.active !== false) : null;
+        
+        // Unpaid months calculation
+        const startMonth = tenantObj.lastPaidMonth 
+            ? getNextMonth(tenantObj.lastPaidMonth) 
+            : (tenantContract ? tenantContract.startDate.slice(0, 7) : currentMonthStr);
+        
+        const unpaidMonthsList = [];
+        let tempMonth = startMonth;
+        while (tempMonth <= currentMonthStr) {
+            unpaidMonthsList.push(tempMonth);
+            tempMonth = getNextMonth(tempMonth);
+        }
+
+        const overdueMonths = unpaidMonthsList.length;
+
+        // 3. Deposit logic
+        const depositMonthsPaid = tenantObj.depositMonthsPaid || 0;
+        const depositMonthsRequired = tenantObj.depositMonths || 0;
+        const rentAmount = tenantObj.rentAmount || 0;
+        const depositHeldAmount = depositMonthsPaid * rentAmount;
+
+        const depositUsed = Math.min(overdueMonths, depositMonthsPaid);
+        const netOverdueMonths = Math.max(0, overdueMonths - depositUsed);
+        const rentOutstandingAmount = netOverdueMonths * rentAmount;
+        const depositMonthsLeft = Math.max(0, depositMonthsPaid - overdueMonths);
+        const isUsingDeposit = depositUsed > 0;
+
+        // Generate rows for the periods
+        const breakdownRows = unpaidMonthsList.map((m, idx) => {
+            const dueDate = getDueDateForMonth(tenantObj.dueDateDay, m);
+            // Check if this month is covered by deposit
+            const isCovered = idx < depositUsed;
+            const amountText = isCovered 
+                ? (lang === 'fr' ? 'Couvert par dépôt' : 'Covered by Deposit') 
+                : `${rentAmount.toLocaleString()} ${currency}`;
+            const amountStyle = isCovered ? 'color: #166534; font-style: italic; font-weight: 500;' : 'color: #ef4444; font-weight: 700;';
+
+            return `
+                <tr>
+                    <td>${formatMonth(m, lang)}</td>
+                    <td>${dueDate || '—'}</td>
+                    <td style="${amountStyle}">${amountText}</td>
+                </tr>
+            `;
+        }).join('');
+
+        const statementDate = new Date().toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
+
+        const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Statement - ${tenantObj.name}</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: Arial, sans-serif; color: #1a1a2e; background: white; }
+    .page { padding: 0.8cm; max-width: 14cm; margin: 0 auto; }
+    .header { display: flex; justify-content: space-between; align-items: flex-start;
+              border-bottom: 2px solid #2D60FF; padding-bottom: 10px; margin-bottom: 12px; }
+    .title { font-size: 20px; font-weight: 900; color: #2D60FF; letter-spacing: -0.5px; }
+    .subtitle { font-size: 10px; color: #718EBF; margin-top: 2px; font-weight: 600;
+                text-transform: uppercase; letter-spacing: 0.5px; }
+    .receipt-no-label { font-size: 10px; color: #718EBF; font-weight: 600; text-align: right; }
+    .receipt-no { font-size: 13px; font-weight: 800; text-align: right; }
+    .date { font-size: 9px; color: #718EBF; text-align: right; margin-top: 2px; }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px; }
+    .info-box { background: #F5F7FA; border-radius: 10px; padding: 8px 12px; }
+    .info-label { font-size: 8px; color: #718EBF; font-weight: 700; text-transform: uppercase;
+                  letter-spacing: 0.5px; margin-bottom: 3px; }
+    .info-name { font-size: 13px; font-weight: 800; }
+    .info-sub { font-size: 10px; color: #718EBF; margin-top: 2px; }
+    .info-unit { font-size: 11px; font-weight: 700; color: #2D60FF; margin-top: 2px; }
+    
+    .summary-card { background: #FFFBEB; border: 1px solid #FEF3C7; border-radius: 12px; padding: 12px 14px; margin-bottom: 14px; }
+    .summary-title { font-size: 10px; color: #B45309; font-weight: 700; text-transform: uppercase; margin-bottom: 6px; }
+    .summary-grid { display: flex; justify-content: space-between; }
+    .summary-val { font-size: 15px; font-weight: 800; color: #78350F; }
+
+    table { width: 100%; border-collapse: collapse; margin-bottom: 12px; font-size: 11px; }
+    thead tr { background: #2D60FF; color: white; }
+    th { padding: 6px 8px; text-align: left; font-weight: 700; }
+    th:last-child { text-align: right; }
+    td { padding: 8px; border-bottom: 1px solid #E6EFF5; }
+    td:last-child { text-align: right; }
+    
+    .deposit-section { margin-top: 10px; margin-bottom: 10px; background: #F5F7FA; border-radius: 12px; padding: 10px 12px; border: 1px solid #E6EFF5; }
+    .deposit-title { font-size: 10px; color: #718EBF; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; text-align: left; }
+    .deposit-grid { display: flex; justify-content: space-between; gap: 15px; text-align: left; }
+    .deposit-val { font-size: 11px; font-weight: 800; color: #343C6A; display: block; margin-top: 1px; }
+
+    .footer { border-top: 1px dashed #E6EFF5; padding-top: 8px;
+              display: flex; justify-content: space-between; align-items: center; }
+    .footer-note { font-size: 10px; color: #B1B1B1; }
+    .footer-status { font-size: 10px; color: #EF4444; font-weight: 700; text-transform: uppercase; }
+    @media print { @page { margin: 0.6cm; size: A5 portrait; } }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="header">
+      <div>
+        <div class="title">STATEMENT OF ARREARS</div>
+        <div class="subtitle">Outstanding Rent & Coverage</div>
+      </div>
+      <div>
+        <div class="receipt-no-label">Statement Date</div>
+        <div class="receipt-no" style="font-size: 11px;">${statementDate}</div>
+      </div>
+    </div>
+
+    <div class="grid2">
+      <div class="info-box">
+        <div class="info-label">Tenant Details</div>
+        <div class="info-name">${tenantObj.name}</div>
+        ${tenantObj.phone ? `<div class="info-sub">&#128222; ${tenantObj.phone}</div>` : ''}
+        ${tenantObj.email ? `<div class="info-sub">&#9993; ${tenantObj.email}</div>` : ''}
+      </div>
+      <div class="info-box">
+        <div class="info-label">Property / Unit</div>
+        <div class="info-name">${propName}</div>
+        <div class="info-unit">Unit: ${unitNumber}</div>
+      </div>
+    </div>
+
+    <div class="summary-card">
+      <div class="summary-title">Arrears Overview</div>
+      <div class="summary-grid">
+        <div>
+          <span style="font-size: 8px; color: #B45309; text-transform: uppercase; display: block; font-weight: 600;">Months Overdue</span>
+          <span class="summary-val">${overdueMonths} Month${overdueMonths !== 1 ? 's' : ''}</span>
+        </div>
+        <div>
+          <span style="font-size: 8px; color: #B45309; text-transform: uppercase; display: block; font-weight: 600;">Last Payment Date</span>
+          <span class="summary-val" style="color: #343C6A; font-size: 13px;">${lastPaymentDate}</span>
+        </div>
+        <div style="text-align: right;">
+          <span style="font-size: 8px; color: #B45309; text-transform: uppercase; display: block; font-weight: 600;">Rent Outstanding</span>
+          <span class="summary-val" style="color: #EF4444;">${rentOutstandingAmount.toLocaleString()} ${currency}</span>
+        </div>
+      </div>
+    </div>
+
+    <div style="font-size: 10px; color: #718EBF; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; text-align: left;">Breakdown of Due Periods</div>
+    <table>
+      <thead>
+        <tr>
+          <th>Due Period</th>
+          <th>Due Date</th>
+          <th>Amount</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${breakdownRows}
+      </tbody>
+    </table>
+
+    <div class="deposit-section" style="${isUsingDeposit ? 'background: #FFFBEB; border-color: #FEF3C7;' : ''}">
+      <div class="deposit-title" style="${isUsingDeposit ? 'color: #B45309;' : ''}">Security Deposit Status</div>
+      <div class="deposit-grid">
+        <div style="flex: 1;">
+          <span style="font-size: 8px; color: #718EBF; text-transform: uppercase; display: block; font-weight: 600;">Total Held</span>
+          <span class="deposit-val" style="${isUsingDeposit ? 'color: #78350F;' : ''}">${depositMonthsPaid} / ${depositMonthsRequired} Months</span>
+          <span style="font-size: 8px; color: #718EBF; display: block; margin-top: 0px;">(${depositHeldAmount.toLocaleString()} ${currency})</span>
+        </div>
+        <div style="flex: 1; border-left: 1px solid #E6EFF5; padding-left: 15px;">
+          <span style="font-size: 8px; color: #718EBF; text-transform: uppercase; display: block; font-weight: 600;">Used Coverage</span>
+          <span class="deposit-val" style="color: ${isUsingDeposit ? '#D97706' : '#343C6A'}">${depositUsed} Month${depositUsed !== 1 ? 's' : ''}</span>
+        </div>
+        <div style="flex: 1; border-left: 1px solid #E6EFF5; padding-left: 15px;">
+          <span style="font-size: 8px; color: #718EBF; text-transform: uppercase; display: block; font-weight: 600;">Remaining Balance</span>
+          <span class="deposit-val" style="color: ${depositMonthsLeft > 0 ? '#10B981' : '#EF4444'}">${depositMonthsLeft} Month${depositMonthsLeft !== 1 ? 's' : ''}</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="signatures-row" style="display: flex; justify-content: space-between; align-items: flex-end; margin-top: 25px; margin-bottom: 15px;">
+      ${signature ? `
+        <div class="signature-container" style="text-align: left;">
+          <img src="${signature}" style="max-height: 40px; max-width: 150px; display: block; margin-bottom: 2px;" alt="Owner Signature" />
+          <div style="font-size: 8px; color: #718EBF; text-transform: uppercase; border-top: 1px solid #E6EFF5; display: inline-block; width: 120px; padding-top: 2px; font-weight: bold;">Property Owner Signature</div>
+        </div>
+      ` : `
+        <div class="signature-container" style="text-align: left; padding-top: 25px;">
+          <div style="font-size: 8px; color: #718EBF; text-transform: uppercase; border-top: 1px dashed #B1B1B1; display: inline-block; width: 120px; padding-top: 2px; font-weight: bold;">Property Owner Signature</div>
+        </div>
+      `}
+      <div class="signature-container" style="text-align: right; padding-top: 25px;">
+        <div style="font-size: 8px; color: #718EBF; text-transform: uppercase; border-top: 1px dashed #B1B1B1; display: inline-block; width: 120px; padding-top: 2px; font-weight: bold;">Tenant Signature</div>
+      </div>
+    </div>
+
+    <div class="footer" style="margin-top: 15px;">
+      <div class="footer-note">Generated automatically by Property Manager Suite</div>
+      <div class="footer-status" style="color: ${rentOutstandingAmount > 0 ? '#EF4444' : '#10B981'};">
+        ${rentOutstandingAmount > 0 ? '⚠️ PAYMENT REQUIRED' : '✓ COVERED BY DEPOSIT'}
+      </div>
+    </div>
+  </div>
+  <script>window.onload = function() { window.print(); window.onafterprint = function() { window.close(); }; }</script>
+</body>
+</html>`;
+
+        const win = window.open('', '_blank', 'width=600,height=800');
+        if (win) { win.document.write(html); win.document.close(); }
+        else { alert('Please allow pop-ups for this site to print statements.'); }
+    };
 
     // Helper to get all months between two dates (inclusive)
     const getMonthsInRange = (start, end) => {
@@ -1508,6 +1756,7 @@ const Dashboard = () => {
                                                 <th style={{ textAlign: 'left', padding: '10px 12px', background: '#F5F7FA', color: '#718EBF', fontSize: '0.75rem', fontWeight: '700', borderBottom: '2px solid #E6EFF5' }}>Room Number</th>
                                                 <th style={{ textAlign: 'left', padding: '10px 12px', background: '#F5F7FA', color: '#718EBF', fontSize: '0.75rem', fontWeight: '700', borderBottom: '2px solid #E6EFF5' }}>Last Payment Date</th>
                                                 <th style={{ textAlign: 'left', padding: '10px 12px', background: '#F5F7FA', color: '#718EBF', fontSize: '0.75rem', fontWeight: '700', borderBottom: '2px solid #E6EFF5' }}>Months Unpaid</th>
+                                                <th style={{ textAlign: 'center', padding: '10px 12px', background: '#F5F7FA', color: '#718EBF', fontSize: '0.75rem', fontWeight: '700', borderBottom: '2px solid #E6EFF5' }}>Action</th>
                                             </tr>
                                         </thead>
                                         <tbody>
@@ -1533,6 +1782,28 @@ const Dashboard = () => {
                                                                 </span>
                                                             ))}
                                                         </div>
+                                                    </td>
+                                                    <td style={{ padding: '12px', textAlign: 'center' }}>
+                                                        <button
+                                                            onClick={() => printTenantStatement(item.tenant)}
+                                                            title="Print Statement of Arrears"
+                                                            style={{
+                                                                background: '#E7EDFF',
+                                                                border: 'none',
+                                                                borderRadius: '8px',
+                                                                padding: '6px 10px',
+                                                                color: '#2D60FF',
+                                                                cursor: 'pointer',
+                                                                display: 'inline-flex',
+                                                                alignItems: 'center',
+                                                                justifyContent: 'center',
+                                                                transition: 'background 0.2s',
+                                                            }}
+                                                            onMouseEnter={(e) => e.currentTarget.style.background = '#D2E0FF'}
+                                                            onMouseLeave={(e) => e.currentTarget.style.background = '#E7EDFF'}
+                                                        >
+                                                            <Printer size={15} />
+                                                        </button>
                                                     </td>
                                                 </tr>
                                             ))}
