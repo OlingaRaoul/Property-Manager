@@ -286,11 +286,11 @@ const Tenants = () => {
         const rentAmount = tenantObj.rentAmount || 0;
         const depositHeldAmount = depositMonthsPaid * rentAmount;
 
-        const depositUsed = Math.min(overdueMonths, depositMonthsPaid);
-        const netOverdueMonths = Math.max(0, overdueMonths - depositUsed);
-        const rentOutstandingAmount = netOverdueMonths * rentAmount;
-        const depositMonthsLeft = Math.max(0, depositMonthsPaid - overdueMonths);
-        const isUsingDeposit = depositUsed > 0;
+        const depositUsed = 0;
+        const netOverdueMonths = overdueMonths;
+        const rentOutstandingAmount = overdueMonths * rentAmount;
+        const depositMonthsLeft = depositMonthsPaid;
+        const isUsingDeposit = false;
 
         // Generate rows for the periods
         const breakdownRows = unpaidMonthsList.map((m, idx) => {

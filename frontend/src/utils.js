@@ -158,28 +158,12 @@ export function calculateRentStatus(tenant, settings) {
         overdueMonths = 1;
     }
     
-    // Check if covered by deposit
-    const depositPaidMonths = tenant.depositMonthsPaid || 0;
-    
     if (overdueMonths > 0) {
-        if (overdueMonths <= depositPaidMonths) {
-            // Using deposit
-            const remaining = depositPaidMonths - overdueMonths;
-            return {
-                status: lang === 'fr' ? 'Dépôt utilisé' : 'Using Deposit',
-                class: 'due',
-                color: '#D97706', // Amber 600
-                message: lang === 'fr' ? `Dépôt utilisé (${remaining} mois restants)` : `Using deposit (${remaining} months left)`
-            };
-        } else {
-            // Overdue
-            const netOverdue = overdueMonths - depositPaidMonths;
-            return {
-                status: t('overdue', lang),
-                class: 'overdue',
-                message: lang === 'fr' ? `En retard (${netOverdue} mois impayés)` : `Overdue (${netOverdue} month(s) unpaid)`
-            };
-        }
+        return {
+            status: t('overdue', lang),
+            class: 'overdue',
+            message: lang === 'fr' ? `En retard (${overdueMonths} mois impayés)` : `Overdue (${overdueMonths} month(s) unpaid)`
+        };
     }
     
     // If within threshold before due date for the upcoming month

@@ -498,11 +498,11 @@ const Dashboard = () => {
         const rentAmount = tenantObj.rentAmount || 0;
         const depositHeldAmount = depositMonthsPaid * rentAmount;
 
-        const depositUsed = Math.min(overdueMonths, depositMonthsPaid);
-        const netOverdueMonths = Math.max(0, overdueMonths - depositUsed);
-        const rentOutstandingAmount = netOverdueMonths * rentAmount;
-        const depositMonthsLeft = Math.max(0, depositMonthsPaid - overdueMonths);
-        const isUsingDeposit = depositUsed > 0;
+        const depositUsed = 0;
+        const netOverdueMonths = overdueMonths;
+        const rentOutstandingAmount = overdueMonths * rentAmount;
+        const depositMonthsLeft = depositMonthsPaid;
+        const isUsingDeposit = false;
 
         // Generate rows for the periods
         const breakdownRows = unpaidMonthsList.map((m, idx) => {
@@ -699,15 +699,15 @@ const Dashboard = () => {
         const tableRowsHtml = unpaidTenantsList.map(item => {
             const overdueMonths = item.unpaidMonths.length;
             const depositMonthsPaid = item.tenant.depositMonthsPaid || 0;
-            const depositUsed = Math.min(overdueMonths, depositMonthsPaid);
-            const netOverdueMonths = Math.max(0, overdueMonths - depositUsed);
-            const rentOutstandingAmount = netOverdueMonths * (item.tenant.rentAmount || 0);
+            const depositUsed = 0;
+            const netOverdueMonths = overdueMonths;
+            const rentOutstandingAmount = overdueMonths * (item.tenant.rentAmount || 0);
 
             totalOutstanding += rentOutstandingAmount;
 
             // Formatted unpaid months string
             const unpaidMonthsFormatted = item.unpaidMonths.map((m, idx) => {
-                const isCovered = idx < depositUsed;
+                const isCovered = false;
                 const monthName = formatMonth(m, lang);
                 return isCovered 
                     ? `<span style="background: #F0FDF4; color: #166534; border: 1px solid #DCFCE7; padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: bold; margin-right: 4px; display: inline-block;">${monthName} (Deposit)</span>`
@@ -995,12 +995,9 @@ const Dashboard = () => {
             overdueMonths = 1;
         }
 
-        const depositPaidMonths = tenant.depositMonthsPaid || 0;
-
-        if (overdueMonths > depositPaidMonths) {
+        if (overdueMonths > 0) {
             overdueCount++;
-            const netOverdue = overdueMonths - depositPaidMonths;
-            totalDue += netOverdue * (tenant.rentAmount || 0);
+            totalDue += overdueMonths * (tenant.rentAmount || 0);
         }
     });
 
