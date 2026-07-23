@@ -633,6 +633,16 @@ const Dashboard = () => {
       </tbody>
     </table>
 
+    <div class="deposit-section" style="${isUsingDeposit ? 'background: #FFFBEB; border-color: #FEF3C7;' : ''}">
+      <div class="deposit-title" style="${isUsingDeposit ? 'color: #B45309;' : ''}">Security Deposit Status</div>
+      <div class="deposit-grid" style="display: flex; justify-content: flex-start; align-items: center;">
+        <div style="flex: 1;">
+          <span style="font-size: 8px; color: #718EBF; text-transform: uppercase; display: block; font-weight: 600;">Total Held</span>
+          <span class="deposit-val" style="${isUsingDeposit ? 'color: #78350F;' : ''}">${depositMonthsPaid} / ${depositMonthsRequired} Months</span>
+          <span style="font-size: 8px; color: #718EBF; display: block; margin-top: 0px;">(${depositHeldAmount.toLocaleString()} ${currency})</span>
+        </div>
+      </div>
+    </div>
 
     <div class="signatures-row" style="display: flex; justify-content: space-between; align-items: flex-end; margin-top: 25px; margin-bottom: 15px;">
       ${signature ? `
