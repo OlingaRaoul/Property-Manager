@@ -661,7 +661,10 @@ const Dashboard = () => {
     </div>
 
     <div class="footer" style="margin-top: 15px;">
-      <div class="footer-note">Generated automatically by Property Manager Suite</div>
+      <div class="footer-note" style="display: flex; align-items: center; gap: 4px; font-weight: bold; color: #718EBF;">
+        <img src="/favicon.png" style="height: 12px; width: auto;" alt="App Logo" />
+        Powered by Property Manager Suite
+      </div>
       <div class="footer-status" style="color: ${rentOutstandingAmount > 0 ? '#EF4444' : '#10B981'};">
         ${rentOutstandingAmount > 0 ? '⚠️ PAYMENT REQUIRED' : '✓ COVERED BY DEPOSIT'}
       </div>
@@ -812,8 +815,9 @@ const Dashboard = () => {
       </div>
     </div>
 
-    <div class="footer">
-      Generated automatically by Property Manager Suite
+    <div class="footer" style="display: flex; align-items: center; justify-content: center; gap: 4px; font-weight: bold; color: #718EBF;">
+      <img src="/favicon.png" style="height: 12px; width: auto;" alt="App Logo" />
+      Powered by Property Manager Suite
     </div>
   </div>
   <script>window.onload = function() { window.print(); window.onafterprint = function() { window.close(); }; }</script>
@@ -1323,8 +1327,9 @@ const Dashboard = () => {
                     `}
                 </div>
 
-                <div class="footer">
-                    Property Management Ledger System — Confidential PDF Report
+                <div class="footer" style="display: flex; align-items: center; justify-content: center; gap: 4px; font-weight: bold; color: #718EBF;">
+                    <img src="/favicon.png" style="height: 12px; width: auto;" alt="App Logo" />
+                    Powered by Property Manager Suite — Confidential PDF Report
                 </div>
 
                 <script>

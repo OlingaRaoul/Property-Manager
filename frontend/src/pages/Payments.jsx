@@ -351,6 +351,10 @@ const Payments = () => {
         <div style="font-size: 8px; color: #718EBF; text-transform: uppercase; border-top: 1px dashed #B1B1B1; display: inline-block; width: 120px; padding-top: 2px; font-weight: bold;">Tenant Signature</div>
       </div>
     </div>
+    <div style="display: flex; align-items: center; justify-content: center; gap: 4px; border-top: 1px dashed #E6EFF5; padding-top: 8px; margin-top: 12px; font-size: 8px; font-weight: bold; color: #718EBF;">
+      <img src="/favicon.png" style="height: 12px; width: auto;" alt="App Logo" />
+      Powered by Property Manager Suite
+    </div>
   </div>
   <script>window.onload = function() { window.print(); window.onafterprint = function() { window.close(); }; }<\/script>
 </body></html>`;
