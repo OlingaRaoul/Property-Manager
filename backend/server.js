@@ -653,6 +653,12 @@ app.post('/api/auth/reset-password', async (req, res) => {
 });
 
 app.post('/api/auth/change-password', authMiddleware, async (req, res) => {
+    const host = req.get('host') || '';
+    const isLocalhost = host.includes('localhost') || host.includes('127.0.0.1');
+    if (!isLocalhost) {
+        return res.status(403).json({ error: 'Manual password change is only allowed on localhost.' });
+    }
+
     const { currentPassword, newPassword } = req.body;
     if (!currentPassword || !newPassword) {
         return res.status(400).json({ error: 'Current password and new password are required.' });
