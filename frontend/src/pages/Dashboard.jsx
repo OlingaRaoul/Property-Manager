@@ -532,8 +532,9 @@ const Dashboard = () => {
   <title>Statement - ${tenantObj.name}</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; margin: 0; padding: 0; }
     body { font-family: Arial, sans-serif; color: #1a1a2e; background: white; }
-    .page { padding: 0.8cm; max-width: 14cm; margin: 0 auto; }
+    .page { display: flex; flex-direction: column; min-height: calc(100vh - 1.2cm); padding: 0.8cm; max-width: 14cm; margin: 0 auto; box-sizing: border-box; }
     .header { display: flex; justify-content: space-between; align-items: flex-start;
               border-bottom: 2px solid #2D60FF; padding-bottom: 10px; margin-bottom: 12px; }
     .title { font-size: 20px; font-weight: 900; color: #2D60FF; letter-spacing: -0.5px; }
@@ -568,7 +569,7 @@ const Dashboard = () => {
     .deposit-val { font-size: 11px; font-weight: 800; color: #343C6A; display: block; margin-top: 1px; }
 
     .footer { border-top: 1px dashed #E6EFF5; padding-top: 8px;
-              display: flex; justify-content: space-between; align-items: center; }
+              display: flex; justify-content: space-between; align-items: center; margin-top: auto; }
     .footer-note { font-size: 10px; color: #B1B1B1; }
     .footer-status { font-size: 10px; color: #EF4444; font-weight: 700; text-transform: uppercase; }
     @media print { @page { margin: 0.6cm; size: A5 portrait; } }
@@ -731,8 +732,9 @@ const Dashboard = () => {
   <title>Arrears Report</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; margin: 0; padding: 0; }
     body { font-family: Arial, sans-serif; color: #1a1a2e; background: white; line-height: 1.4; }
-    .page { padding: 1cm; max-width: 21cm; margin: 0 auto; }
+    .page { display: flex; flex-direction: column; min-height: calc(100vh - 1.6cm); padding: 1cm; max-width: 21cm; margin: 0 auto; box-sizing: border-box; }
     .header { display: flex; justify-content: space-between; align-items: flex-start;
               border-bottom: 3px solid #2D60FF; padding-bottom: 12px; margin-bottom: 18px; }
     .title { font-size: 22px; font-weight: 900; color: #2D60FF; letter-spacing: -0.5px; }
@@ -756,7 +758,7 @@ const Dashboard = () => {
     .signatures-row { display: flex; justify-content: space-between; align-items: flex-end; margin-top: 40px; margin-bottom: 15px; }
     .signature-container { width: 180px; }
     
-    .footer { border-top: 1px dashed #E6EFF5; padding-top: 8px; font-size: 9px; color: #B1B1B1; text-align: center; }
+    .footer { border-top: 1px dashed #E6EFF5; padding-top: 8px; font-size: 9px; color: #B1B1B1; text-align: center; margin-top: auto; }
     @media print { @page { margin: 0.8cm; size: A4 portrait; } }
   </style>
 </head>
