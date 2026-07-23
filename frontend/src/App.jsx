@@ -816,10 +816,10 @@ function TenantHistoryModal() {
               <span style={{ fontSize: '0.75rem', color: '#991B1B', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                 {lang === 'fr' ? 'Impayés / Arriérés' : 'Arrears / Unpaid Rent'}
               </span>
-              <span style={{ fontSize: '1.15rem', fontWeight: '800', color: '#991B1B' }}>
+              <span style={{ fontSize: '1.25rem', fontWeight: '850', color: '#DC2626' }}>
                 {totalAmountDue.toLocaleString()} {currency}
               </span>
-              <span style={{ fontSize: '0.7rem', color: '#B91C1C', fontWeight: '600', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }} title={unpaidMonthsList.length > 0 ? unpaidMonthsList.map(m => formatMonth(m, lang)).join(', ') : ''}>
+              <span style={{ fontSize: '0.75rem', color: '#374151', fontWeight: '600', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }} title={unpaidMonthsList.length > 0 ? unpaidMonthsList.map(m => formatMonth(m, lang)).join(', ') : ''}>
                 {unpaidMonthsList.length > 0 
                   ? `${lang === 'fr' ? 'Mois' : 'Due'}: ${unpaidMonthsList.map(m => formatMonth(m, lang)).join(', ')}`
                   : (lang === 'fr' ? 'Aucun impayé' : 'No unpaid months')}
