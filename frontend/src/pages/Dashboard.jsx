@@ -681,6 +681,155 @@ const Dashboard = () => {
 
         const win = window.open('', '_blank', 'width=600,height=800');
         if (win) { win.document.write(html); win.document.close(); }
+    };
+
+    const printAllArrears = () => {
+        if (unpaidTenantsList.length === 0) {
+            alert("No active tenants have unpaid monthly invoices.");
+            return;
+        }
+
+        const currency = state.settings.currency || '$';
+        const signature = state.settings.signature;
+        const lang = state.settings.lang || 'en';
+
+        let totalOutstanding = 0;
+        let totalTenantsCount = unpaidTenantsList.length;
+
+        const tableRowsHtml = unpaidTenantsList.map(item => {
+            const overdueMonths = item.unpaidMonths.length;
+            const depositMonthsPaid = item.tenant.depositMonthsPaid || 0;
+            const depositUsed = Math.min(overdueMonths, depositMonthsPaid);
+            const netOverdueMonths = Math.max(0, overdueMonths - depositUsed);
+            const rentOutstandingAmount = netOverdueMonths * (item.tenant.rentAmount || 0);
+
+            totalOutstanding += rentOutstandingAmount;
+
+            // Formatted unpaid months string
+            const unpaidMonthsFormatted = item.unpaidMonths.map((m, idx) => {
+                const isCovered = idx < depositUsed;
+                const monthName = formatMonth(m, lang);
+                return isCovered 
+                    ? `<span style="background: #F0FDF4; color: #166534; border: 1px solid #DCFCE7; padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: bold; margin-right: 4px; display: inline-block;">${monthName} (Deposit)</span>`
+                    : `<span style="background: #FEF2F2; color: #991B1B; border: 1px solid #FEE2E2; padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: bold; margin-right: 4px; display: inline-block;">${monthName}</span>`;
+            }).join(' ');
+
+            return `
+                <tr>
+                    <td style="font-weight: bold;">${item.tenant.name}</td>
+                    <td>${item.propertyName} - ${item.roomNumber}</td>
+                    <td>${item.lastPaymentDate}</td>
+                    <td>${unpaidMonthsFormatted}</td>
+                    <td style="text-align: right; font-weight: bold; color: ${rentOutstandingAmount > 0 ? '#ef4444' : '#166534'};">
+                        ${rentOutstandingAmount.toLocaleString()} ${currency}
+                    </td>
+                </tr>
+            `;
+        }).join('');
+
+        const statementDate = new Date().toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
+
+        const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Arrears Report</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: Arial, sans-serif; color: #1a1a2e; background: white; line-height: 1.4; }
+    .page { padding: 1cm; max-width: 21cm; margin: 0 auto; }
+    .header { display: flex; justify-content: space-between; align-items: flex-start;
+              border-bottom: 3px solid #2D60FF; padding-bottom: 12px; margin-bottom: 18px; }
+    .title { font-size: 22px; font-weight: 900; color: #2D60FF; letter-spacing: -0.5px; }
+    .subtitle { font-size: 10px; color: #718EBF; margin-top: 2px; font-weight: 600;
+                text-transform: uppercase; letter-spacing: 0.5px; }
+    .report-date { font-size: 10px; color: #718EBF; font-weight: 600; text-align: right; }
+    .date-val { font-size: 12px; font-weight: 800; color: #343C6A; }
+    
+    .summary-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px; }
+    .summary-card { background: #FFFBEB; border: 1px solid #FEF3C7; border-radius: 10px; padding: 10px 14px; }
+    .summary-title { font-size: 9px; color: #B45309; font-weight: 700; text-transform: uppercase; margin-bottom: 4px; }
+    .summary-val { font-size: 16px; font-weight: 800; color: #78350F; }
+
+    table { width: 100%; border-collapse: collapse; margin-bottom: 25px; font-size: 11px; }
+    thead tr { background: #2D60FF; color: white; }
+    th { padding: 8px 10px; text-align: left; font-weight: 700; font-size: 9px; text-transform: uppercase; }
+    th:last-child { text-align: right; }
+    td { padding: 10px 8px; border-bottom: 1px solid #E6EFF5; }
+    td:last-child { text-align: right; }
+    
+    .signatures-row { display: flex; justify-content: space-between; align-items: flex-end; margin-top: 40px; margin-bottom: 15px; }
+    .signature-container { width: 180px; }
+    
+    .footer { border-top: 1px dashed #E6EFF5; padding-top: 8px; font-size: 9px; color: #B1B1B1; text-align: center; }
+    @media print { @page { margin: 0.8cm; size: A4 portrait; } }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="header">
+      <div>
+        <div class="title">OUTSTANDING RENT & COVERAGE REPORT</div>
+        <div class="subtitle">Arrears & Deposit Summary</div>
+      </div>
+      <div class="report-date">
+        <div>Report Date</div>
+        <div class="date-val">${statementDate}</div>
+      </div>
+    </div>
+
+    <div class="summary-cards">
+      <div class="summary-card">
+        <div class="summary-title">Total Active Arrears Accounts</div>
+        <div class="summary-val">${totalTenantsCount} Tenant${totalTenantsCount !== 1 ? 's' : ''}</div>
+      </div>
+      <div class="summary-card" style="background: #FEE2E2; border-color: #FEE2E2;">
+        <div class="summary-title" style="color: #991B1B;">Total Cash Rent Outstanding</div>
+        <div class="summary-val" style="color: #991B1B;">${totalOutstanding.toLocaleString()} ${currency}</div>
+      </div>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Tenant Name</th>
+          <th>Property & Unit</th>
+          <th>Last Payment</th>
+          <th>Unpaid Periods & Coverage</th>
+          <th style="text-align: right;">Amount Due</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${tableRowsHtml}
+      </tbody>
+    </table>
+
+    <div class="signatures-row">
+      ${signature ? `
+        <div class="signature-container" style="text-align: left;">
+          <img src="${signature}" style="max-height: 40px; max-width: 150px; display: block; margin-bottom: 2px;" alt="Owner Signature" />
+          <div style="font-size: 8px; color: #718EBF; text-transform: uppercase; border-top: 1px solid #E6EFF5; display: inline-block; width: 120px; padding-top: 2px; font-weight: bold;">Property Owner Signature</div>
+        </div>
+      ` : `
+        <div class="signature-container" style="text-align: left; padding-top: 25px;">
+          <div style="font-size: 8px; color: #718EBF; text-transform: uppercase; border-top: 1px dashed #B1B1B1; display: inline-block; width: 120px; padding-top: 2px; font-weight: bold;">Property Owner Signature</div>
+        </div>
+      `}
+      <div class="signature-container" style="text-align: right; padding-top: 25px;">
+        <div style="font-size: 8px; color: #718EBF; text-transform: uppercase; border-top: 1px dashed #B1B1B1; display: inline-block; width: 120px; padding-top: 2px; font-weight: bold;">Verifier Signature</div>
+      </div>
+    </div>
+
+    <div class="footer">
+      Generated automatically by Property Manager Suite
+    </div>
+  </div>
+  <script>window.onload = function() { window.print(); window.onafterprint = function() { window.close(); }; }</script>
+</body>
+</html>`;
+
+        const win = window.open('', '_blank', 'width=800,height=1000');
+        if (win) { win.document.write(html); win.document.close(); }
         else { alert('Please allow pop-ups for this site to print statements.'); }
     };
 
@@ -1708,22 +1857,47 @@ const Dashboard = () => {
                                     List of active tenants with outstanding monthly rent balances
                                 </p>
                             </div>
-                            <button 
-                                onClick={() => setShowUnpaidModal(false)}
-                                style={{
-                                    background: 'transparent',
-                                    border: 'none',
-                                    cursor: 'pointer',
-                                    color: '#718EBF',
-                                    padding: '4px',
-                                    borderRadius: '50%',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                }}
-                            >
-                                <X size={20} />
-                            </button>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                {unpaidTenantsList.length > 0 && (
+                                    <button
+                                        onClick={printAllArrears}
+                                        style={{
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '0.35rem',
+                                            background: '#2D60FF',
+                                            color: '#FFFFFF',
+                                            border: 'none',
+                                            borderRadius: '8px',
+                                            padding: '0.45rem 0.9rem',
+                                            fontSize: '0.75rem',
+                                            fontWeight: '700',
+                                            cursor: 'pointer',
+                                            transition: 'background 0.2s',
+                                        }}
+                                        onMouseEnter={(e) => e.currentTarget.style.background = '#1A4BDB'}
+                                        onMouseLeave={(e) => e.currentTarget.style.background = '#2D60FF'}
+                                    >
+                                        <Printer size={14} /> Print List
+                                    </button>
+                                )}
+                                <button 
+                                    onClick={() => setShowUnpaidModal(false)}
+                                    style={{
+                                        background: 'transparent',
+                                        border: 'none',
+                                        cursor: 'pointer',
+                                        color: '#718EBF',
+                                        padding: '4px',
+                                        borderRadius: '50%',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                    }}
+                                >
+                                    <X size={20} />
+                                </button>
+                            </div>
                         </div>
 
                         {/* Modal Body */}
