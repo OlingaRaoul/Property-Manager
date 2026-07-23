@@ -22,7 +22,7 @@ import './index.css';
 
 import { X, Printer, Edit, Trash2, CalendarDays, Receipt } from 'lucide-react';
 import axios from 'axios';
-import { formatMonth } from './utils';
+import { formatMonth, getMonthsDifference } from './utils';
 
 function TenantHistoryModal() {
   const { activeTenantHistoryId, setActiveTenantHistoryId, state, setState, API_URL } = useAppState();
@@ -70,6 +70,66 @@ function TenantHistoryModal() {
 
   const nextUnpaidMonth = getNextMonth(tenantObj.lastPaidMonth);
   const nextDueDate = tenantObj.isAssigned !== false ? getDueDateForMonth(tenantObj.dueDateDay, nextUnpaidMonth) : (lang === 'fr' ? 'Contrat terminé' : 'Contract Finished');
+
+  const getMonthsInRange = (start, end) => {
+      const startYear = parseInt(start.split('-')[0]);
+      const startMonth = parseInt(start.split('-')[1]);
+      const endYear = parseInt(end.split('-')[0]);
+      const endMonth = parseInt(end.split('-')[1]);
+      
+      const months = [];
+      let currYear = startYear;
+      let currMonth = startMonth;
+      
+      while (currYear < endYear || (currYear === endYear && currMonth <= endMonth)) {
+          months.push(`${currYear}-${String(currMonth).padStart(2, '0')}`);
+          currMonth++;
+          if (currMonth > 12) {
+              currMonth = 1;
+              currYear++;
+          }
+      }
+      return months;
+  };
+
+  const getUnpaidMonthsList = (tenant) => {
+      const today = new Date();
+      const currentMonthStr = today.toISOString().slice(0, 7); // YYYY-MM
+      let startDateStr = '';
+      
+      const tenantContracts = state.contracts.filter(c => String(c.tenantId) === String(tenant.id));
+      if (tenantContracts.length > 0) {
+          const sortedContracts = [...tenantContracts].sort((a, b) => a.startDate.localeCompare(b.startDate));
+          startDateStr = sortedContracts[0].startDate.slice(0, 7);
+      } else {
+          const tenantPayments = state.payments.filter(p => String(p.tenantId) === String(tenant.id));
+          if (tenantPayments.length > 0) {
+              const sortedPayments = [...tenantPayments].sort((a, b) => a.date.localeCompare(b.date));
+              startDateStr = sortedPayments[0].date.slice(0, 7);
+          } else {
+              startDateStr = `${today.getFullYear()}-01`;
+          }
+      }
+
+      if (startDateStr > currentMonthStr) {
+          return [];
+      }
+
+      const allMonths = getMonthsInRange(startDateStr, currentMonthStr);
+      
+      const paidMonths = state.payments
+          .filter(p => String(p.tenantId) === String(tenant.id) && p.type === 'Rent')
+          .reduce((acc, p) => {
+              if (p.monthPaid) acc.add(p.monthPaid);
+              if (p.monthList) p.monthList.forEach(m => acc.add(m));
+              return acc;
+          }, new Set());
+
+      return allMonths.filter(m => !paidMonths.has(m));
+  };
+
+  const unpaidMonthsList = getUnpaidMonthsList(tenantObj);
+  const totalAmountDue = unpaidMonthsList.length * (tenantObj.rentAmount || 0);
 
   // Group payments for the history table
   const grouped = tenantPayments.reduce((acc, p) => {
@@ -748,6 +808,21 @@ function TenantHistoryModal() {
               </span>
               <span style={{ fontSize: '0.7rem', color: '#1E40AF', fontWeight: '600' }}>
                 Paid Amount: {(tenantObj.depositPaidAmount || 0).toLocaleString()} {currency}
+              </span>
+            </div>
+
+            {/* Stat 4: Unpaid Months & Arrears */}
+            <div style={{ background: '#FEF2F2', border: '1px solid #FEE2E2', borderRadius: '12px', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+              <span style={{ fontSize: '0.75rem', color: '#991B1B', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                {lang === 'fr' ? 'Impayés / Arriérés' : 'Arrears / Unpaid Rent'}
+              </span>
+              <span style={{ fontSize: '1.15rem', fontWeight: '800', color: '#991B1B' }}>
+                {totalAmountDue.toLocaleString()} {currency}
+              </span>
+              <span style={{ fontSize: '0.7rem', color: '#B91C1C', fontWeight: '600', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }} title={unpaidMonthsList.length > 0 ? unpaidMonthsList.map(m => formatMonth(m, lang)).join(', ') : ''}>
+                {unpaidMonthsList.length > 0 
+                  ? `${lang === 'fr' ? 'Mois' : 'Due'}: ${unpaidMonthsList.map(m => formatMonth(m, lang)).join(', ')}`
+                  : (lang === 'fr' ? 'Aucun impayé' : 'No unpaid months')}
               </span>
             </div>
           </div>
