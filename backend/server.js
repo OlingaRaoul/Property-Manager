@@ -547,7 +547,17 @@ app.post('/api/auth/forgot-password', async (req, res) => {
             return res.json({ status: 'success', message: 'If that email address exists, a password reset link has been sent.' });
         }
 
-        const clientOrigin = req.headers.origin || 'http://localhost:5173';
+        const getClientOrigin = () => {
+            if (req.headers.origin) return req.headers.origin;
+            if (req.headers.referer) {
+                try {
+                    return new URL(req.headers.referer).origin;
+                } catch (e) {}
+            }
+            const protocol = req.secure || req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
+            return `${protocol}://${req.headers.host || 'localhost:8080'}`;
+        };
+        const clientOrigin = getClientOrigin();
         const resetLink = `${clientOrigin}/reset-password?token=${token}&email=${encodeURIComponent(lowercaseEmail)}`;
 
         if (smtpConfig && smtpConfig.host && smtpConfig.user && smtpConfig.pass) {
