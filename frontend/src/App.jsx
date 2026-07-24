@@ -24,6 +24,12 @@ import { X, Printer, Edit, Trash2, CalendarDays, Receipt } from 'lucide-react';
 import axios from 'axios';
 import { formatMonth, getMonthsDifference } from './utils';
 
+const getTransactionId = (payment) => {
+    if (!payment || !payment.id) return payment?.date || '';
+    const match = String(payment.id).match(/^(pay\d+)/);
+    return match ? match[1] : payment.id;
+};
+
 function TenantHistoryModal() {
   const { activeTenantHistoryId, setActiveTenantHistoryId, state, setState, API_URL } = useAppState();
   const navigate = useNavigate();
@@ -58,12 +64,6 @@ function TenantHistoryModal() {
           nextY += 1;
       }
       return `${nextY}-${String(nextM).padStart(2, '0')}`;
-  };
-
-  const getTransactionId = (payment) => {
-      if (!payment || !payment.id) return payment?.date || '';
-      const match = String(payment.id).match(/^(pay\d+)/);
-      return match ? match[1] : payment.id;
   };
 
   const getDueDateForMonth = (dueDateDay, monthStr) => {
