@@ -3,7 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import axios from 'axios';
 import { useAppState } from '../context/StateContext';
-import { formatMonth } from '../utils';
+import { formatMonth, getMonthsDifference } from '../utils';
 import { Receipt, PlusCircle, Building2, ChevronDown, MapPin, Printer, Trash2, X, CheckCircle2, Lock, CalendarDays, Edit, Search } from 'lucide-react';
 
 
@@ -42,6 +42,64 @@ const generateMonthWindow = () => {
 };
 
 const MONTH_WINDOW = generateMonthWindow();
+
+const getMonthsInRange = (start, end) => {
+    const startYear = parseInt(start.split('-')[0]);
+    const startMonth = parseInt(start.split('-')[1]);
+    const endYear = parseInt(end.split('-')[0]);
+    const endMonth = parseInt(end.split('-')[1]);
+    
+    const months = [];
+    let currYear = startYear;
+    let currMonth = startMonth;
+    
+    while (currYear < endYear || (currYear === endYear && currMonth <= endMonth)) {
+        months.push(`${currYear}-${String(currMonth).padStart(2, '0')}`);
+        currMonth++;
+        if (currMonth > 12) {
+            currMonth = 1;
+            currYear++;
+        }
+    }
+    return months;
+};
+
+const getUnpaidMonthsList = (tenant, state) => {
+    if (!tenant) return [];
+    const today = new Date();
+    const currentMonthStr = today.toISOString().slice(0, 7); // YYYY-MM
+    let startDateStr = '';
+    
+    const tenantContracts = state.contracts ? state.contracts.filter(c => String(c.tenantId) === String(tenant.id) && c.active !== false) : [];
+    if (tenantContracts.length > 0) {
+        const sortedContracts = [...tenantContracts].sort((a, b) => a.startDate.localeCompare(b.startDate));
+        startDateStr = sortedContracts[0].startDate.slice(0, 7);
+    } else {
+        const tenantPayments = state.payments.filter(p => String(p.tenantId) === String(tenant.id));
+        if (tenantPayments.length > 0) {
+            const sortedPayments = [...tenantPayments].sort((a, b) => a.date.localeCompare(b.date));
+            startDateStr = sortedPayments[0].date.slice(0, 7);
+        } else {
+            startDateStr = `${today.getFullYear()}-01`;
+        }
+    }
+
+    if (startDateStr > currentMonthStr) {
+        return [];
+    }
+
+    const allMonths = getMonthsInRange(startDateStr, currentMonthStr);
+    
+    const paidMonths = state.payments
+        .filter(p => String(p.tenantId) === String(tenant.id) && p.type === 'Rent')
+        .reduce((acc, p) => {
+            if (p.monthPaid) acc.add(p.monthPaid);
+            if (p.monthList) p.monthList.forEach(m => acc.add(m));
+            return acc;
+        }, new Set());
+
+    return allMonths.filter(m => !paidMonths.has(m));
+};
 
 const btnBlue = (disabled) => ({
     backgroundColor: '#2D60FF', color: '#FFFFFF', border: 'none',
@@ -195,16 +253,30 @@ const Payments = () => {
               </tr>
             `;
 
-        const depositDetailInfoHtml = (depositMonths > 0 || paidDeposit > 0)
-            ? `
+        const unpaidMonthsList = getUnpaidMonthsList(tenant, state);
+        const overdueMonthsCount = unpaidMonthsList.length;
+        const outstandingRent = overdueMonthsCount * rentAmount;
+
+        let depositDetailInfoHtml = '';
+        if (depositMonths > 0 || paidDeposit > 0) {
+            depositDetailInfoHtml += `
             <div style="border-top: 1px solid #E6EFF5; margin-top: 8px; padding-top: 8px; font-size: 11px; color: #343C6A;">
               <strong>Deposit:</strong> ${depositMonthsPaid}/${depositMonths} paid
             </div>
             <div style="font-size: 11px; color: ${outstandingBalance < 0 ? '#EF4444' : '#10B981'};">
               <strong>Outstanding Deposit:</strong> ${outstandingBalance.toLocaleString()} ${currency}
             </div>
-            `
-            : '';
+            `;
+        }
+
+        if (outstandingRent > 0) {
+            const hasDeposit = (depositMonths > 0 || paidDeposit > 0);
+            depositDetailInfoHtml += `
+            <div style="${!hasDeposit ? 'border-top: 1px solid #E6EFF5; margin-top: 8px; padding-top: 8px;' : 'margin-top: 2px;'} font-size: 11px; color: #EF4444;">
+              <strong>Outstanding Rent:</strong> ${outstandingRent.toLocaleString()} ${currency} (${overdueMonthsCount} Month${overdueMonthsCount !== 1 ? 's' : ''})
+            </div>
+            `;
+        }
 
         let depositInfoHtml = '';
         if (depositMonths > 0 || paidDeposit > 0) {
@@ -1544,6 +1616,9 @@ const Payments = () => {
                 0
             );
             const outstandingBalance = paidDeposit - reqDeposit;
+            const unpaidMonthsList = getUnpaidMonthsList(tenant, state);
+            const overdueMonthsCount = unpaidMonthsList.length;
+            const outstandingRent = overdueMonthsCount * rentAmount;
 
             return (
                 <>
@@ -1579,6 +1654,11 @@ const Payments = () => {
                                                 <strong>Outstanding Deposit:</strong> {outstandingBalance.toLocaleString()} {state.settings.currency}
                                             </div>
                                         </>
+                                    )}
+                                    {outstandingRent > 0 && (
+                                        <div style={{ borderTop: !(depositMonths > 0 || paidDeposit > 0) ? '1px solid #E6EFF5' : undefined, marginTop: !(depositMonths > 0 || paidDeposit > 0) ? '8px' : '2px', paddingTop: !(depositMonths > 0 || paidDeposit > 0) ? '8px' : undefined, fontSize: '11px', color: '#EF4444' }}>
+                                            <strong>Outstanding Rent:</strong> {outstandingRent.toLocaleString()} {state.settings.currency} ({overdueMonthsCount} Month{overdueMonthsCount !== 1 ? 's' : ''})
+                                        </div>
                                     )}
                                 </div>
                                 <div style={{ background: '#F5F7FA', borderRadius: '10px', padding: '8px 12px' }}>
@@ -1752,6 +1832,11 @@ const Payments = () => {
                                                         <strong>Outstanding Deposit:</strong> {outstandingBalance.toLocaleString()} {state.settings.currency}
                                                     </div>
                                                 </>
+                                            )}
+                                            {outstandingRent > 0 && (
+                                                <div style={{ borderTop: !(depositMonths > 0 || paidDeposit > 0) ? '1px solid #E6EFF5' : undefined, marginTop: !(depositMonths > 0 || paidDeposit > 0) ? '8px' : '2px', paddingTop: !(depositMonths > 0 || paidDeposit > 0) ? '8px' : undefined, fontSize: '11px', color: '#EF4444' }}>
+                                                    <strong>Outstanding Rent:</strong> {outstandingRent.toLocaleString()} {state.settings.currency} ({overdueMonthsCount} Month{overdueMonthsCount !== 1 ? 's' : ''})
+                                                </div>
                                             )}
                                         </div>
                                         <div style={{ background: '#F5F7FA', borderRadius: '10px', padding: '1rem' }}>
