@@ -196,9 +196,9 @@ const Payments = () => {
         const signature = state.settings.signature || '';
 
         // Fetch individual payment records for this group
-        const txId = getTransactionId(receiptData);
+        const txId = `${getTransactionId(receiptData)}-${receiptData.date}`;
         const groupPayments = state.payments.filter(pay => 
-            getTransactionId(pay) === txId
+            `${getTransactionId(pay)}-${pay.date}` === txId
         );
 
         // Security Deposit calculations
@@ -230,7 +230,7 @@ const Payments = () => {
                     period = `${mCount} Month${mCount !== 1 ? 's' : ''}`;
                 } else if (pType === 'Rent') {
                     desc = 'Monthly Rent';
-                    period = pay.monthList
+                    period = (pay.monthList && pay.monthList.length > 0)
                         ? pay.monthList.map(m => formatMonth(m, lang)).join(', ')
                         : formatMonth(pay.monthPaid, lang);
                 } else if (pType) {
@@ -876,7 +876,7 @@ const Payments = () => {
 
     const renderPaymentTable = (payments, propId) => {
         const grouped = payments.reduce((acc, p) => {
-            const key = getTransactionId(p);
+            const key = `${getTransactionId(p)}-${p.date}`;
             if (!acc[key]) {
                 acc[key] = { 
                     ...p, 
@@ -1601,9 +1601,9 @@ const Payments = () => {
                     : formatMonth(receipt.monthPaid, lang));
 
             // Fetch individual payment records for this group
-            const txId = getTransactionId(receipt);
+            const txId = `${getTransactionId(receipt)}-${receipt.date}`;
             const groupPayments = state.payments.filter(pay => 
-                getTransactionId(pay) === txId
+                `${getTransactionId(pay)}-${pay.date}` === txId
             );
 
             // Security Deposit calculations
@@ -1697,7 +1697,7 @@ const Payments = () => {
                                                 period = `${mCount} Month${mCount !== 1 ? 's' : ''}`;
                                             } else if (pType === 'Rent') {
                                                 desc = 'Monthly Rent';
-                                                period = pay.monthList
+                                                period = (pay.monthList && pay.monthList.length > 0)
                                                     ? pay.monthList.map(m => formatMonth(m, lang)).join(', ')
                                                     : formatMonth(pay.monthPaid, lang);
                                             } else if (pType) {
@@ -1876,7 +1876,7 @@ const Payments = () => {
                                                         period = `${mCount} Month${mCount !== 1 ? 's' : ''}`;
                                                     } else if (pType === 'Rent') {
                                                         desc = 'Monthly Rent';
-                                                        period = pay.monthList
+                                                        period = (pay.monthList && pay.monthList.length > 0)
                                                             ? pay.monthList.map(m => formatMonth(m, lang)).join(', ')
                                                             : formatMonth(pay.monthPaid, lang);
                                                     } else if (pType) {

@@ -139,7 +139,7 @@ function TenantHistoryModal() {
 
   // Group payments for the history table
   const grouped = tenantPayments.reduce((acc, p) => {
-      const key = getTransactionId(p);
+      const key = `${getTransactionId(p)}-${p.date}`;
       if (!acc[key]) {
           acc[key] = { 
               ...p, 
@@ -449,9 +449,9 @@ function TenantHistoryModal() {
       const signature = state.settings.signature || '';
 
       // Fetch individual payment records for this group
-      const txId = getTransactionId(receiptData);
+      const txId = `${getTransactionId(receiptData)}-${receiptData.date}`;
       const groupPayments = state.payments.filter(pay => 
-          getTransactionId(pay) === txId
+          `${getTransactionId(pay)}-${pay.date}` === txId
       );
 
       // Security Deposit calculations
@@ -482,7 +482,7 @@ function TenantHistoryModal() {
                   period = `${mCount} Month${mCount !== 1 ? 's' : ''}`;
               } else if (pType === 'Rent') {
                   desc = 'Monthly Rent';
-                  period = pay.monthList
+                  period = (pay.monthList && pay.monthList.length > 0)
                       ? pay.monthList.map(m => formatMonth(m, lang)).join(', ')
                       : formatMonth(pay.monthPaid, lang);
               } else if (pType) {
@@ -694,9 +694,9 @@ function TenantHistoryModal() {
   const handleDeletePaymentGroup = async (group) => {
       if (!confirm('Are you sure you want to delete this payment group?')) return;
       try {
+          const txId = `${getTransactionId(group)}-${group.date}`;
           const groupPayments = state.payments.filter(p => 
-              String(p.tenantId) === String(tenantObj.id) && 
-              p.date === group.date
+              `${getTransactionId(p)}-${p.date}` === txId
           );
           
           await Promise.all(groupPayments.map(p => axios.delete(`${API_URL}/payments/${p.id}`)));
@@ -946,9 +946,9 @@ function TenantHistoryModal() {
                     : formatMonth(previewReceipt.monthPaid, lang));
 
             // Fetch individual payment records for this group
-            const txId = getTransactionId(previewReceipt);
+            const txId = `${getTransactionId(previewReceipt)}-${previewReceipt.date}`;
             const groupPayments = state.payments.filter(pay => 
-                getTransactionId(pay) === txId
+                `${getTransactionId(pay)}-${pay.date}` === txId
             );
 
             // Security Deposit calculations
@@ -973,55 +973,61 @@ function TenantHistoryModal() {
                     <div className="modal animate-pop-in" style={{ maxWidth: '600px', padding: 0, overflow: 'hidden', borderRadius: '20px' }} onClick={e => e.stopPropagation()}>
                         {/* Modal header */}
                         <div style={{ padding: '1.25rem 1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #E6EFF5' }}>
-                            <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.6rem', fontSize: '1.05rem', color: '#343C6A' }}>
-                                <Receipt size={20} style={{ color: '#2D60FF' }} /> Payment Receipt
-                            </h3>
-                            <button className="btn-close" onClick={() => setPreviewReceipt(null)}><X size={20} /></button>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                <div style={{ width: '40px', height: '40px', borderRadius: '12px', background: '#EFF6FF', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#2D60FF' }}>
+                                    <Receipt size={20} />
+                                </div>
+                                <div>
+                                    <h3 style={{ margin: 0, color: '#343C6A', fontWeight: '750', fontSize: '1.1rem' }}>
+                                        {lang === 'fr' ? 'Reçu de paiement' : 'Payment Receipt'}
+                                    </h3>
+                                    <span style={{ fontSize: '0.7rem', color: '#718EBF' }}>#{receiptNo}</span>
+                                </div>
+                            </div>
+                            <button className="btn-icon" onClick={() => setPreviewReceipt(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#718EBF' }}>
+                                <X size={20} />
+                            </button>
                         </div>
 
-                        {/* Receipt preview */}
-                        <div style={{ background: '#F5F7FA', padding: '1.5rem', maxHeight: '70vh', overflowY: 'auto' }}>
-                            <div style={{ background: 'white', borderRadius: '16px', padding: '2rem', boxShadow: '0 4px 20px rgba(0,0,0,0.06)', fontFamily: 'Arial, sans-serif' }}>
-                                {/* Header */}
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '2px solid #2D60FF', paddingBottom: '1rem', marginBottom: '1.25rem' }}>
+                        {/* Modal body (printable content) */}
+                        <div id="receipt-preview-content" style={{ padding: '1.5rem 1.5rem 1rem', background: '#F5F7FA', maxHeight: '70vh', overflowY: 'auto' }}>
+                            {/* Receipt Container */}
+                            <div style={{ background: '#FFFFFF', padding: '1.5rem', borderRadius: '16px', boxShadow: '0 4px 12px rgba(0,0,0,0.03)' }}>
+                                {/* Receipt Header */}
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem', borderBottom: '2px solid #F4F6F9', paddingBottom: '1rem' }}>
                                     <div>
-                                        <div style={{ fontSize: '1.4rem', fontWeight: '900', color: '#2D60FF', letterSpacing: '-0.5px' }}>RENT RECEIPT</div>
-                                        <div style={{ fontSize: '0.7rem', color: '#718EBF', marginTop: '2px', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Payment Confirmation</div>
+                                        <h2 style={{ margin: 0, color: '#2D60FF', fontWeight: '800', fontSize: '1.4rem', letterSpacing: '-0.5px' }}>RENT RECEIPT</h2>
+                                        <span style={{ fontSize: '0.75rem', color: '#718EBF', textTransform: 'uppercase', fontWeight: '600' }}>PAYMENT CONFIRMATION</span>
                                     </div>
                                     <div style={{ textAlign: 'right' }}>
-                                        <div style={{ fontSize: '0.7rem', color: '#718EBF', fontWeight: '600' }}>Receipt No.</div>
-                                        <div style={{ fontSize: '0.9rem', fontWeight: '800', color: '#343C6A' }}>{receiptNo}</div>
-                                        <div style={{ fontSize: '0.72rem', color: '#718EBF', marginTop: '2px' }}>Date: {previewReceipt.date}</div>
+                                        <span style={{ display: 'block', fontSize: '0.7rem', color: '#718EBF', fontWeight: '600' }}>Receipt No.</span>
+                                        <strong style={{ display: 'block', color: '#343C6A', fontSize: '0.95rem' }}>{receiptNo}</strong>
+                                        <span style={{ display: 'block', fontSize: '0.7rem', color: '#718EBF', marginTop: '4px' }}>Date: {previewReceipt.date}</span>
                                     </div>
                                 </div>
 
-                                {/* Tenant + Property */}
+                                {/* Payer and Property info */}
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.5rem' }}>
-                                    <div style={{ background: '#F5F7FA', borderRadius: '10px', padding: '1rem' }}>
-                                        <div style={{ fontSize: '0.65rem', color: '#718EBF', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>Received From</div>
-                                        <div style={{ fontSize: '1rem', fontWeight: '800', color: '#343C6A' }}>{tenantObj.name}</div>
-                                        {tenantObj.phone && <div style={{ fontSize: '0.78rem', color: '#718EBF', marginTop: '3px' }}>📞 {tenantObj.phone}</div>}
-                                        {tenantObj.email && <div style={{ fontSize: '0.78rem', color: '#718EBF' }}>✉ {tenantObj.email}</div>}
-                                        {(depositMonths > 0 || paidDeposit > 0) && (
-                                            <>
-                                                <div style={{ borderTop: '1px solid #E6EFF5', marginTop: '8px', paddingTop: '8px', fontSize: '11px', color: '#343C6A' }}>
-                                                    <strong>Deposit:</strong> {depositMonthsPaid}/{depositMonths} paid
-                                                </div>
-                                                <div style={{ fontSize: '11px', color: outstandingBalance < 0 ? '#EF4444' : '#10B981' }}>
-                                                    <strong>Outstanding Deposit:</strong> {outstandingBalance.toLocaleString()} {currency}
-                                                </div>
-                                            </>
-                                        )}
+                                    <div style={{ background: '#F8F9FC', padding: '1rem', borderRadius: '12px', border: '1px solid #E6EFF5' }}>
+                                        <span style={{ fontSize: '0.65rem', color: '#718EBF', textTransform: 'uppercase', fontWeight: '700', letterSpacing: '0.5px' }}>RECEIVED FROM</span>
+                                        <div style={{ fontWeight: '750', color: '#343C6A', fontSize: '0.95rem', marginTop: '4px' }}>{tenantObj.name}</div>
+                                        {tenantObj.phone && <div style={{ fontSize: '0.75rem', color: '#718EBF', marginTop: '2px' }}>📞 {tenantObj.phone}</div>}
+                                        <div style={{ fontSize: '0.75rem', color: '#718EBF', marginTop: '6px', borderTop: '1px solid #E6EFF5', paddingTop: '4px' }}>
+                                            <strong>Deposit:</strong> {tenantObj.depositMonthsPaid || 0}/{tenantObj.depositMonths || 0} paid
+                                            <div style={{ color: tenantObj.depositPaidAmount >= (tenantObj.depositMonths * tenantObj.rentAmount) ? 'green' : 'red', fontWeight: '600' }}>
+                                                Outstanding Deposit: {(Math.max(0, (tenantObj.depositMonths * tenantObj.rentAmount) - tenantObj.depositPaidAmount)).toLocaleString()} {currency}
+                                            </div>
+                                        </div>
                                     </div>
-                                    <div style={{ background: '#F5F7FA', borderRadius: '10px', padding: '1rem' }}>
-                                        <div style={{ fontSize: '0.65rem', color: '#718EBF', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>Property / Unit</div>
-                                        <div style={{ fontSize: '0.95rem', fontWeight: '800', color: '#343C6A' }}>{prop?.name || '—'}</div>
+                                    <div style={{ background: '#F8F9FC', padding: '1rem', borderRadius: '12px', border: '1px solid #E6EFF5' }}>
+                                        <span style={{ fontSize: '0.65rem', color: '#718EBF', textTransform: 'uppercase', fontWeight: '700', letterSpacing: '0.5px' }}>PROPERTY / UNIT</span>
+                                        <div style={{ fontWeight: '750', color: '#343C6A', fontSize: '0.95rem', marginTop: '4px' }}>{prop?.name || '—'}</div>
                                         {prop?.address && <div style={{ fontSize: '0.75rem', color: '#718EBF', marginTop: '2px' }}>{prop.address}</div>}
                                         <div style={{ fontSize: '0.8rem', fontWeight: '700', color: '#2D60FF', marginTop: '4px' }}>Unit: {apt?.unitNumber || '—'} ({apt?.type || '—'})</div>
                                     </div>
                                 </div>
 
-                                {/* Payment line-items */}
+                                {/* Payment details table */}
                                 <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '1rem', fontSize: '0.85rem' }}>
                                     <thead>
                                         <tr style={{ background: '#2D60FF' }}>
@@ -1037,14 +1043,14 @@ function TenantHistoryModal() {
                                                  let period = '—';
                                                  const pType = pay.type || 'Rent';
                                                  if (pType === 'Deposit') {
-                                                    desc = 'Security Deposit';
-                                                    const mCount = pay.depositMonths || 0;
-                                                    period = `${mCount} Month${mCount !== 1 ? 's' : ''}`;
-                                                } else if (pType === 'Rent') {
-                                                    desc = 'Monthly Rent';
-                                                    period = pay.monthList
-                                                        ? pay.monthList.map(m => formatMonth(m, lang)).join(', ')
-                                                        : formatMonth(pay.monthPaid, lang);
+                                                     desc = 'Security Deposit';
+                                                     const mCount = pay.depositMonths || 0;
+                                                     period = `${mCount} Month${mCount !== 1 ? 's' : ''}`;
+                                                 } else if (pType === 'Rent') {
+                                                     desc = 'Monthly Rent';
+                                                     period = (pay.monthList && pay.monthList.length > 0)
+                                                         ? pay.monthList.map(m => formatMonth(m, lang)).join(', ')
+                                                         : formatMonth(pay.monthPaid, lang);
                                                 } else if (pType) {
                                                     desc = pType === 'Utility' ? 'Utility Bill' : pType;
                                                     if (pay.utilityId) {
