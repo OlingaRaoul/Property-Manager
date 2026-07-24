@@ -133,18 +133,18 @@ function TenantHistoryModal() {
 
   // Group payments for the history table
   const grouped = tenantPayments.reduce((acc, p) => {
-      const key = `${p.tenantId}-${p.date}`;
+      const key = p.id;
       if (!acc[key]) {
           acc[key] = { 
               ...p, 
               monthList: p.monthPaid ? [p.monthPaid] : [], 
               totalAmount: p.amount,
-              types: new Set([p.type])
+              types: new Set([p.type || 'Rent'])
           };
       } else {
           if (p.monthPaid) acc[key].monthList.push(p.monthPaid);
           acc[key].totalAmount += p.amount;
-          acc[key].types.add(p.type);
+          acc[key].types.add(p.type || 'Rent');
       }
       return acc;
   }, {});
@@ -444,8 +444,7 @@ function TenantHistoryModal() {
 
       // Fetch individual payment records for this group
       const groupPayments = state.payments.filter(pay => 
-          String(pay.tenantId) === String(receiptData.tenantId || tenant?.id) && 
-          pay.date === receiptData.date
+          String(pay.id) === String(receiptData.id)
       );
 
       // Security Deposit calculations
@@ -469,17 +468,18 @@ function TenantHistoryModal() {
           ? groupPayments.map(pay => {
               let desc = 'Monthly Rent';
               let period = '—';
-              if (pay.type === 'Deposit') {
+              const pType = pay.type || 'Rent';
+              if (pType === 'Deposit') {
                   desc = 'Security Deposit';
                   const mCount = pay.depositMonths || 0;
                   period = `${mCount} Month${mCount !== 1 ? 's' : ''}`;
-              } else if (pay.type === 'Rent') {
+              } else if (pType === 'Rent') {
                   desc = 'Monthly Rent';
                   period = pay.monthList
                       ? pay.monthList.map(m => formatMonth(m, lang)).join(', ')
                       : formatMonth(pay.monthPaid, lang);
-              } else if (pay.type) {
-                  desc = pay.type === 'Utility' ? 'Utility Bill' : pay.type;
+              } else if (pType) {
+                  desc = pType === 'Utility' ? 'Utility Bill' : pType;
                   if (pay.utilityId) {
                       desc += ` (${pay.utilityId})`;
                   }
@@ -940,8 +940,7 @@ function TenantHistoryModal() {
 
             // Fetch individual payment records for this group
             const groupPayments = state.payments.filter(pay => 
-                String(pay.tenantId) === String(tenantObj.id) && 
-                pay.date === previewReceipt.date
+                String(pay.id) === String(previewReceipt.id)
             );
 
             // Security Deposit calculations
@@ -1026,19 +1025,18 @@ function TenantHistoryModal() {
                                     <tbody>
                                         {groupPayments.length > 0 ? (
                                             groupPayments.map(pay => {
-                                                let desc = 'Monthly Rent';
-                                                let period = '—';
-                                                if (pay.type === 'Deposit') {
+                                                const pType = pay.type || 'Rent';
+                                                if (pType === 'Deposit') {
                                                     desc = 'Security Deposit';
                                                     const mCount = pay.depositMonths || 0;
                                                     period = `${mCount} Month${mCount !== 1 ? 's' : ''}`;
-                                                } else if (pay.type === 'Rent') {
+                                                } else if (pType === 'Rent') {
                                                     desc = 'Monthly Rent';
                                                     period = pay.monthList
                                                         ? pay.monthList.map(m => formatMonth(m, lang)).join(', ')
                                                         : formatMonth(pay.monthPaid, lang);
-                                                } else if (pay.type) {
-                                                    desc = pay.type === 'Utility' ? 'Utility Bill' : pay.type;
+                                                } else if (pType) {
+                                                    desc = pType === 'Utility' ? 'Utility Bill' : pType;
                                                     if (pay.utilityId) {
                                                         desc += ` (${pay.utilityId})`;
                                                     }
