@@ -60,6 +60,12 @@ function TenantHistoryModal() {
       return `${nextY}-${String(nextM).padStart(2, '0')}`;
   };
 
+  const getTransactionId = (payment) => {
+      if (!payment || !payment.id) return payment?.date || '';
+      const match = String(payment.id).match(/^(pay\d+)/);
+      return match ? match[1] : payment.id;
+  };
+
   const getDueDateForMonth = (dueDateDay, monthStr) => {
       if (!monthStr || !monthStr.includes('-')) return '';
       const [y, m] = monthStr.split('-').map(Number);
@@ -133,7 +139,7 @@ function TenantHistoryModal() {
 
   // Group payments for the history table
   const grouped = tenantPayments.reduce((acc, p) => {
-      const key = p.id;
+      const key = getTransactionId(p);
       if (!acc[key]) {
           acc[key] = { 
               ...p, 
@@ -443,8 +449,9 @@ function TenantHistoryModal() {
       const signature = state.settings.signature || '';
 
       // Fetch individual payment records for this group
+      const txId = getTransactionId(receiptData);
       const groupPayments = state.payments.filter(pay => 
-          String(pay.id) === String(receiptData.id)
+          getTransactionId(pay) === txId
       );
 
       // Security Deposit calculations
@@ -939,8 +946,9 @@ function TenantHistoryModal() {
                     : formatMonth(previewReceipt.monthPaid, lang));
 
             // Fetch individual payment records for this group
+            const txId = getTransactionId(previewReceipt);
             const groupPayments = state.payments.filter(pay => 
-                String(pay.id) === String(previewReceipt.id)
+                getTransactionId(pay) === txId
             );
 
             // Security Deposit calculations

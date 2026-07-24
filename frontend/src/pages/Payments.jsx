@@ -43,6 +43,12 @@ const generateMonthWindow = () => {
 
 const MONTH_WINDOW = generateMonthWindow();
 
+const getTransactionId = (payment) => {
+    if (!payment || !payment.id) return payment?.date || '';
+    const match = String(payment.id).match(/^(pay\d+)/);
+    return match ? match[1] : payment.id;
+};
+
 const getMonthsInRange = (start, end) => {
     const startYear = parseInt(start.split('-')[0]);
     const startMonth = parseInt(start.split('-')[1]);
@@ -190,8 +196,9 @@ const Payments = () => {
         const signature = state.settings.signature || '';
 
         // Fetch individual payment records for this group
+        const txId = getTransactionId(receiptData);
         const groupPayments = state.payments.filter(pay => 
-            String(pay.id) === String(receiptData.id)
+            getTransactionId(pay) === txId
         );
 
         // Security Deposit calculations
@@ -869,7 +876,7 @@ const Payments = () => {
 
     const renderPaymentTable = (payments, propId) => {
         const grouped = payments.reduce((acc, p) => {
-            const key = p.id;
+            const key = getTransactionId(p);
             if (!acc[key]) {
                 acc[key] = { 
                     ...p, 
@@ -1594,8 +1601,9 @@ const Payments = () => {
                     : formatMonth(receipt.monthPaid, lang));
 
             // Fetch individual payment records for this group
+            const txId = getTransactionId(receipt);
             const groupPayments = state.payments.filter(pay => 
-                String(pay.id) === String(receipt.id)
+                getTransactionId(pay) === txId
             );
 
             // Security Deposit calculations
