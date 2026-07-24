@@ -101,27 +101,46 @@ function TenantHistoryModal() {
   const getUnpaidMonthsList = (tenant) => {
       const today = new Date();
       const currentMonthStr = today.toISOString().slice(0, 7); // YYYY-MM
-      let startDateStr = '';
       
-      const tenantContracts = state.contracts.filter(c => String(c.tenantId) === String(tenant.id));
-      if (tenantContracts.length > 0) {
-          const sortedContracts = [...tenantContracts].sort((a, b) => a.startDate.localeCompare(b.startDate));
-          startDateStr = sortedContracts[0].startDate.slice(0, 7);
+      const dueDateDay = tenant.dueDateDay || 1;
+      let targetEndMonth = currentMonthStr;
+      if (today.getDate() >= dueDateDay) {
+          targetEndMonth = getNextMonth(currentMonthStr);
+      }
+
+      // Find the first month they paid rent for
+      const tenantPayments = state.payments.filter(p => String(p.tenantId) === String(tenant.id) && p.type === 'Rent');
+      let firstPaidMonth = '';
+      tenantPayments.forEach(p => {
+          if (p.monthPaid) {
+              if (!firstPaidMonth || p.monthPaid < firstPaidMonth) firstPaidMonth = p.monthPaid;
+          }
+          if (p.monthList) {
+              p.monthList.forEach(m => {
+                  if (!firstPaidMonth || m < firstPaidMonth) firstPaidMonth = m;
+              });
+          }
+      });
+
+      let startDateStr = '';
+      if (firstPaidMonth) {
+          startDateStr = firstPaidMonth;
       } else {
-          const tenantPayments = state.payments.filter(p => String(p.tenantId) === String(tenant.id));
-          if (tenantPayments.length > 0) {
-              const sortedPayments = [...tenantPayments].sort((a, b) => a.date.localeCompare(b.date));
-              startDateStr = sortedPayments[0].date.slice(0, 7);
+          // Fallback to contract start date
+          const tenantContracts = state.contracts.filter(c => String(c.tenantId) === String(tenant.id));
+          if (tenantContracts.length > 0) {
+              const sortedContracts = [...tenantContracts].sort((a, b) => a.startDate.localeCompare(b.startDate));
+              startDateStr = sortedContracts[0].startDate.slice(0, 7);
           } else {
-              startDateStr = `${today.getFullYear()}-01`;
+              startDateStr = currentMonthStr;
           }
       }
 
-      if (startDateStr > currentMonthStr) {
+      if (startDateStr > targetEndMonth) {
           return [];
       }
 
-      const allMonths = getMonthsInRange(startDateStr, currentMonthStr);
+      const allMonths = getMonthsInRange(startDateStr, targetEndMonth);
       
       const paidMonths = state.payments
           .filter(p => String(p.tenantId) === String(tenant.id) && p.type === 'Rent')
