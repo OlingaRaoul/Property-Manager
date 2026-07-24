@@ -1032,9 +1032,11 @@ function TenantHistoryModal() {
                                     </thead>
                                     <tbody>
                                         {groupPayments.length > 0 ? (
-                                            groupPayments.map(pay => {
-                                                const pType = pay.type || 'Rent';
-                                                if (pType === 'Deposit') {
+                                             groupPayments.map(pay => {
+                                                 let desc = 'Monthly Rent';
+                                                 let period = '—';
+                                                 const pType = pay.type || 'Rent';
+                                                 if (pType === 'Deposit') {
                                                     desc = 'Security Deposit';
                                                     const mCount = pay.depositMonths || 0;
                                                     period = `${mCount} Month${mCount !== 1 ? 's' : ''}`;

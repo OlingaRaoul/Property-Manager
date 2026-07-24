@@ -1688,6 +1688,8 @@ const Payments = () => {
                                 <tbody>
                                     {groupPayments.length > 0 ? (
                                         groupPayments.map(pay => {
+                                            let desc = 'Monthly Rent';
+                                            let period = '—';
                                             const pType = pay.type || 'Rent';
                                             if (pType === 'Deposit') {
                                                 desc = 'Security Deposit';
@@ -1865,6 +1867,8 @@ const Payments = () => {
                                         <tbody>
                                             {groupPayments.length > 0 ? (
                                                 groupPayments.map(pay => {
+                                                    let desc = 'Monthly Rent';
+                                                    let period = '—';
                                                     const pType = pay.type || 'Rent';
                                                     if (pType === 'Deposit') {
                                                         desc = 'Security Deposit';
