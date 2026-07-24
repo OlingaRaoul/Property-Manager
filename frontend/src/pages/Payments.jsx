@@ -237,25 +237,47 @@ const Payments = () => {
                     }
                     period = '—';
                 }
+                let yearVal = '—';
+                if (pType === 'Rent') {
+                    if (pay.monthList && pay.monthList.length > 0) {
+                        yearVal = [...new Set(pay.monthList.map(m => m.split('-')[0]))].join(', ');
+                    } else if (pay.monthPaid) {
+                        yearVal = pay.monthPaid.split('-')[0];
+                    }
+                } else if (pay.date) {
+                    yearVal = pay.date.split('-')[0];
+                }
                 return `
                   <tr style="border-bottom: 1px solid #E6EFF5;">
                     <td style="padding: 12px; color: #343C6A; font-weight: 600;">${desc}</td>
                     <td style="padding: 12px; color: #718EBF;">${period}</td>
+                    <td style="padding: 12px; color: #718EBF;">${yearVal}</td>
                     <td style="padding: 12px; text-align: right; font-weight: 800; color: #2D60FF;">${pay.amount.toLocaleString()} ${currency}</td>
                   </tr>
                 `;
             }).join('')
-            : `
-              <tr style="border-bottom: 1px solid #E6EFF5;">
-                <td style="padding: 12px; color: #343C6A; font-weight: 600;">${
-                    receiptData.types?.has('Rent') && receiptData.types?.has('Deposit') 
-                        ? 'Monthly Rent & Security Deposit' 
-                        : (receiptData.types?.has('Deposit') ? 'Security Deposit' : 'Monthly Rent')
-                }</td>
-                <td style="padding: 12px; color: #718EBF;">${monthsStr}</td>
-                <td style="padding: 12px; text-align: right; font-weight: 800; color: #2D60FF;">${total} ${currency}</td>
-              </tr>
-            `;
+            : (() => {
+                let mainYear = '—';
+                if (receiptData.monthList && receiptData.monthList.length > 0) {
+                    mainYear = [...new Set(receiptData.monthList.map(m => m.split('-')[0]))].join(', ');
+                } else if (receiptData.monthPaid) {
+                    mainYear = receiptData.monthPaid.split('-')[0];
+                } else if (receiptData.date) {
+                    mainYear = receiptData.date.split('-')[0];
+                }
+                return `
+                  <tr style="border-bottom: 1px solid #E6EFF5;">
+                    <td style="padding: 12px; color: #343C6A; font-weight: 600;">${
+                        receiptData.types?.has('Rent') && receiptData.types?.has('Deposit') 
+                            ? 'Monthly Rent & Security Deposit' 
+                            : (receiptData.types?.has('Deposit') ? 'Security Deposit' : 'Monthly Rent')
+                    }</td>
+                    <td style="padding: 12px; color: #718EBF;">${monthsStr}</td>
+                    <td style="padding: 12px; color: #718EBF;">${mainYear}</td>
+                    <td style="padding: 12px; text-align: right; font-weight: 800; color: #2D60FF;">${total} ${currency}</td>
+                  </tr>
+                `;
+            })();
 
         const unpaidMonthsList = getUnpaidMonthsList(tenant, state);
         const overdueMonthsCount = unpaidMonthsList.length;
@@ -394,16 +416,17 @@ const Payments = () => {
         <tr>
           <th>Description</th>
           <th>Period</th>
+          <th>${lang === 'fr' ? 'Année' : 'Year'}</th>
           <th>Amount</th>
         </tr>
       </thead>
       <tbody>
         ${itemsHtml}
-        ${receiptData.note ? `<tr><td colspan="3" style="color:#718EBF;font-style:italic">Note: ${receiptData.note}</td></tr>` : ''}
+        ${receiptData.note ? `<tr><td colspan="4" style="color:#718EBF;font-style:italic">Note: ${receiptData.note}</td></tr>` : ''}
       </tbody>
       <tfoot>
         <tr>
-          <td colspan="2">TOTAL PAID</td>
+          <td colspan="3">TOTAL PAID</td>
           <td>${total} ${currency}</td>
         </tr>
       </tfoot>
@@ -1676,6 +1699,7 @@ const Payments = () => {
                                     <tr style={{ background: '#2D60FF', color: 'white' }}>
                                         <th style={{ padding: '6px 8px', textAlign: 'left', fontWeight: '700', borderRadius: '8px 0 0 0' }}>Description</th>
                                         <th style={{ padding: '6px 8px', textAlign: 'left', fontWeight: '700' }}>Period</th>
+                                        <th style={{ padding: '6px 8px', textAlign: 'left', fontWeight: '700' }}>{lang === 'fr' ? 'Année' : 'Year'}</th>
                                         <th style={{ padding: '6px 8px', textAlign: 'right', fontWeight: '700', borderRadius: '0 8px 0 0' }}>Amount</th>
                                     </tr>
                                 </thead>
@@ -1701,10 +1725,21 @@ const Payments = () => {
                                                 }
                                                 period = '—';
                                             }
+                                            let yearVal = '—';
+                                            if (pType === 'Rent') {
+                                                if (pay.monthList && pay.monthList.length > 0) {
+                                                    yearVal = [...new Set(pay.monthList.map(m => m.split('-')[0]))].join(', ');
+                                                } else if (pay.monthPaid) {
+                                                    yearVal = pay.monthPaid.split('-')[0];
+                                                }
+                                            } else if (pay.date) {
+                                                yearVal = pay.date.split('-')[0];
+                                            }
                                             return (
                                                 <tr key={pay.id} style={{ borderBottom: '1px solid #E6EFF5' }}>
                                                     <td style={{ padding: '8px', color: '#343C6A', fontWeight: '600' }}>{desc}</td>
                                                     <td style={{ padding: '8px', color: '#718EBF' }}>{period}</td>
+                                                    <td style={{ padding: '8px', color: '#718EBF' }}>{yearVal}</td>
                                                     <td style={{ padding: '8px', textAlign: 'right', fontWeight: '800', color: '#2D60FF' }}>
                                                         {pay.amount.toLocaleString()} {state.settings.currency}
                                                     </td>
@@ -1712,25 +1747,38 @@ const Payments = () => {
                                             );
                                         })
                                     ) : (
-                                        <tr style={{ borderBottom: '1px solid #E6EFF5' }}>
-                                            <td style={{ padding: '8px', color: '#343C6A', fontWeight: '600' }}>
-                                                {receipt.types?.has('Rent') && receipt.types?.has('Deposit') ? 'Monthly Rent & Security Deposit' : (receipt.types?.has('Deposit') ? 'Security Deposit' : 'Monthly Rent')}
-                                            </td>
-                                            <td style={{ padding: '8px', color: '#718EBF' }}>{monthsStr}</td>
-                                            <td style={{ padding: '8px', textAlign: 'right', fontWeight: '800', color: '#2D60FF' }}>
-                                                {(receipt.totalAmount || receipt.amount || 0).toLocaleString()} {state.settings.currency}
-                                            </td>
-                                        </tr>
+                                        (() => {
+                                            let mainYear = '—';
+                                            if (receipt.monthList && receipt.monthList.length > 0) {
+                                                mainYear = [...new Set(receipt.monthList.map(m => m.split('-')[0]))].join(', ');
+                                            } else if (receipt.monthPaid) {
+                                                mainYear = receipt.monthPaid.split('-')[0];
+                                            } else if (receipt.date) {
+                                                mainYear = receipt.date.split('-')[0];
+                                            }
+                                            return (
+                                                <tr style={{ borderBottom: '1px solid #E6EFF5' }}>
+                                                    <td style={{ padding: '8px', color: '#343C6A', fontWeight: '600' }}>
+                                                        {receipt.types?.has('Rent') && receipt.types?.has('Deposit') ? 'Monthly Rent & Security Deposit' : (receipt.types?.has('Deposit') ? 'Security Deposit' : 'Monthly Rent')}
+                                                    </td>
+                                                    <td style={{ padding: '8px', color: '#718EBF' }}>{monthsStr}</td>
+                                                    <td style={{ padding: '8px', color: '#718EBF' }}>{mainYear}</td>
+                                                    <td style={{ padding: '8px', textAlign: 'right', fontWeight: '800', color: '#2D60FF' }}>
+                                                        {(receipt.totalAmount || receipt.amount || 0).toLocaleString()} {state.settings.currency}
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })()
                                     )}
                                     {receipt.note && (
                                         <tr style={{ borderBottom: '1px solid #E6EFF5' }}>
-                                            <td style={{ padding: '8px', color: '#718EBF', fontStyle: 'italic' }} colSpan={3}>Note: {receipt.note}</td>
+                                            <td style={{ padding: '8px', color: '#718EBF', fontStyle: 'italic' }} colSpan={4}>Note: {receipt.note}</td>
                                         </tr>
                                     )}
                                 </tbody>
                                 <tfoot>
                                     <tr style={{ background: '#F5F7FA' }}>
-                                        <td colSpan={2} style={{ padding: '8px', fontWeight: '800', fontSize: '12px', color: '#343C6A' }}>TOTAL PAID</td>
+                                        <td colSpan={3} style={{ padding: '8px', fontWeight: '800', fontSize: '12px', color: '#343C6A' }}>TOTAL PAID</td>
                                         <td style={{ padding: '8px', textAlign: 'right', fontWeight: '900', fontSize: '15px', color: '#2D60FF' }}>
                                             {(receipt.totalAmount || receipt.amount || 0).toLocaleString()} {state.settings.currency}
                                         </td>

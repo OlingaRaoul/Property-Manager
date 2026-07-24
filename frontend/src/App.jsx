@@ -492,25 +492,47 @@ function TenantHistoryModal() {
                   }
                   period = '—';
               }
+              let yearVal = '—';
+              if (pType === 'Rent') {
+                  if (pay.monthList && pay.monthList.length > 0) {
+                      yearVal = [...new Set(pay.monthList.map(m => m.split('-')[0]))].join(', ');
+                  } else if (pay.monthPaid) {
+                      yearVal = pay.monthPaid.split('-')[0];
+                  }
+              } else if (pay.date) {
+                  yearVal = pay.date.split('-')[0];
+              }
               return `
                 <tr style="border-bottom: 1px solid #E6EFF5;">
                   <td style="padding: 12px; color: #343C6A; font-weight: 600;">${desc}</td>
                   <td style="padding: 12px; color: #718EBF;">${period}</td>
+                  <td style="padding: 12px; color: #718EBF;">${yearVal}</td>
                   <td style="padding: 12px; text-align: right; font-weight: 800; color: #2D60FF;">${pay.amount.toLocaleString()} ${currency}</td>
                 </tr>
               `;
           }).join('')
-          : `
-            <tr style="border-bottom: 1px solid #E6EFF5;">
-              <td style="padding: 12px; color: #343C6A; font-weight: 600;">${
-                  receiptData.types?.has('Rent') && receiptData.types?.has('Deposit') 
-                      ? 'Monthly Rent & Security Deposit' 
-                      : (receiptData.types?.has('Deposit') ? 'Security Deposit' : 'Monthly Rent')
-              }</td>
-              <td style="padding: 12px; color: #718EBF;">${monthsStr}</td>
-              <td style="padding: 12px; text-align: right; font-weight: 800; color: #2D60FF;">${total} ${currency}</td>
-            </tr>
-          `;
+          : (() => {
+              let mainYear = '—';
+              if (receiptData.monthList && receiptData.monthList.length > 0) {
+                  mainYear = [...new Set(receiptData.monthList.map(m => m.split('-')[0]))].join(', ');
+              } else if (receiptData.monthPaid) {
+                  mainYear = receiptData.monthPaid.split('-')[0];
+              } else if (receiptData.date) {
+                  mainYear = receiptData.date.split('-')[0];
+              }
+              return `
+                <tr style="border-bottom: 1px solid #E6EFF5;">
+                  <td style="padding: 12px; color: #343C6A; font-weight: 600;">${
+                      receiptData.types?.has('Rent') && receiptData.types?.has('Deposit') 
+                          ? 'Monthly Rent & Security Deposit' 
+                          : (receiptData.types?.has('Deposit') ? 'Security Deposit' : 'Monthly Rent')
+                  }</td>
+                  <td style="padding: 12px; color: #718EBF;">${monthsStr}</td>
+                  <td style="padding: 12px; color: #718EBF;">${mainYear}</td>
+                  <td style="padding: 12px; text-align: right; font-weight: 800; color: #2D60FF;">${total} ${currency}</td>
+                </tr>
+              `;
+          })();
 
       const depositDetailInfoHtml = (depositMonths > 0 || paidDeposit > 0)
           ? `
@@ -635,16 +657,17 @@ function TenantHistoryModal() {
         <tr>
           <th>Description</th>
           <th>Period</th>
+          <th>${lang === 'fr' ? 'Année' : 'Year'}</th>
           <th>Amount</th>
         </tr>
       </thead>
       <tbody>
         ${itemsHtml}
-        ${receiptData.note ? `<tr><td colspan="3" style="color:#718EBF;font-style:italic">Note: ${receiptData.note}</td></tr>` : ''}
+        ${receiptData.note ? `<tr><td colspan="4" style="color:#718EBF;font-style:italic">Note: ${receiptData.note}</td></tr>` : ''}
       </tbody>
       <tfoot>
         <tr>
-          <td colspan="2">TOTAL PAID</td>
+          <td colspan="3">TOTAL PAID</td>
           <td>${total} ${currency}</td>
         </tr>
       </tfoot>
@@ -1027,6 +1050,7 @@ function TenantHistoryModal() {
                                         <tr style={{ background: '#2D60FF' }}>
                                             <th style={{ padding: '0.7rem 1rem', textAlign: 'left', color: 'white', fontWeight: '700', borderRadius: '8px 0 0 0' }}>Description</th>
                                             <th style={{ padding: '0.7rem 1rem', textAlign: 'left', color: 'white', fontWeight: '700' }}>Period</th>
+                                            <th style={{ padding: '0.7rem 1rem', textAlign: 'left', color: 'white', fontWeight: '700' }}>{lang === 'fr' ? 'Année' : 'Year'}</th>
                                             <th style={{ padding: '0.7rem 1rem', textAlign: 'right', color: 'white', fontWeight: '700', borderRadius: '0 8px 0 0' }}>Amount</th>
                                         </tr>
                                     </thead>
@@ -1045,43 +1069,67 @@ function TenantHistoryModal() {
                                                      period = (pay.monthList && pay.monthList.length > 0)
                                                          ? pay.monthList.map(m => formatMonth(m, lang)).join(', ')
                                                          : formatMonth(pay.monthPaid, lang);
-                                                } else if (pType) {
-                                                    desc = pType === 'Utility' ? 'Utility Bill' : pType;
-                                                    if (pay.utilityId) {
-                                                        desc += ` (${pay.utilityId})`;
-                                                    }
-                                                    period = '—';
+                                                 } else if (pType) {
+                                                     desc = pType === 'Utility' ? 'Utility Bill' : pType;
+                                                     if (pay.utilityId) {
+                                                         desc += ` (${pay.utilityId})`;
+                                                     }
+                                                     period = '—';
+                                                 }
+                                                 let yearVal = '—';
+                                                 if (pType === 'Rent') {
+                                                     if (pay.monthList && pay.monthList.length > 0) {
+                                                         yearVal = [...new Set(pay.monthList.map(m => m.split('-')[0]))].join(', ');
+                                                     } else if (pay.monthPaid) {
+                                                         yearVal = pay.monthPaid.split('-')[0];
+                                                     }
+                                                 } else if (pay.date) {
+                                                     yearVal = pay.date.split('-')[0];
+                                                 }
+                                                 return (
+                                                     <tr key={pay.id} style={{ borderBottom: '1px solid #E6EFF5' }}>
+                                                         <td style={{ padding: '0.8rem 1rem', fontWeight: '600', color: '#343C6A' }}>{desc}</td>
+                                                         <td style={{ padding: '0.8rem 1rem', color: '#718EBF' }}>{period}</td>
+                                                         <td style={{ padding: '0.8rem 1rem', color: '#718EBF' }}>{yearVal}</td>
+                                                         <td style={{ padding: '0.8rem 1rem', textAlign: 'right', fontWeight: '800', color: '#2D60FF' }}>
+                                                             {pay.amount.toLocaleString()} {currency}
+                                                         </td>
+                                                     </tr>
+                                                 );
+                                             })
+                                        ) : (
+                                            (() => {
+                                                let mainYear = '—';
+                                                if (previewReceipt.monthList && previewReceipt.monthList.length > 0) {
+                                                    mainYear = [...new Set(previewReceipt.monthList.map(m => m.split('-')[0]))].join(', ');
+                                                } else if (previewReceipt.monthPaid) {
+                                                    mainYear = previewReceipt.monthPaid.split('-')[0];
+                                                } else if (previewReceipt.date) {
+                                                    mainYear = previewReceipt.date.split('-')[0];
                                                 }
                                                 return (
-                                                    <tr key={pay.id} style={{ borderBottom: '1px solid #E6EFF5' }}>
-                                                        <td style={{ padding: '0.8rem 1rem', fontWeight: '600', color: '#343C6A' }}>{desc}</td>
-                                                        <td style={{ padding: '0.8rem 1rem', color: '#718EBF' }}>{period}</td>
+                                                    <tr style={{ borderBottom: '1px solid #E6EFF5' }}>
+                                                        <td style={{ padding: '0.8rem 1rem', fontWeight: '600', color: '#343C6A' }}>
+                                                            {previewReceipt.types?.has('Rent') && previewReceipt.types?.has('Deposit') ? 'Monthly Rent & Security Deposit' : (previewReceipt.types?.has('Deposit') ? 'Security Deposit' : 'Monthly Rent')}
+                                                        </td>
+                                                        <td style={{ padding: '0.8rem 1rem', color: '#718EBF' }}>{monthsStr}</td>
+                                                        <td style={{ padding: '0.8rem 1rem', color: '#718EBF' }}>{mainYear}</td>
                                                         <td style={{ padding: '0.8rem 1rem', textAlign: 'right', fontWeight: '800', color: '#2D60FF' }}>
-                                                            {pay.amount.toLocaleString()} {currency}
+                                                            {(previewReceipt.totalAmount || previewReceipt.amount || 0).toLocaleString()} {currency}
                                                         </td>
                                                     </tr>
                                                 );
-                                            })
-                                        ) : (
-                                            <tr style={{ borderBottom: '1px solid #E6EFF5' }}>
-                                                <td style={{ padding: '0.8rem 1rem', fontWeight: '600', color: '#343C6A' }}>
-                                                    {previewReceipt.types?.has('Rent') && previewReceipt.types?.has('Deposit') ? 'Monthly Rent & Security Deposit' : (previewReceipt.types?.has('Deposit') ? 'Security Deposit' : 'Monthly Rent')}
-                                                </td>
-                                                <td style={{ padding: '0.8rem 1rem', color: '#718EBF' }}>{monthsStr}</td>
-                                                <td style={{ padding: '0.8rem 1rem', textAlign: 'right', fontWeight: '800', color: '#2D60FF' }}>
-                                                    {(previewReceipt.totalAmount || previewReceipt.amount || 0).toLocaleString()} {currency}
-                                                </td>
-                                            </tr>
+                                            })()
                                         )}
                                         {previewReceipt.note && (
                                             <tr>
-                                                <td colSpan={3} style={{ padding: '0.5rem 1rem', color: '#718EBF', fontStyle: 'italic', fontSize: '0.78rem' }}>Note: {previewReceipt.note}</td>
+                                                <td colSpan={4} style={{ padding: '0.5rem 1rem', color: '#718EBF', fontStyle: 'italic', fontSize: '0.78rem' }}>Note: {previewReceipt.note}</td>
                                             </tr>
                                         )}
                                     </tbody>
                                     <tfoot>
                                         <tr style={{ background: '#F5F7FA' }}>
-                                            <td colSpan={2} style={{ padding: '0.9rem 1rem', fontWeight: '800', fontSize: '0.95rem', color: '#343C6A' }}>TOTAL PAID</td>
+                                            <td colSpan={3} style={{ padding: '0.9rem 1rem', fontWeight: '800', fontSize: '0.95rem', color: '#343C6A' }}>TOTAL PAID</td>
                                             <td style={{ padding: '0.9rem 1rem', textAlign: 'right', fontWeight: '900', fontSize: '1.25rem', color: '#2D60FF' }}>
                                                 {(previewReceipt.totalAmount || previewReceipt.amount || 0).toLocaleString()} {currency}
                                             </td>
