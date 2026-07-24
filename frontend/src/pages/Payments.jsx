@@ -197,6 +197,11 @@ const Payments = () => {
 
         // Fetch individual payment records for this group
         const groupPayments = receiptData.payments || [];
+        const sortedPayments = [...groupPayments].sort((a, b) => {
+            const keyA = a.monthPaid || (a.monthList && a.monthList[0]) || a.date?.slice(0, 7) || '';
+            const keyB = b.monthPaid || (b.monthList && b.monthList[0]) || b.date?.slice(0, 7) || '';
+            return keyB.localeCompare(keyA);
+        });
 
         // Security Deposit calculations
         const tenant = receiptData.tenant || state.tenants.find(t => String(t.id) === String(receiptData.tenantId));
@@ -216,8 +221,8 @@ const Payments = () => {
         );
         const outstandingBalance = paidDeposit - reqDeposit;
 
-        const itemsHtml = groupPayments.length > 0
-            ? groupPayments.map(pay => {
+        const itemsHtml = sortedPayments.length > 0
+            ? sortedPayments.map(pay => {
                 let desc = 'Monthly Rent';
                 let period = '—';
                 const pType = pay.type || 'Rent';
@@ -1622,6 +1627,11 @@ const Payments = () => {
 
             // Fetch individual payment records for this group
             const groupPayments = receipt.payments || [];
+            const sortedPayments = [...groupPayments].sort((a, b) => {
+                const keyA = a.monthPaid || (a.monthList && a.monthList[0]) || a.date?.slice(0, 7) || '';
+                const keyB = b.monthPaid || (b.monthList && b.monthList[0]) || b.date?.slice(0, 7) || '';
+                return keyB.localeCompare(keyA);
+            });
 
             // Security Deposit calculations
             const tenant = receipt.tenant || state.tenants.find(t => String(t.id) === String(receipt.tenantId));
@@ -1704,8 +1714,8 @@ const Payments = () => {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {groupPayments.length > 0 ? (
-                                        groupPayments.map(pay => {
+                                    {sortedPayments.length > 0 ? (
+                                        sortedPayments.map(pay => {
                                             let desc = 'Monthly Rent';
                                             let period = '—';
                                             const pType = pay.type || 'Rent';
@@ -1903,12 +1913,13 @@ const Payments = () => {
                                             <tr style={{ background: '#2D60FF' }}>
                                                 <th style={{ padding: '0.7rem 1rem', textAlign: 'left', color: 'white', fontWeight: '700', borderRadius: '8px 0 0 0' }}>Description</th>
                                                 <th style={{ padding: '0.7rem 1rem', textAlign: 'left', color: 'white', fontWeight: '700' }}>Period</th>
+                                                <th style={{ padding: '0.7rem 1rem', textAlign: 'left', color: 'white', fontWeight: '700' }}>{lang === 'fr' ? 'Année' : 'Year'}</th>
                                                 <th style={{ padding: '0.7rem 1rem', textAlign: 'right', color: 'white', fontWeight: '700', borderRadius: '0 8px 0 0' }}>Amount</th>
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {groupPayments.length > 0 ? (
-                                                groupPayments.map(pay => {
+                                            {sortedPayments.length > 0 ? (
+                                                sortedPayments.map(pay => {
                                                     let desc = 'Monthly Rent';
                                                     let period = '—';
                                                     const pType = pay.type || 'Rent';
@@ -1927,43 +1938,67 @@ const Payments = () => {
                                                             desc += ` (${pay.utilityId})`;
                                                         }
                                                         period = '—';
-                                                    }
-                                                    return (
-                                                        <tr key={pay.id} style={{ borderBottom: '1px solid #E6EFF5' }}>
-                                                            <td style={{ padding: '0.8rem 1rem', fontWeight: '600', color: '#343C6A' }}>{desc}</td>
-                                                            <td style={{ padding: '0.8rem 1rem', color: '#718EBF' }}>{period}</td>
-                                                            <td style={{ padding: '0.8rem 1rem', textAlign: 'right', fontWeight: '800', color: '#2D60FF' }}>
-                                                                {pay.amount.toLocaleString()} {state.settings.currency}
-                                                            </td>
-                                                        </tr>
-                                                    );
-                                                })
-                                            ) : (
-                                                <tr style={{ borderBottom: '1px solid #E6EFF5' }}>
-                                                    <td style={{ padding: '0.8rem 1rem', fontWeight: '600', color: '#343C6A' }}>
-                                                        {receipt.types?.has('Rent') && receipt.types?.has('Deposit') ? 'Monthly Rent & Security Deposit' : (receipt.types?.has('Deposit') ? 'Security Deposit' : 'Monthly Rent')}
-                                                    </td>
-                                                    <td style={{ padding: '0.8rem 1rem', color: '#718EBF' }}>{monthsStr}</td>
-                                                    <td style={{ padding: '0.8rem 1rem', textAlign: 'right', fontWeight: '800', color: '#2D60FF' }}>
-                                                        {(receipt.totalAmount || receipt.amount || 0).toLocaleString()} {state.settings.currency}
-                                                    </td>
-                                                </tr>
-                                            )}
-                                            {receipt.note && (
-                                                <tr>
-                                                    <td colSpan={3} style={{ padding: '0.5rem 1rem', color: '#718EBF', fontStyle: 'italic', fontSize: '0.78rem' }}>Note: {receipt.note}</td>
-                                                </tr>
-                                            )}
-                                        </tbody>
-                                        <tfoot>
-                                            <tr style={{ background: '#F5F7FA' }}>
-                                                <td colSpan={2} style={{ padding: '0.9rem 1rem', fontWeight: '800', fontSize: '0.95rem', color: '#343C6A' }}>TOTAL PAID</td>
-                                                <td style={{ padding: '0.9rem 1rem', textAlign: 'right', fontWeight: '900', fontSize: '1.25rem', color: '#2D60FF' }}>
-                                                    {(receipt.totalAmount || receipt.amount || 0).toLocaleString()} {state.settings.currency}
-                                                </td>
-                                            </tr>
-                                        </tfoot>
-                                    </table>
+                                                     }
+                                                     let yearVal = '—';
+                                                     if (pType === 'Rent') {
+                                                         if (pay.monthList && pay.monthList.length > 0) {
+                                                             yearVal = [...new Set(pay.monthList.map(m => m.split('-')[0]))].join(', ');
+                                                         } else if (pay.monthPaid) {
+                                                             yearVal = pay.monthPaid.split('-')[0];
+                                                         }
+                                                     } else if (pay.date) {
+                                                         yearVal = pay.date.split('-')[0];
+                                                     }
+                                                     return (
+                                                         <tr key={pay.id} style={{ borderBottom: '1px solid #E6EFF5' }}>
+                                                             <td style={{ padding: '0.8rem 1rem', fontWeight: '600', color: '#343C6A' }}>{desc}</td>
+                                                             <td style={{ padding: '0.8rem 1rem', color: '#718EBF' }}>{period}</td>
+                                                             <td style={{ padding: '0.8rem 1rem', color: '#718EBF' }}>{yearVal}</td>
+                                                             <td style={{ padding: '0.8rem 1rem', textAlign: 'right', fontWeight: '800', color: '#2D60FF' }}>
+                                                                 {pay.amount.toLocaleString()} {state.settings.currency}
+                                                             </td>
+                                                         </tr>
+                                                     );
+                                                 })
+                                             ) : (
+                                                 (() => {
+                                                     let mainYear = '—';
+                                                     if (receipt.monthList && receipt.monthList.length > 0) {
+                                                         mainYear = [...new Set(receipt.monthList.map(m => m.split('-')[0]))].join(', ');
+                                                     } else if (receipt.monthPaid) {
+                                                         mainYear = receipt.monthPaid.split('-')[0];
+                                                     } else if (receipt.date) {
+                                                         mainYear = receipt.date.split('-')[0];
+                                                     }
+                                                     return (
+                                                         <tr style={{ borderBottom: '1px solid #E6EFF5' }}>
+                                                             <td style={{ padding: '0.8rem 1rem', fontWeight: '600', color: '#343C6A' }}>
+                                                                 {receipt.types?.has('Rent') && receipt.types?.has('Deposit') ? 'Monthly Rent & Security Deposit' : (receipt.types?.has('Deposit') ? 'Security Deposit' : 'Monthly Rent')}
+                                                             </td>
+                                                             <td style={{ padding: '0.8rem 1rem', color: '#718EBF' }}>{monthsStr}</td>
+                                                             <td style={{ padding: '0.8rem 1rem', color: '#718EBF' }}>{mainYear}</td>
+                                                             <td style={{ padding: '0.8rem 1rem', textAlign: 'right', fontWeight: '800', color: '#2D60FF' }}>
+                                                                 {(receipt.totalAmount || receipt.amount || 0).toLocaleString()} {state.settings.currency}
+                                                             </td>
+                                                         </tr>
+                                                     );
+                                                 })()
+                                             )}
+                                             {receipt.note && (
+                                                 <tr>
+                                                     <td colSpan={4} style={{ padding: '0.5rem 1rem', color: '#718EBF', fontStyle: 'italic', fontSize: '0.78rem' }}>Note: {receipt.note}</td>
+                                                 </tr>
+                                             )}
+                                         </tbody>
+                                         <tfoot>
+                                             <tr style={{ background: '#F5F7FA' }}>
+                                                 <td colSpan={3} style={{ padding: '0.9rem 1rem', fontWeight: '800', fontSize: '0.95rem', color: '#343C6A' }}>TOTAL PAID</td>
+                                                 <td style={{ padding: '0.9rem 1rem', textAlign: 'right', fontWeight: '900', fontSize: '1.25rem', color: '#2D60FF' }}>
+                                                     {(receipt.totalAmount || receipt.amount || 0).toLocaleString()} {state.settings.currency}
+                                                 </td>
+                                             </tr>
+                                         </tfoot>
+                                     </table>
 
                                     {/* Security Deposit Details */}
                                     {(reqDeposit > 0 || paidDeposit > 0) ? (

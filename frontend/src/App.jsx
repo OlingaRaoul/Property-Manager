@@ -453,6 +453,11 @@ function TenantHistoryModal() {
 
       // Fetch individual payment records for this group
       const groupPayments = receiptData.payments || [];
+      const sortedPayments = [...groupPayments].sort((a, b) => {
+          const keyA = a.monthPaid || (a.monthList && a.monthList[0]) || a.date?.slice(0, 7) || '';
+          const keyB = b.monthPaid || (b.monthList && b.monthList[0]) || b.date?.slice(0, 7) || '';
+          return keyB.localeCompare(keyA);
+      });
 
       // Security Deposit calculations
       const rentAmount = Number(tenant?.rentAmount || 0);
@@ -471,8 +476,8 @@ function TenantHistoryModal() {
       );
       const outstandingBalance = paidDeposit - reqDeposit;
 
-      const itemsHtml = groupPayments.length > 0
-          ? groupPayments.map(pay => {
+      const itemsHtml = sortedPayments.length > 0
+          ? sortedPayments.map(pay => {
               let desc = 'Monthly Rent';
               let period = '—';
               const pType = pay.type || 'Rent';
@@ -967,6 +972,11 @@ function TenantHistoryModal() {
 
             // Fetch individual payment records for this group
             const groupPayments = previewReceipt.payments || [];
+            const sortedPayments = [...groupPayments].sort((a, b) => {
+                const keyA = a.monthPaid || (a.monthList && a.monthList[0]) || a.date?.slice(0, 7) || '';
+                const keyB = b.monthPaid || (b.monthList && b.monthList[0]) || b.date?.slice(0, 7) || '';
+                return keyB.localeCompare(keyA);
+            });
 
             // Security Deposit calculations
             const rentAmount = Number(tenantObj.rentAmount || 0);
@@ -1055,8 +1065,8 @@ function TenantHistoryModal() {
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {groupPayments.length > 0 ? (
-                                             groupPayments.map(pay => {
+                                        {sortedPayments.length > 0 ? (
+                                             sortedPayments.map(pay => {
                                                  let desc = 'Monthly Rent';
                                                  let period = '—';
                                                  const pType = pay.type || 'Rent';
