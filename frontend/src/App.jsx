@@ -145,12 +145,15 @@ function TenantHistoryModal() {
               ...p, 
               monthList: p.monthPaid ? [p.monthPaid] : [], 
               totalAmount: p.amount,
-              types: new Set([p.type || 'Rent'])
+              types: new Set([p.type || 'Rent']),
+              payments: [p]
           };
       } else {
           if (p.monthPaid) acc[key].monthList.push(p.monthPaid);
           acc[key].totalAmount += p.amount;
           acc[key].types.add(p.type || 'Rent');
+          if (!acc[key].payments) acc[key].payments = [];
+          acc[key].payments.push(p);
       }
       return acc;
   }, {});
@@ -449,10 +452,7 @@ function TenantHistoryModal() {
       const signature = state.settings.signature || '';
 
       // Fetch individual payment records for this group
-      const txId = `${getTransactionId(receiptData)}-${receiptData.date}`;
-      const groupPayments = state.payments.filter(pay => 
-          `${getTransactionId(pay)}-${pay.date}` === txId
-      );
+      const groupPayments = receiptData.payments || [];
 
       // Security Deposit calculations
       const rentAmount = Number(tenant?.rentAmount || 0);
@@ -694,10 +694,7 @@ function TenantHistoryModal() {
   const handleDeletePaymentGroup = async (group) => {
       if (!confirm('Are you sure you want to delete this payment group?')) return;
       try {
-          const txId = `${getTransactionId(group)}-${group.date}`;
-          const groupPayments = state.payments.filter(p => 
-              `${getTransactionId(p)}-${p.date}` === txId
-          );
+          const groupPayments = group.payments || [];
           
           await Promise.all(groupPayments.map(p => axios.delete(`${API_URL}/payments/${p.id}`)));
           
@@ -946,10 +943,7 @@ function TenantHistoryModal() {
                     : formatMonth(previewReceipt.monthPaid, lang));
 
             // Fetch individual payment records for this group
-            const txId = `${getTransactionId(previewReceipt)}-${previewReceipt.date}`;
-            const groupPayments = state.payments.filter(pay => 
-                `${getTransactionId(pay)}-${pay.date}` === txId
-            );
+            const groupPayments = previewReceipt.payments || [];
 
             // Security Deposit calculations
             const rentAmount = Number(tenantObj.rentAmount || 0);
