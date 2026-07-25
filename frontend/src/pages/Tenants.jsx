@@ -104,7 +104,7 @@ const CircleProgress = ({ rentRemaining = 0, size = 70, strokeWidth = 9, label =
                 </div>
             </div>
             <span style={{ fontSize: '0.6rem', fontWeight: '700', color: 'var(--text-muted)', marginTop: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                {label} ({totalMonths}/12)
+                {label} ({rentMonths}/12)
             </span>
         </div>
     );
