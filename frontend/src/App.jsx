@@ -243,7 +243,7 @@ function TenantHistoryModal() {
                   }
                   .summary-grid {
                       display: grid;
-                      grid-template-columns: repeat(3, 1fr);
+                      grid-template-columns: repeat(4, 1fr);
                       gap: 12px;
                       margin-bottom: 15px;
                   }
@@ -373,6 +373,10 @@ function TenantHistoryModal() {
                   <div class="summary-card accent">
                       <span>Total Paid</span>
                       <h3>${grandTotal.toLocaleString()} ${currency}</h3>
+                  </div>
+                  <div class="summary-card" style="${totalAmountDue > 0 ? 'background: rgba(255, 75, 74, 0.05); border-color: rgba(255, 75, 74, 0.15);' : ''}">
+                      <span style="${totalAmountDue > 0 ? 'color: #FF4B4A;' : ''}">Unpaid Rent</span>
+                      <h3 style="${totalAmountDue > 0 ? 'color: #FF4B4A;' : ''}">${totalAmountDue.toLocaleString()} ${currency}</h3>
                   </div>
               </div>
 
