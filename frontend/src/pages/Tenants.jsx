@@ -32,16 +32,12 @@ const selectStyle = {
     background: '#FFFFFF', color: '#343C6A', fontSize: '0.95rem', outline: 'none',
 };
 
-const CircleProgress = ({ depositMonthsPaid = 0, rentRemaining = 0, size = 70, strokeWidth = 9, label = "Coverage", monthsLeft = 0 }) => {
+const CircleProgress = ({ rentRemaining = 0, size = 70, strokeWidth = 9, label = "Coverage", monthsLeft = 0 }) => {
     const radius = (size - strokeWidth) / 2;
     const circumference = radius * 2 * Math.PI;
 
-    // Deposit component (max 2 months)
-    const depositMonths = Math.min(2, depositMonthsPaid);
-    const depositLength = (depositMonths / 12) * circumference;
-
-    // Rent component (max 10 months)
-    const rentMonths = Math.min(10, rentRemaining);
+    // Rent component (max 12 months for a full circle)
+    const rentMonths = Math.min(12, rentRemaining);
     const rentLength = (rentMonths / 12) * circumference;
 
     // Rent color is based on rent remaining:
@@ -51,8 +47,6 @@ const CircleProgress = ({ depositMonthsPaid = 0, rentRemaining = 0, size = 70, s
     if (rentRemaining <= 2) {
         rentColor = '#FFBB38';
     }
-
-    const totalMonths = depositMonths + rentMonths;
 
     let centerColor = '#10B981';
     if (monthsLeft < 0) {
@@ -65,18 +59,7 @@ const CircleProgress = ({ depositMonthsPaid = 0, rentRemaining = 0, size = 70, s
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
             <div style={{ position: 'relative', width: size, height: size }}>
                 <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
-                    {/* Deposit Background Slot (first 2/12 - 16.67%) */}
-                    <circle
-                        cx={size / 2}
-                        cy={size / 2}
-                        r={radius}
-                        fill="transparent"
-                        stroke="#FEE2E2"
-                        strokeWidth={strokeWidth}
-                        strokeDasharray={`${circumference * 0.1667} ${circumference}`}
-                        strokeLinecap="round"
-                    />
-                    {/* Rent Background Slot (remaining 10/12 - 83.33%) */}
+                    {/* Full Rent Background Slot */}
                     <circle
                         cx={size / 2}
                         cy={size / 2}
@@ -84,26 +67,10 @@ const CircleProgress = ({ depositMonthsPaid = 0, rentRemaining = 0, size = 70, s
                         fill="transparent"
                         stroke="#E7EDFF"
                         strokeWidth={strokeWidth}
-                        strokeDasharray={`${circumference * 0.8333} ${circumference}`}
-                        strokeDashoffset={-circumference * 0.1667}
+                        strokeDasharray={`${circumference} ${circumference}`}
                         strokeLinecap="round"
                     />
                     
-                    {/* Deposit Filled Progressive circle (Red) */}
-                    {depositMonths > 0 && (
-                        <circle
-                            cx={size / 2}
-                            cy={size / 2}
-                            r={radius}
-                            fill="transparent"
-                            stroke="#FF4B4A"
-                            strokeWidth={strokeWidth}
-                            strokeDasharray={`${depositLength} ${circumference}`}
-                            strokeLinecap="round"
-                            style={{ transition: 'stroke-dashoffset 0.5s ease-in-out' }}
-                        />
-                    )}
-
                     {/* Rent Filled Progressive circle (Green or Yellow) */}
                     {rentMonths > 0 && (
                         <circle
@@ -114,7 +81,6 @@ const CircleProgress = ({ depositMonthsPaid = 0, rentRemaining = 0, size = 70, s
                             stroke={rentColor}
                             strokeWidth={strokeWidth}
                             strokeDasharray={`${rentLength} ${circumference}`}
-                            strokeDashoffset={-circumference * 0.1667}
                             strokeLinecap="round"
                             style={{ transition: 'stroke-dashoffset 0.5s ease-in-out' }}
                         />
