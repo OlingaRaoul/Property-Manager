@@ -125,6 +125,30 @@ const getNextMonth = (monthStr) => {
     return `${nextY}-${String(nextM).padStart(2, '0')}`;
 };
 
+const getMonthsLeftVal = (tenant, currentMonthStr) => {
+    if (tenant.lastPaidMonth && tenant.lastPaidMonth >= currentMonthStr) {
+        return getMonthsDifference(currentMonthStr, tenant.lastPaidMonth);
+    }
+    const today = new Date();
+    const currentDay = today.getDate();
+    const year = today.getFullYear();
+    const month = today.getMonth() + 1;
+    const daysInMonth = new Date(year, month, 0).getDate();
+    const actualDueDay = Math.min(tenant.dueDateDay || 1, daysInMonth);
+
+    let overdue = 0;
+    if (tenant.lastPaidMonth) {
+        overdue = getMonthsDifference(tenant.lastPaidMonth, currentMonthStr);
+        if (currentDay <= actualDueDay) {
+            overdue = Math.max(0, overdue - 1);
+        }
+    } else if (currentDay > actualDueDay) {
+        overdue = 1;
+    }
+    
+    return overdue > 0 ? -overdue : 0;
+};
+
 const getDueDateForMonth = (dueDateDay, monthStr) => {
     if (!monthStr || !monthStr.includes('-')) return '';
     const [y, m] = monthStr.split('-').map(Number);
@@ -596,8 +620,8 @@ const Tenants = () => {
 
     const sortedAssigned = [...filteredAssigned].sort((a, b) => {
         if (sortBy === 'urgency') {
-            const monthsLeftA = a.lastPaidMonth ? getMonthsDifference(currentMonthStr, a.lastPaidMonth) : -1;
-            const monthsLeftB = b.lastPaidMonth ? getMonthsDifference(currentMonthStr, b.lastPaidMonth) : -1;
+            const monthsLeftA = getMonthsLeftVal(a, currentMonthStr);
+            const monthsLeftB = getMonthsLeftVal(b, currentMonthStr);
             if (monthsLeftA !== monthsLeftB) {
                 return monthsLeftA - monthsLeftB; // Smallest to biggest
             }
@@ -807,9 +831,7 @@ const Tenants = () => {
                                             ? getMonthsDifference(currentMonthStr, tenantObj.lastPaidMonth) + 1
                                             : 0;
                                         
-                                        const monthsLeftVal = tenantObj.lastPaidMonth
-                                            ? getMonthsDifference(currentMonthStr, tenantObj.lastPaidMonth)
-                                            : -1;
+                                        const monthsLeftVal = getMonthsLeftVal(tenantObj, currentMonthStr);
 
                                         return (
                                             <CircleProgress 

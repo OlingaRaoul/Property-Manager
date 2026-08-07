@@ -104,8 +104,15 @@ function TenantHistoryModal() {
       
       const dueDateDay = tenant.dueDateDay || 1;
       let targetEndMonth = currentMonthStr;
-      if (today.getDate() >= dueDateDay) {
-          targetEndMonth = getNextMonth(currentMonthStr);
+      if (today.getDate() < dueDateDay) {
+          const [y, m] = currentMonthStr.split('-').map(Number);
+          let prevY = y;
+          let prevM = m - 1;
+          if (prevM < 1) {
+              prevM = 12;
+              prevY -= 1;
+          }
+          targetEndMonth = `${prevY}-${String(prevM).padStart(2, '0')}`;
       }
 
       // Find the first month they paid rent for
