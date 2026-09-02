@@ -166,16 +166,26 @@ function TenantHistoryModal() {
   // Group payments for the history table
   const grouped = tenantPayments.reduce((acc, p) => {
       const key = `${getTransactionId(p)}-${p.date}`;
+      const monthsFromPayment = [];
+      if (p.monthPaid) monthsFromPayment.push(p.monthPaid);
+      if (Array.isArray(p.monthList)) {
+          p.monthList.forEach(m => {
+              if (m && !monthsFromPayment.includes(m)) monthsFromPayment.push(m);
+          });
+      }
+
       if (!acc[key]) {
           acc[key] = { 
               ...p, 
-              monthList: p.monthPaid ? [p.monthPaid] : [], 
+              monthList: [...monthsFromPayment], 
               totalAmount: p.amount,
               types: new Set([p.type || 'Rent']),
               payments: [p]
           };
       } else {
-          if (p.monthPaid) acc[key].monthList.push(p.monthPaid);
+          monthsFromPayment.forEach(m => {
+              if (!acc[key].monthList.includes(m)) acc[key].monthList.push(m);
+          });
           acc[key].totalAmount += p.amount;
           acc[key].types.add(p.type || 'Rent');
           if (!acc[key].payments) acc[key].payments = [];
@@ -183,6 +193,12 @@ function TenantHistoryModal() {
       }
       return acc;
   }, {});
+
+  Object.values(grouped).forEach(g => {
+      if (g.monthList) {
+          g.monthList = [...new Set(g.monthList)].sort((a, b) => a.localeCompare(b));
+      }
+  });
 
   const sortedGrouped = Object.values(grouped).sort((a, b) => b.date.localeCompare(a.date));
 
@@ -405,8 +421,9 @@ function TenantHistoryModal() {
                           } else if (p.types.has('Deposit')) {
                               typeLabel = 'Deposit';
                           }
-                          const monthDisplay = p.monthList.length > 0 
-                              ? p.monthList.map(m => formatMonth(m, lang)).reverse().join(', ') 
+                          const sortedMonths = [...new Set(p.monthList || [])].sort((a, b) => a.localeCompare(b));
+                          const monthDisplay = sortedMonths.length > 0 
+                              ? sortedMonths.map(m => formatMonth(m, lang)).join(', ') 
                               : '—';
                           return `
                               <tr>
@@ -926,8 +943,9 @@ function TenantHistoryModal() {
                       typeBorder = '1px solid #E0E7FF';
                   }
 
-                  const monthDisplay = p.monthList.length > 0 
-                      ? p.monthList.map(m => formatMonth(m, lang)).reverse().join(', ') 
+                  const sortedMonths = [...new Set(p.monthList || [])].sort((a, b) => a.localeCompare(b));
+                  const monthDisplay = sortedMonths.length > 0 
+                      ? sortedMonths.map(m => formatMonth(m, lang)).join(', ') 
                       : '—';
 
                   return (
