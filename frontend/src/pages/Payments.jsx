@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom';
 import axios from 'axios';
 import { useAppState } from '../context/StateContext';
 import { formatMonth, getMonthsDifference } from '../utils';
-import { Receipt, PlusCircle, Building2, ChevronDown, MapPin, Printer, Trash2, X, CheckCircle2, Lock, CalendarDays, Edit, Search } from 'lucide-react';
+import { Receipt, PlusCircle, Building2, ChevronDown, MapPin, Printer, Trash2, X, CheckCircle2, Lock, CalendarDays, Edit, Search, Mail, Loader2, Send } from 'lucide-react';
 
 
 const TODAY      = new Date().toISOString().split('T')[0];
@@ -214,10 +214,109 @@ const Payments = () => {
 
     // ── Receipt state ─────────────────────────────────────────────────
     const [receipt, setReceipt] = useState(null);
+    const [sendingEmail, setSendingEmail] = useState(false);
+    const [emailStatus, setEmailStatus] = useState(null);
 
     const openReceipt = useCallback((paymentGroup, tenant) => {
+        setEmailStatus(null);
         setReceipt({ ...paymentGroup, tenant });
     }, []);
+
+    const sendReceiptEmail = async (receiptData) => {
+        const tenant = receiptData.tenant || state.tenants.find(t => String(t.id) === String(receiptData.tenantId));
+        if (!tenant?.email) {
+            alert('This tenant does not have an email address configured. Please add an email address in the Tenants tab first.');
+            return;
+        }
+
+        const apt = tenant ? state.apartments.find(a => String(a.id) === String(tenant.apartmentId)) : null;
+        const prop = apt ? state.properties.find(p => String(p.id) === String(apt.propertyId)) : null;
+        const receiptNo = `RCP-${receiptData.id?.replace('pay','').slice(-6) || Date.now()}`;
+
+        // Format items
+        const groupPayments = receiptData.payments || [];
+        let items = [];
+        if (groupPayments.length > 0) {
+            items = groupPayments.map(p => ({
+                description: p.type === 'Deposit' ? 'Security Deposit' : (p.type === 'Utility' ? 'Utility Bill' : 'Monthly Rent'),
+                period: (p.monthList && p.monthList.length > 0)
+                    ? p.monthList.map(m => formatMonth(m, lang)).join(', ')
+                    : (p.monthPaid ? formatMonth(p.monthPaid, lang) : (p.date || '—')),
+                amount: p.amount || 0
+            }));
+        } else {
+            const pType = receiptData.type || 'Rent';
+            const desc = pType === 'Deposit' ? 'Security Deposit' : (pType === 'Utility' ? 'Utility Bill' : 'Monthly Rent');
+            const period = receiptData.type === 'Deposit'
+                ? '—'
+                : (receiptData.monthList
+                    ? receiptData.monthList.map(m => formatMonth(m, lang)).join(', ')
+                    : (receiptData.monthPaid ? formatMonth(receiptData.monthPaid, lang) : '—'));
+            items = [{
+                description: desc,
+                period,
+                amount: receiptData.totalAmount || receiptData.amount || 0
+            }];
+        }
+
+        const rentAmount = Number(tenant?.rentAmount || 0);
+        const depositMonths = Number(tenant?.depositMonths || 0);
+        const reqDeposit = depositMonths * rentAmount;
+        const tenantPayments = state.payments.filter(p => 
+            String(p.tenantId) === String(tenant?.id) && 
+            p.type === 'Deposit' &&
+            (p.status === 'Approved' || !p.status)
+        );
+        const paidDeposit = tenantPayments.reduce((sum, p) => sum + p.amount, 0);
+        const depositMonthsPaid = tenantPayments.reduce((sum, p) => 
+            sum + (p.depositMonths || (rentAmount > 0 ? Math.round(p.amount / rentAmount) : 1)), 
+            0
+        );
+
+        setSendingEmail(true);
+        setEmailStatus(null);
+        try {
+            const token = localStorage.getItem('token');
+            const res = await axios.post(`${API_URL}/send-receipt`, {
+                to: tenant.email,
+                receiptData: {
+                    receiptNo,
+                    date: receiptData.date || TODAY,
+                    tenantName: tenant.name,
+                    tenantPhone: tenant.phone,
+                    tenantEmail: tenant.email,
+                    propertyName: prop?.name,
+                    propertyAddress: prop?.address,
+                    unitNumber: apt?.unitNumber,
+                    unitType: apt?.type,
+                    items,
+                    totalAmount: receiptData.totalAmount || receiptData.amount || 0,
+                    currency: state.settings.currency || 'EUR',
+                    note: receiptData.note,
+                    depositInfo: {
+                        required: reqDeposit,
+                        paid: paidDeposit,
+                        monthsTotal: depositMonths,
+                        monthsPaid: depositMonthsPaid
+                    }
+                }
+            }, {
+                headers: token ? { Authorization: `Bearer ${token}` } : {}
+            });
+
+            setEmailStatus({
+                type: 'success',
+                message: res.data.message || `Receipt sent to ${tenant.email}!`,
+                note: res.data.note
+            });
+        } catch (err) {
+            console.error("Receipt email error:", err);
+            const msg = err.response?.data?.error || err.message || 'Failed to send receipt email';
+            setEmailStatus({ type: 'error', message: msg });
+        } finally {
+            setSendingEmail(false);
+        }
+    };
 
     // Opens a dedicated print window with the receipt HTML — most reliable cross-browser
     const printReceipt = (receiptData) => {
@@ -2108,13 +2207,65 @@ const Payments = () => {
                                 </div>
                             </div>
 
+                            {/* Email status feedback banner */}
+                            {emailStatus && (
+                                <div style={{
+                                    padding: '0.75rem 1.5rem',
+                                    backgroundColor: emailStatus.type === 'success' ? '#DCFCE7' : '#FEE2E2',
+                                    color: emailStatus.type === 'success' ? '#15803D' : '#B91C1C',
+                                    fontSize: '0.85rem',
+                                    fontWeight: '600',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    borderTop: '1px solid #E6EFF5'
+                                }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                        {emailStatus.type === 'success' ? <CheckCircle2 size={16} /> : <X size={16} />}
+                                        <span>{emailStatus.message}</span>
+                                        {emailStatus.note && (
+                                            <span style={{ fontSize: '0.75rem', opacity: 0.85 }}>({emailStatus.note})</span>
+                                        )}
+                                    </div>
+                                    <button
+                                        onClick={() => setEmailStatus(null)}
+                                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', padding: 2 }}
+                                    >
+                                        <X size={14} />
+                                    </button>
+                                </div>
+                            )}
+
                             {/* Action buttons */}
-                            <div className="modal-footer" style={{ padding: '1rem 1.5rem' }}>
+                            <div className="modal-footer" style={{ padding: '1rem 1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                 <button className="btn btn-secondary" onClick={() => setReceipt(null)}>Close</button>
-                                <button className="btn" style={{ backgroundColor: '#2D60FF', color: '#fff', border: 'none', padding: '0.75rem 2rem', borderRadius: '10px', fontWeight: '600', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}
-                                    onClick={() => printReceipt(receipt)}>
-                                    <Printer size={16} /> Print Receipt
-                                </button>
+                                <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+                                    <button
+                                        className="btn"
+                                        style={{
+                                            backgroundColor: '#10B981',
+                                            color: '#fff',
+                                            border: 'none',
+                                            padding: '0.75rem 1.5rem',
+                                            borderRadius: '10px',
+                                            fontWeight: '600',
+                                            cursor: sendingEmail ? 'not-allowed' : 'pointer',
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            gap: '0.5rem',
+                                            opacity: sendingEmail ? 0.7 : 1
+                                        }}
+                                        disabled={sendingEmail}
+                                        onClick={() => sendReceiptEmail(receipt)}
+                                    >
+                                        {sendingEmail ? <Loader2 size={16} className="animate-spin" /> : <Mail size={16} />}
+                                        {sendingEmail ? 'Sending...' : 'Email Receipt'}
+                                    </button>
+                                    <button className="btn" style={{ backgroundColor: '#2D60FF', color: '#fff', border: 'none', padding: '0.75rem 2rem', borderRadius: '10px', fontWeight: '600', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}
+                                        onClick={() => printReceipt(receipt)}>
+                                        <Printer size={16} /> Print Receipt
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>

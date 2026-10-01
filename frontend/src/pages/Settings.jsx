@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAppState } from '../context/StateContext';
 import { t } from '../utils';
-import { Settings as SettingsIcon, Mail, Save, Send, Tag, Trash2, CheckCircle, PenTool, Upload, RefreshCw, X, Edit, Lock } from 'lucide-react';
+import { Settings as SettingsIcon, Mail, Save, Send, Tag, Trash2, CheckCircle, PenTool, Upload, RefreshCw, X, Edit, Lock, Sparkles, ChevronDown, ChevronUp } from 'lucide-react';
 import axios from 'axios';
 
 const Settings = () => {
@@ -10,6 +10,9 @@ const Settings = () => {
     const [statusMsg, setStatusMsg] = useState({ text: '', type: '' });
     const [newUnitType, setNewUnitType] = useState('');
     const [testLoading, setTestLoading] = useState(false);
+    const [resendStatus, setResendStatus] = useState(null);
+    const [testEmailRecipient, setTestEmailRecipient] = useState('');
+    const [showCustomSmtp, setShowCustomSmtp] = useState(false);
     const lang = state.settings.lang || 'en';
 
     // Signature state
@@ -66,7 +69,17 @@ const Settings = () => {
                 setSmtp(prev => ({ ...prev, ...data, pass: '' }));
             } catch (e) { console.error("SMTP fetch failed"); }
         };
+        const fetchEmailStatus = async () => {
+            try {
+                const token = localStorage.getItem('token');
+                const { data } = await axios.get(`${API_URL}/email-status`, {
+                    headers: token ? { Authorization: `Bearer ${token}` } : {}
+                });
+                setResendStatus(data);
+            } catch (e) { console.error("Email status fetch failed"); }
+        };
         fetchSmtp();
+        fetchEmailStatus();
     }, [API_URL]);
 
     if (loading) return <div>Loading...</div>;
@@ -106,6 +119,28 @@ const Settings = () => {
         } catch (e) {
             const errMsg = e.response?.data?.error || e.message;
             setStatusMsg({ text: errMsg, type: 'error' });
+        } finally {
+            setTestLoading(false);
+        }
+    };
+
+    const sendTestEmail = async () => {
+        if (!testEmailRecipient || !testEmailRecipient.includes('@')) {
+            setStatusMsg({ text: 'Please enter a valid recipient email address for testing', type: 'error' });
+            return;
+        }
+        setTestLoading(true);
+        setStatusMsg({ text: 'Sending test email via Resend API...', type: 'info' });
+        try {
+            const token = localStorage.getItem('token');
+            const { data } = await axios.post(`${API_URL}/send-test-email`, { to: testEmailRecipient }, {
+                headers: token ? { Authorization: `Bearer ${token}` } : {}
+            });
+            setStatusMsg({ text: data.message || 'Test email sent successfully!', type: 'success' });
+            setTimeout(() => setStatusMsg({ text: '', type: '' }), 6000);
+        } catch (e) {
+            const errMsg = e.response?.data?.error || e.message;
+            setStatusMsg({ text: `Test email failed: ${errMsg}`, type: 'error' });
         } finally {
             setTestLoading(false);
         }
@@ -324,33 +359,95 @@ const Settings = () => {
                     </div>
                 </div>
 
-                {/* SMTP Config */}
+                {/* Email Delivery Config */}
                 <div className="stat-card" style={{ display: 'flex', flexDirection: 'column', padding: '1.5rem', background: 'white', borderRadius: '20px', boxShadow: 'var(--card-shadow)', border: '1px solid var(--border-light)' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem' }}>
-                        <div style={{ width: '40px', height: '40px', borderRadius: '12px', background: 'linear-gradient(135deg,#4F46E5,#7C3AED)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
-                            <Mail size={20} />
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                            <div style={{ width: '40px', height: '40px', borderRadius: '12px', background: 'linear-gradient(135deg,#2563EB,#4F46E5)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
+                                <Mail size={20} />
+                            </div>
+                            <div>
+                                <h3 style={{ margin: 0, fontFamily: 'Outfit', fontWeight: 800, fontSize: '1rem' }}>Email Delivery System</h3>
+                                <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-muted)' }}>Automated tenant receipts & utility statements</p>
+                            </div>
                         </div>
-                        <div>
-                            <h3 style={{ margin: 0, fontFamily: 'Outfit', fontWeight: 800, fontSize: '1rem' }}>Email & SMTP Configuration</h3>
-                            <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-muted)' }}>Configure outgoing email for receipt delivery</p>
+                        {resendStatus?.hasResend && (
+                            <span style={{ fontSize: '0.7rem', fontWeight: '700', padding: '0.3rem 0.75rem', borderRadius: '20px', background: '#DCFCE7', color: '#15803D', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <Sparkles size={13} /> Resend Active
+                            </span>
+                        )}
+                    </div>
+
+                    {resendStatus?.hasResend ? (
+                        <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '14px', padding: '1rem', marginBottom: '1.25rem' }}>
+                            <div style={{ fontSize: '0.8rem', color: '#64748B', marginBottom: '4px' }}>Sender Address</div>
+                            <div style={{ fontSize: '0.9rem', fontWeight: '700', color: '#1E293B', fontFamily: 'monospace' }}>
+                                {resendStatus.sender}
+                            </div>
+                            <div style={{ fontSize: '0.72rem', color: '#94A3B8', marginTop: '4px' }}>
+                                Verified domain delivery with zero spam and automatic DKIM/SPF.
+                            </div>
+
+                            {/* Test Email Section */}
+                            <div style={{ marginTop: '1rem', paddingTop: '0.75rem', borderTop: '1px dashed #CBD5E1' }}>
+                                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '700', color: '#475569', marginBottom: '6px' }}>
+                                    Send Test Email:
+                                </label>
+                                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                    <input
+                                        type="email"
+                                        placeholder="your-email@example.com"
+                                        className="search-box"
+                                        style={{ flex: 1, padding: '0.6rem 0.85rem', fontSize: '0.85rem' }}
+                                        value={testEmailRecipient}
+                                        onChange={e => setTestEmailRecipient(e.target.value)}
+                                    />
+                                    <button
+                                        className="btn btn-primary"
+                                        disabled={testLoading}
+                                        onClick={sendTestEmail}
+                                        style={{ padding: '0.6rem 1rem', background: '#2563EB', color: 'white', border: 'none', borderRadius: '10px', fontWeight: 600, fontSize: '0.85rem', cursor: testLoading ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem', opacity: testLoading ? 0.7 : 1 }}
+                                    >
+                                        <Send size={14} /> {testLoading ? 'Sending...' : 'Send Test'}
+                                    </button>
+                                </div>
+                            </div>
                         </div>
-                    </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 120px', gap: '1rem', marginBottom: '1rem' }}>
-                        <input type="text" className="search-box" placeholder="SMTP Host" value={smtp.host || ''} onChange={e => setSmtp({...smtp, host: e.target.value})} />
-                        <input type="number" className="search-box" placeholder="Port" value={smtp.port || '587'} onChange={e => setSmtp({...smtp, port: e.target.value})} />
-                    </div>
-                    <input type="email" className="search-box" style={{ width: '100%', marginBottom: '1rem' }} placeholder="Login/Email" value={smtp.user || ''} onChange={e => setSmtp({...smtp, user: e.target.value})} />
-                    <input type="password" className="search-box" style={{ width: '100%', marginBottom: '1rem' }} placeholder="Password" value={smtp.pass || ''} onChange={e => setSmtp({...smtp, pass: e.target.value})} />
-                    <input type="text" className="search-box" style={{ width: '100%', marginBottom: '1.5rem' }} placeholder="Sender Name" value={smtp.from || ''} onChange={e => setSmtp({...smtp, from: e.target.value})} />
-                    
-                    <div style={{ marginTop: 'auto', display: 'flex', gap: '0.75rem' }}>
-                        <button className="btn btn-primary" onClick={saveSmtp} style={{ flex: 1, padding: '0.75rem', background: 'var(--primary)', color: 'white', border: 'none', borderRadius: '10px', cursor: 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
-                            <Save size={15} /> Save SMTP
-                        </button>
-                        <button className="btn btn-secondary" onClick={testSmtpConnection} disabled={testLoading} style={{ flex: 1, padding: '0.75rem', background: 'var(--secondary)', color: 'white', border: 'none', borderRadius: '10px', cursor: 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', opacity: testLoading ? 0.6 : 1 }}>
-                            <Send size={15} /> {testLoading ? 'Testing...' : 'Test'}
-                        </button>
-                    </div>
+                    ) : (
+                        <div style={{ background: '#FEF3C7', border: '1px solid #FDE68A', borderRadius: '12px', padding: '0.85rem', marginBottom: '1rem', fontSize: '0.8rem', color: '#92400E' }}>
+                            Resend API key is not configured. Outgoing emails are currently simulated or using custom SMTP.
+                        </div>
+                    )}
+
+                    {/* Toggle Custom SMTP */}
+                    <button
+                        onClick={() => setShowCustomSmtp(!showCustomSmtp)}
+                        style={{ background: 'none', border: 'none', color: '#64748B', cursor: 'pointer', fontSize: '0.78rem', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.25rem 0', marginBottom: showCustomSmtp ? '1rem' : 0 }}
+                    >
+                        {showCustomSmtp ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+                        {showCustomSmtp ? 'Hide Custom SMTP Configuration' : 'Advanced: Custom SMTP Configuration'}
+                    </button>
+
+                    {showCustomSmtp && (
+                        <div style={{ borderTop: '1px solid #E2E8F0', paddingTop: '1rem' }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 120px', gap: '1rem', marginBottom: '1rem' }}>
+                                <input type="text" className="search-box" placeholder="SMTP Host" value={smtp.host || ''} onChange={e => setSmtp({...smtp, host: e.target.value})} />
+                                <input type="number" className="search-box" placeholder="Port" value={smtp.port || '587'} onChange={e => setSmtp({...smtp, port: e.target.value})} />
+                            </div>
+                            <input type="email" className="search-box" style={{ width: '100%', marginBottom: '1rem' }} placeholder="Login/Email" value={smtp.user || ''} onChange={e => setSmtp({...smtp, user: e.target.value})} />
+                            <input type="password" className="search-box" style={{ width: '100%', marginBottom: '1rem' }} placeholder="Password" value={smtp.pass || ''} onChange={e => setSmtp({...smtp, pass: e.target.value})} />
+                            <input type="text" className="search-box" style={{ width: '100%', marginBottom: '1.5rem' }} placeholder="Sender Name" value={smtp.from || ''} onChange={e => setSmtp({...smtp, from: e.target.value})} />
+                            
+                            <div style={{ display: 'flex', gap: '0.75rem' }}>
+                                <button className="btn btn-primary" onClick={saveSmtp} style={{ flex: 1, padding: '0.75rem', background: 'var(--primary)', color: 'white', border: 'none', borderRadius: '10px', cursor: 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
+                                    <Save size={15} /> Save SMTP
+                                </button>
+                                <button className="btn btn-secondary" onClick={testSmtpConnection} disabled={testLoading} style={{ flex: 1, padding: '0.75rem', background: 'var(--secondary)', color: 'white', border: 'none', borderRadius: '10px', cursor: 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', opacity: testLoading ? 0.6 : 1 }}>
+                                    <Send size={15} /> {testLoading ? 'Testing...' : 'Test SMTP'}
+                                </button>
+                            </div>
+                        </div>
+                    )}
                 </div>
 
                 {/* Landlord Signature Config */}

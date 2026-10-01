@@ -10,6 +10,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { OAuth2Client } = require('google-auth-library');
 const crypto = require('crypto');
+const emailService = require('./emailService');
 
 dotenv.config();
 
@@ -1903,11 +1904,94 @@ app.post('/api/test-smtp', authMiddleware, async (req, res) => {
     }
 });
 
-// ── Email and simulated receipt delivery ──────────────────────────────
+// ── Professional Email Delivery (Resend API + SMTP fallback) ──────
+
+app.get('/api/email-status', authMiddleware, async (req, res) => {
+    const hasResend = !!process.env.RESEND_API_KEY;
+    res.json({
+        status: 'success',
+        provider: hasResend ? 'resend' : 'smtp',
+        sender: process.env.RESEND_FROM_EMAIL || 'Property Manager <receipts@pmanager.net>',
+        fallbackSender: process.env.RESEND_FALLBACK_FROM || 'Property Manager <onboarding@resend.dev>',
+        hasResend
+    });
+});
+
+app.post('/api/send-test-email', authMiddleware, async (req, res) => {
+    const { to } = req.body;
+    if (!to) return res.status(400).json({ error: 'Recipient email is required.' });
+
+    try {
+        if (process.env.RESEND_API_KEY) {
+            const html = `
+                <div style="font-family: sans-serif; padding: 24px; color: #1e293b;">
+                    <h2 style="color: #2563eb;">🚀 Property Manager Email Test</h2>
+                    <p>Congratulations! Your email delivery system is functioning properly via <strong>Resend API</strong>.</p>
+                    <p>Sent from: <code>${process.env.RESEND_FROM_EMAIL || 'receipts@pmanager.net'}</code></p>
+                    <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 20px 0;" />
+                    <p style="font-size: 12px; color: #94a3b8;">Property Manager Pro • All rights reserved</p>
+                </div>
+            `;
+            const result = await emailService.sendEmail({
+                to,
+                subject: 'Test Email — Property Manager Pro',
+                html
+            });
+            return res.json({
+                status: 'success',
+                message: `Test email successfully sent to ${to}!`,
+                sender: result.sender,
+                note: result.note
+            });
+        } else {
+            return res.status(400).json({ error: 'Resend API key is not configured.' });
+        }
+    } catch (e) {
+        console.error("Test email failed:", e.message);
+        return res.status(500).json({ error: e.message });
+    }
+});
 
 app.post('/api/send-receipt', authMiddleware, async (req, res) => {
-    const { to, subject, body } = req.body;
+    const { to, subject, body, receiptData } = req.body;
+    if (!to) {
+        return res.status(400).json({ error: 'Recipient email is required.' });
+    }
+
     try {
+        // If Resend API is available, use professional delivery
+        if (process.env.RESEND_API_KEY) {
+            let htmlContent = body;
+            if (receiptData) {
+                // If landlord has a signature stored in settings, attach it
+                let sig = null;
+                if (isConnected()) {
+                    const row = await Setting.findOne({ key: 'signature', userId: req.userId });
+                    if (row) sig = row.value;
+                } else if (mockData.settings) {
+                    sig = mockData.settings[`signature_${req.userId}`];
+                }
+                receiptData.signatureUrl = sig;
+                htmlContent = emailService.buildRentReceiptHtml(receiptData);
+            }
+
+            const emailSubject = subject || `Rent Receipt — ${receiptData?.receiptNo || 'Payment Confirmation'} (${receiptData?.propertyName || 'Property Manager'})`;
+            
+            const result = await emailService.sendEmail({
+                to,
+                subject: emailSubject,
+                html: htmlContent
+            });
+
+            return res.json({
+                status: 'success',
+                message: `Receipt sent successfully to ${to}!`,
+                sender: result.sender,
+                note: result.note
+            });
+        }
+
+        // Fallback to user-supplied SMTP configuration
         let smtpConfig = null;
         if (isConnected()) {
             const row = await Setting.findOne({ key: 'smtp_config', userId: req.userId });
@@ -1929,16 +2013,54 @@ app.post('/api/send-receipt', authMiddleware, async (req, res) => {
             await transporter.sendMail({
                 from: `"${smtpConfig.from || 'Property Manager'}" <${smtpConfig.user}>`,
                 to,
-                subject,
-                html: body
+                subject: subject || 'Payment Receipt',
+                html: body || '<p>Payment Receipt</p>'
             });
-            return res.json({ status: 'success', message: `Receipt sent successfully to ${to}!` });
+            return res.json({ status: 'success', message: `Receipt sent successfully to ${to} via custom SMTP!` });
         } else {
             console.log(`📧 [RECEIPT SIMULATION] To: ${to} | Subject: ${subject}`);
-            return res.json({ status: 'success', message: `Receipt simulated for ${to} (Configure SMTP in settings for real emails)` });
+            return res.json({ status: 'success', message: `Receipt simulated for ${to} (Configure Resend or SMTP for live emails)` });
         }
     } catch (e) {
         console.error("Receipt delivery error:", e.message);
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.post('/api/send-utility-bill', authMiddleware, async (req, res) => {
+    const { to, utilityData } = req.body;
+    if (!to) {
+        return res.status(400).json({ error: 'Recipient email is required.' });
+    }
+    if (!utilityData) {
+        return res.status(400).json({ error: 'Utility bill details are required.' });
+    }
+
+    try {
+        if (process.env.RESEND_API_KEY) {
+            const htmlContent = emailService.buildUtilityBillHtml(utilityData);
+            const emailSubject = `Utility Bill: ${utilityData.type || 'Utility'} — Unit ${utilityData.unitNumber || '—'} (${utilityData.month || ''})`;
+
+            const result = await emailService.sendEmail({
+                to,
+                subject: emailSubject,
+                html: htmlContent
+            });
+
+            return res.json({
+                status: 'success',
+                message: `Utility bill sent successfully to ${to}!`,
+                sender: result.sender,
+                note: result.note
+            });
+        }
+
+        return res.json({
+            status: 'success',
+            message: `Utility bill simulated for ${to} (Add Resend API key for live emails)`
+        });
+    } catch (e) {
+        console.error("Utility bill delivery error:", e.message);
         res.status(500).json({ error: e.message });
     }
 });

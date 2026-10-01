@@ -5,7 +5,7 @@ import { formatMonth } from '../utils';
 import {
     Zap, Droplet, Flame, Building2, CheckCircle2, Trash2,
     ZapOff, PlusCircle, X, AlertTriangle, Edit3, ChevronDown, MapPin,
-    BarChart3, DollarSign, Clock, Undo2
+    BarChart3, DollarSign, Clock, Undo2, Mail, Loader2
 } from 'lucide-react';
 
 // ── Constants ─────────────────────────────────────────────────────────
@@ -74,6 +74,68 @@ const Utilities = () => {
     // Delete confirm
     const [deleteTarget, setDeleteTarget] = useState(null);
     const [deleting, setDeleting]         = useState(false);
+
+    // Email sending state
+    const [sendingUtilityEmailId, setSendingUtilityEmailId] = useState(null);
+    const [utilityEmailToast, setUtilityEmailToast] = useState(null);
+
+    const sendUtilityBillEmail = async (u) => {
+        const apt = state.apartments.find(a => String(a.id) === String(u.apartmentId));
+        const prop = apt ? state.properties.find(p => String(p.id) === String(apt.propertyId)) : null;
+        const tenant = apt ? state.tenants.find(t => String(t.apartmentId) === String(apt.id)) : null;
+
+        if (!tenant) {
+            alert('No tenant currently assigned to this unit.');
+            return;
+        }
+        if (!tenant.email) {
+            alert(`Tenant ${tenant.name} does not have an email address configured. Please add one in the Tenants section.`);
+            return;
+        }
+
+        setSendingUtilityEmailId(u.id);
+        setUtilityEmailToast(null);
+
+        try {
+            const token = localStorage.getItem('token');
+            const res = await axios.post(`${API_URL}/send-utility-bill`, {
+                to: tenant.email,
+                utilityData: {
+                    billId: u.id,
+                    tenantName: tenant.name,
+                    propertyName: prop?.name,
+                    propertyAddress: prop?.address,
+                    unitNumber: apt?.unitNumber,
+                    type: u.type,
+                    month: formatMonth(u.month, lang),
+                    date: u.date,
+                    lastReading: u.lastReading,
+                    currentReading: u.currentReading,
+                    unitsConsumed: u.unitsConsumed ?? (Number(u.currentReading || 0) - Number(u.lastReading || 0)),
+                    ratePerUnit: u.ratePerUnit,
+                    amount: u.amount || 0,
+                    currency: state.settings.currency || 'EUR',
+                    status: u.status || 'Unpaid',
+                    note: u.note
+                }
+            }, {
+                headers: token ? { Authorization: `Bearer ${token}` } : {}
+            });
+
+            setUtilityEmailToast({
+                type: 'success',
+                message: res.data.message || `Utility bill sent to ${tenant.email}!`
+            });
+            setTimeout(() => setUtilityEmailToast(null), 6000);
+        } catch (err) {
+            console.error("Utility email error:", err);
+            const msg = err.response?.data?.error || err.message || 'Failed to email utility bill';
+            setUtilityEmailToast({ type: 'error', message: msg });
+            setTimeout(() => setUtilityEmailToast(null), 8000);
+        } finally {
+            setSendingUtilityEmailId(null);
+        }
+    };
 
     // Computed units consumed + amount
     const consumed   = useMemo(() => {
@@ -226,6 +288,31 @@ const Utilities = () => {
                     <PlusCircle size={18} /> Record Reading
                 </button>
             </div>
+
+            {/* Email Toast Banner */}
+            {utilityEmailToast && (
+                <div style={{
+                    marginBottom: '1.5rem',
+                    padding: '0.85rem 1.25rem',
+                    borderRadius: '12px',
+                    backgroundColor: utilityEmailToast.type === 'success' ? '#DCFCE7' : '#FEE2E2',
+                    color: utilityEmailToast.type === 'success' ? '#15803D' : '#B91C1C',
+                    fontSize: '0.85rem',
+                    fontWeight: '600',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    boxShadow: '0 2px 10px rgba(0,0,0,0.04)'
+                }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                        {utilityEmailToast.type === 'success' ? <CheckCircle2 size={18} /> : <AlertTriangle size={18} />}
+                        <span>{utilityEmailToast.message}</span>
+                    </div>
+                    <button onClick={() => setUtilityEmailToast(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', padding: '2px' }}>
+                        <X size={16} />
+                    </button>
+                </div>
+            )}
 
             {/* ── Stats ── */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '1rem', marginBottom: '2.5rem' }}>
@@ -390,7 +477,27 @@ const Utilities = () => {
                                                 <div style={{ fontSize: '0.75rem', fontWeight: '600', color: '#718EBF' }}>
                                                     Period: {formatMonth(u.month, lang)}
                                                 </div>
-                                                <div style={{ display: 'flex', gap: '0.75rem' }}>
+                                                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                                                    <button
+                                                        title={`Email Bill to ${tenant?.name || 'Tenant'}`}
+                                                        onClick={() => sendUtilityBillEmail(u)}
+                                                        disabled={sendingUtilityEmailId === u.id}
+                                                        style={{
+                                                            background: '#EFF6FF',
+                                                            border: 'none',
+                                                            cursor: sendingUtilityEmailId === u.id ? 'not-allowed' : 'pointer',
+                                                            color: '#2563EB',
+                                                            padding: '8px 10px',
+                                                            borderRadius: '8px',
+                                                            display: 'flex',
+                                                            alignItems: 'center',
+                                                            gap: '5px',
+                                                            fontSize: '0.75rem',
+                                                            fontWeight: '700'
+                                                        }}>
+                                                        {sendingUtilityEmailId === u.id ? <Loader2 size={15} className="animate-spin" /> : <Mail size={15} />}
+                                                        <span>{sendingUtilityEmailId === u.id ? 'Sending...' : 'Email'}</span>
+                                                    </button>
                                                     <button 
                                                         title={u.status === 'Unpaid' ? "Mark as Paid" : "Unmark as Paid"} 
                                                         onClick={() => toggleStatus(u)}
