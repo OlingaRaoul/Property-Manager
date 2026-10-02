@@ -5,6 +5,10 @@ on:
     branches:
       - main
 
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -17,7 +21,10 @@ jobs:
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: 22
+          timeout: 60s
+          command_timeout: 15m
           script: |
             cd /root/var/www/Property-Manager
             git pull origin main
             sudo docker compose up -d --build
+
