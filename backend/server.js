@@ -1959,9 +1959,9 @@ app.post('/api/send-receipt', authMiddleware, async (req, res) => {
     }
 
     try {
-        // If Resend API is available, use professional delivery
+        // If Resend API is available, use professional delivery with PDF attachment
         if (process.env.RESEND_API_KEY) {
-            let htmlContent = body;
+            let result;
             if (receiptData) {
                 // If landlord has a signature stored in settings, attach it
                 let sig = null;
@@ -1972,20 +1972,23 @@ app.post('/api/send-receipt', authMiddleware, async (req, res) => {
                     sig = mockData.settings[`signature_${req.userId}`];
                 }
                 receiptData.signatureUrl = sig;
-                htmlContent = emailService.buildRentReceiptHtml(receiptData);
-            }
 
-            const emailSubject = subject || `Rent Receipt — ${receiptData?.receiptNo || 'Payment Confirmation'} (${receiptData?.propertyName || 'Property Manager'})`;
-            
-            const result = await emailService.sendEmail({
-                to,
-                subject: emailSubject,
-                html: htmlContent
-            });
+                result = await emailService.sendRentReceiptWithPdf({
+                    to,
+                    receiptData,
+                    subject
+                });
+            } else {
+                result = await emailService.sendEmail({
+                    to,
+                    subject: subject || 'Payment Receipt',
+                    html: body || '<p>Payment Receipt</p>'
+                });
+            }
 
             return res.json({
                 status: 'success',
-                message: `Receipt sent successfully to ${to}!`,
+                message: `Receipt with PDF attached sent successfully to ${to}!`,
                 sender: result.sender,
                 note: result.note
             });
@@ -2028,7 +2031,7 @@ app.post('/api/send-receipt', authMiddleware, async (req, res) => {
 });
 
 app.post('/api/send-utility-bill', authMiddleware, async (req, res) => {
-    const { to, utilityData } = req.body;
+    const { to, utilityData, subject } = req.body;
     if (!to) {
         return res.status(400).json({ error: 'Recipient email is required.' });
     }
@@ -2038,18 +2041,15 @@ app.post('/api/send-utility-bill', authMiddleware, async (req, res) => {
 
     try {
         if (process.env.RESEND_API_KEY) {
-            const htmlContent = emailService.buildUtilityBillHtml(utilityData);
-            const emailSubject = `Utility Bill: ${utilityData.type || 'Utility'} — Unit ${utilityData.unitNumber || '—'} (${utilityData.month || ''})`;
-
-            const result = await emailService.sendEmail({
+            const result = await emailService.sendUtilityBillWithPdf({
                 to,
-                subject: emailSubject,
-                html: htmlContent
+                utilityData,
+                subject
             });
 
             return res.json({
                 status: 'success',
-                message: `Utility bill sent successfully to ${to}!`,
+                message: `Utility statement with PDF attached sent successfully to ${to}!`,
                 sender: result.sender,
                 note: result.note
             });
