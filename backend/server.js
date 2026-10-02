@@ -711,10 +711,33 @@ app.get('/api/public/tenant/:token', async (req, res) => {
             const apt = mockData.apartments.find(a => String(a.id) === String(tenant.apartmentId));
             const prop = apt ? mockData.properties.find(p => String(p.id) === String(apt.propertyId)) : null;
 
-            const utilities = mockData.utilities.filter(u => 
+            const utilities = (mockData.utilities || []).filter(u => 
                 String(u.apartmentId) === String(tenant.apartmentId) && 
                 u.status !== 'Paid'
             );
+
+            // Collect paid rent months
+            const tenantPayments = (mockData.payments || []).filter(p => 
+                String(p.tenantId) === String(tenant.id) && 
+                (p.type === 'Rent' || !p.type) && 
+                p.status !== 'Rejected'
+            );
+            const paidMonthsList = [];
+            tenantPayments.forEach(p => {
+                if (p.monthPaid && !paidMonthsList.includes(p.monthPaid)) paidMonthsList.push(p.monthPaid);
+                if (Array.isArray(p.monthList)) {
+                    p.monthList.forEach(m => {
+                        if (!paidMonthsList.includes(m)) paidMonthsList.push(m);
+                    });
+                }
+            });
+
+            const tenantContract = (mockData.contracts || []).find(c => 
+                String(c.tenantId) === String(tenant.id) && c.active !== false
+            );
+            const agreedDay = tenantContract?.agreedDay || tenant.dueDateDay || 1;
+            const entryMonth = tenantContract?.startDate ? tenantContract.startDate.slice(0, 7) : null;
+            const currency = mockData.settings?.currency || '$';
 
             return res.json({
                 tenant: {
@@ -722,7 +745,13 @@ app.get('/api/public/tenant/:token', async (req, res) => {
                     name: tenant.name,
                     rentAmount: tenant.rentAmount,
                     lastPaidMonth: tenant.lastPaidMonth,
+                    depositMonths: tenant.depositMonths || 0,
+                    depositMonthsPaid: tenant.depositMonthsPaid || 0,
+                    dueDateDay: agreedDay,
+                    entryMonth: entryMonth,
+                    paidMonths: paidMonthsList
                 },
+                currency,
                 apartment: apt ? { unitNumber: apt.unitNumber } : null,
                 property: prop ? { name: prop.name } : null,
                 pendingUtilities: utilities.map(u => ({
@@ -744,13 +773,45 @@ app.get('/api/public/tenant/:token', async (req, res) => {
                 status: { $ne: 'Paid' }
             }).lean();
 
+            // Collect paid rent months
+            const tenantPayments = await Payment.find({ 
+                tenantId: tenant.id, 
+                type: { $in: ['Rent', null] },
+                status: { $ne: 'Rejected' }
+            }).lean();
+            const paidMonthsList = [];
+            tenantPayments.forEach(p => {
+                if (p.monthPaid && !paidMonthsList.includes(p.monthPaid)) paidMonthsList.push(p.monthPaid);
+                if (Array.isArray(p.monthList)) {
+                    p.monthList.forEach(m => {
+                        if (!paidMonthsList.includes(m)) paidMonthsList.push(m);
+                    });
+                }
+            });
+
+            const tenantContract = await Contract.findOne({ 
+                tenantId: tenant.id, 
+                active: { $ne: false } 
+            }).lean();
+            const agreedDay = tenantContract?.agreedDay || tenant.dueDateDay || 1;
+            const entryMonth = tenantContract?.startDate ? tenantContract.startDate.slice(0, 7) : null;
+
+            const currSetting = await Setting.findOne({ key: 'currency' }).lean();
+            const currency = currSetting?.value || '$';
+
             return res.json({
                 tenant: {
                     id: tenant.id,
                     name: tenant.name,
                     rentAmount: tenant.rentAmount,
                     lastPaidMonth: tenant.lastPaidMonth,
+                    depositMonths: tenant.depositMonths || 0,
+                    depositMonthsPaid: tenant.depositMonthsPaid || 0,
+                    dueDateDay: agreedDay,
+                    entryMonth: entryMonth,
+                    paidMonths: paidMonthsList
                 },
+                currency,
                 apartment: apt ? { unitNumber: apt.unitNumber } : null,
                 property: prop ? { name: prop.name } : null,
                 pendingUtilities: utilities.map(u => ({

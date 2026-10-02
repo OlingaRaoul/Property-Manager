@@ -1,13 +1,20 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import axios from 'axios';
 import { useAppState } from '../context/StateContext';
-import { CheckCircle2, Upload, AlertCircle, FileText, X } from 'lucide-react';
+import { CheckCircle2, Upload, AlertCircle, FileText, X, Lock } from 'lucide-react';
+
+const TODAY = new Date().toISOString().split('T')[0];
+const THIS_MONTH = TODAY.slice(0, 7);
+
+const lastDay = (ym) => {
+    const [y, m] = ym.split('-').map(Number);
+    return new Date(y, m, 0).getDate();
+};
 
 const TenantPaymentSubmit = () => {
     const { token } = useParams();
     const { API_URL, state } = useAppState();
-    const currency = state?.settings?.currency || 'CFA';
 
     const [tenantData, setTenantData] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -17,11 +24,12 @@ const TenantPaymentSubmit = () => {
     // Form states
     const [type, setType] = useState('Rent'); // 'Rent' | 'Deposit' | 'Utility Bill'
     const [amount, setAmount] = useState('');
-    const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+    const [date, setDate] = useState(TODAY);
     const [monthList, setMonthList] = useState([]); // Selected rent months
     const [depositMonths, setDepositMonths] = useState('1'); // Number of deposit months
     const [utilityId, setUtilityId] = useState('');
     const [note, setNote] = useState('');
+    const [activeYear, setActiveYear] = useState(new Date().getFullYear());
     
     // File upload states
     const [proofFile, setProofFile] = useState('');
@@ -30,19 +38,27 @@ const TenantPaymentSubmit = () => {
     const [dragActive, setDragActive] = useState(false);
     const [submitting, setSubmitting] = useState(false);
 
+    const currency = tenantData?.currency || state?.settings?.currency || 'CFA';
+
     useEffect(() => {
         const fetchTenant = async () => {
             try {
                 const { data } = await axios.get(`${API_URL}/public/tenant/${token}`);
                 setTenantData(data);
                 
-                // Set default month to current month
+                // Determine preselected month: current month if unpaid, or leave empty
                 const now = new Date();
                 const currentMonthString = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-                setMonthList([currentMonthString]);
-                
-                // Set initial amount to rent amount
-                setAmount(String(data.tenant.rentAmount || ''));
+                const paidList = data.tenant?.paidMonths || [];
+                const paidSet = new Set(paidList);
+
+                if (!paidSet.has(currentMonthString)) {
+                    setMonthList([currentMonthString]);
+                    setAmount(String(data.tenant?.rentAmount || ''));
+                } else {
+                    setMonthList([]);
+                    setAmount('0');
+                }
             } catch (err) {
                 setError(err.response?.data?.error || 'Failed to load tenant details. Please check your payment link.');
             } finally {
@@ -88,27 +104,30 @@ const TenantPaymentSubmit = () => {
         }
     };
 
-    // Helper to generate a range of months for rent selection
-    const generateMonths = () => {
-        const months = [];
-        const now = new Date();
-        for (let i = -3; i <= 3; i++) {
-            const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
-            const yyyy = d.getFullYear();
-            const mm = String(d.getMonth() + 1).padStart(2, '0');
-            const value = `${yyyy}-${mm}`;
-            const label = d.toLocaleString('default', { month: 'long', year: 'numeric' });
-            months.push({ value, label });
-        }
-        return months;
-    };
+    const paidMonthsSet = useMemo(() => {
+        return new Set(tenantData?.tenant?.paidMonths || []);
+    }, [tenantData]);
+
+    const agreedDay = tenantData?.tenant?.dueDateDay || 1;
+    const entryMonth = tenantData?.tenant?.entryMonth || null;
+
+    const monthsForActiveYear = useMemo(() => {
+        return Array.from({ length: 12 }, (_, i) => {
+            const m = i + 1;
+            return `${activeYear}-${String(m).padStart(2, '0')}`;
+        });
+    }, [activeYear]);
 
     const toggleMonth = (val) => {
-        if (monthList.includes(val)) {
-            setMonthList(prev => prev.filter(m => m !== val));
-        } else {
-            setMonthList(prev => [...prev, val].sort());
-        }
+        if (paidMonthsSet.has(val)) return;
+        if (entryMonth && val < entryMonth) return;
+        setMonthList(prev => {
+            if (prev.includes(val)) {
+                return prev.filter(m => m !== val);
+            } else {
+                return [...prev, val].sort();
+            }
+        });
     };
 
     // Process file uploads
@@ -348,27 +367,28 @@ const TenantPaymentSubmit = () => {
                 }
                 .type-selector {
                     display: flex;
-                    gap: 0.5rem;
+                    gap: 0.75rem;
                     margin-bottom: 1.5rem;
                 }
                 .type-btn {
                     flex: 1;
-                    padding: 0.85rem 0.5rem;
+                    padding: 0.85rem 1rem;
                     border-radius: 12px;
                     font-weight: 700;
-                    font-size: 0.9rem;
+                    font-size: 0.95rem;
                     cursor: pointer;
                     transition: all 0.2s;
-                    border: 1px solid #D2DCF2;
+                    border: 1.5px solid #D2DCF2;
                     background: #FFFFFF;
                     color: #718EBF;
                     text-align: center;
                 }
                 .type-btn.active {
-                    background: #2D60FF;
-                    color: #FFFFFF;
+                    background: #F0F5FF;
+                    color: #2D60FF;
                     border-color: #2D60FF;
-                    box-shadow: 0 4px 12px rgba(45, 96, 255, 0.2);
+                    border-width: 2px;
+                    box-shadow: 0 4px 12px rgba(45, 96, 255, 0.12);
                 }
                 .dropzone {
                     border: 2px dashed #B8C7E0;
@@ -495,35 +515,14 @@ const TenantPaymentSubmit = () => {
                 }
                 .months-grid {
                     display: grid;
-                    grid-template-columns: repeat(2, 1fr);
-                    gap: 0.75rem;
+                    grid-template-columns: repeat(6, 1fr);
+                    gap: 0.5rem;
                     margin-top: 0.25rem;
                 }
-                .month-checkbox-label {
-                    display: flex;
-                    align-items: center;
-                    gap: 0.75rem;
-                    padding: 0.85rem 1rem;
-                    border: 1.5px solid #D2DCF2;
-                    border-radius: 12px;
-                    background: #FFFFFF;
-                    cursor: pointer;
-                    font-size: 0.85rem;
-                    font-weight: 700;
-                    color: #343C6A;
-                    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-                    user-select: none;
-                }
-                .month-checkbox-label.checked {
-                    border-color: #2D60FF;
-                    background: #F0F4FF;
-                    box-shadow: 0 4px 10px rgba(45, 96, 255, 0.08);
-                }
-                .month-checkbox-label input {
-                    width: 16px;
-                    height: 16px;
-                    accent-color: #2D60FF;
-                    cursor: pointer;
+                @media (max-width: 550px) {
+                    .months-grid {
+                        grid-template-columns: repeat(3, 1fr);
+                    }
                 }
                 .selector-hint {
                     font-size: 0.8rem;
@@ -591,40 +590,195 @@ const TenantPaymentSubmit = () => {
 
                     <form onSubmit={handleSubmit}>
                         <div className="form-group">
-                            <label>Payment Module</label>
+                            <label style={{ fontWeight: '700', color: '#343C6A', fontSize: '0.9rem', marginBottom: '0.4rem' }}>Payment Type *</label>
                             <div className="type-selector">
                                 <button type="button" className={`type-btn ${type === 'Rent' ? 'active' : ''}`} onClick={() => setType('Rent')}>
-                                    Rent
+                                    Rent Payment
                                 </button>
                                 <button type="button" className={`type-btn ${type === 'Deposit' ? 'active' : ''}`} onClick={() => setType('Deposit')}>
-                                    Deposit
+                                    Security Deposit
                                 </button>
-                                <button type="button" className={`type-btn ${type === 'Utility Bill' ? 'active' : ''}`} onClick={() => setType('Utility Bill')}>
-                                    Utilities
-                                </button>
+                                {pendingUtilities && pendingUtilities.length > 0 && (
+                                    <button type="button" className={`type-btn ${type === 'Utility Bill' ? 'active' : ''}`} onClick={() => setType('Utility Bill')}>
+                                        Utilities
+                                    </button>
+                                )}
                             </div>
                         </div>
 
                         {type === 'Rent' && (
-                            <div className="form-group animate-pop-in">
-                                <label>Select Billing Month(s) *</label>
+                            <div className="form-group animate-pop-in" style={{ marginBottom: '1.5rem' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                                    <label style={{ margin: 0, fontWeight: '700', color: '#343C6A', fontSize: '0.9rem' }}>Select Month(s) *</label>
+                                    <div style={{ display: 'flex', gap: '1rem', fontSize: '0.72rem', fontWeight: '600', color: '#718EBF' }}>
+                                        <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                            <span style={{ width: '10px', height: '10px', borderRadius: '3px', background: '#DCFCE7', border: '1px solid #15803D', display: 'inline-block' }} /> Paid
+                                        </span>
+                                        <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                            <span style={{ width: '10px', height: '10px', borderRadius: '3px', background: '#EFF6FF', border: '1px solid #2D60FF', display: 'inline-block' }} /> Selected
+                                        </span>
+                                        <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                            <span style={{ width: '10px', height: '10px', borderRadius: '3px', background: '#FEF9C3', border: '1px solid #A16207', display: 'inline-block' }} /> Advance
+                                        </span>
+                                    </div>
+                                </div>
+
+                                {/* Year Navigation Header */}
+                                <div style={{ 
+                                    display: 'flex', 
+                                    alignItems: 'center', 
+                                    justifyContent: 'center', 
+                                    gap: '2rem', 
+                                    marginBottom: '0.85rem',
+                                    background: '#F8FAFC',
+                                    padding: '0.55rem 1rem',
+                                    borderRadius: '12px',
+                                    border: '1px solid #E2E8F0'
+                                }}>
+                                    <button 
+                                        type="button" 
+                                        onClick={() => setActiveYear(prev => prev - 1)} 
+                                        style={{ 
+                                            border: 'none', 
+                                            background: 'none', 
+                                            color: '#2D60FF', 
+                                            fontSize: '1.2rem', 
+                                            cursor: 'pointer', 
+                                            fontWeight: 'bold',
+                                            padding: '2px 8px',
+                                            userSelect: 'none'
+                                        }}
+                                    >
+                                        ◀
+                                    </button>
+                                    <span style={{ fontWeight: '800', fontSize: '1.15rem', color: '#343C6A', letterSpacing: '0.5px' }}>
+                                        {activeYear}
+                                    </span>
+                                    <button 
+                                        type="button" 
+                                        onClick={() => setActiveYear(prev => prev + 1)} 
+                                        style={{ 
+                                            border: 'none', 
+                                            background: 'none', 
+                                            color: '#2D60FF', 
+                                            fontSize: '1.2rem', 
+                                            cursor: 'pointer', 
+                                            fontWeight: 'bold',
+                                            padding: '2px 8px',
+                                            userSelect: 'none'
+                                        }}
+                                    >
+                                        ▶
+                                    </button>
+                                </div>
+
+                                {/* 12-Month Calendar Grid */}
                                 <div className="months-grid">
-                                    {generateMonths().map(m => {
-                                        const isChecked = monthList.includes(m.value);
+                                    {monthsForActiveYear.map(val => {
+                                        const isPaid = paidMonthsSet.has(val);
+                                        const isSelected = monthList.includes(val);
+                                        const isBeforeEntry = entryMonth ? val < entryMonth : false;
+                                        const isFuture = val > THIS_MONTH;
+                                        const isCurrent = val === THIS_MONTH;
+
+                                        const [yStr, mStr] = val.split('-');
+                                        const monthIndex = parseInt(mStr) - 1;
+                                        const monthShortName = new Date(parseInt(yStr), monthIndex, 1).toLocaleString('default', { month: 'short' });
+                                        const dueLabel = agreedDay ? String(Math.min(agreedDay, lastDay(val))) : null;
+
+                                        let bg, border, color, cursor, titleText, isDisabled;
+                                        if (isBeforeEntry) {
+                                            bg = '#F3F4F6'; border = '1.5px solid #E5E7EB'; color = '#9CA3AF'; cursor = 'not-allowed'; titleText = 'Before tenancy start'; isDisabled = true;
+                                        } else if (isPaid) {
+                                            bg = '#DCFCE7'; border = '1.5px solid #16a34a'; color = '#15803D'; cursor = 'not-allowed'; titleText = 'Already paid'; isDisabled = true;
+                                        } else if (isSelected && isFuture) {
+                                            bg = '#FEF9C3'; border = '1.5px solid #A16207'; color = '#92400E'; cursor = 'pointer'; titleText = 'Advance payment selected'; isDisabled = false;
+                                        } else if (isSelected) {
+                                            bg = '#EFF6FF'; border = '1.5px solid #2D60FF'; color = '#2D60FF'; cursor = 'pointer'; titleText = 'Selected for payment'; isDisabled = false;
+                                        } else if (isFuture) {
+                                            bg = '#FAFAFA'; border = '1.5px dashed #D1D5DB'; color = '#9CA3AF'; cursor = 'pointer'; titleText = 'Click to pay in advance'; isDisabled = false;
+                                        } else if (isCurrent) {
+                                            bg = '#F8FAFF'; border = '1.5px solid #93C5FD'; color = '#343C6A'; cursor = 'pointer'; titleText = 'Current billing month'; isDisabled = false;
+                                        } else {
+                                            bg = '#F9FAFB'; border = '1.5px solid #E5E7EB'; color = '#6B7280'; cursor = 'pointer'; titleText = 'Click to select'; isDisabled = false;
+                                        }
+
                                         return (
-                                            <label key={m.value} className={`month-checkbox-label ${isChecked ? 'checked' : ''}`}>
-                                                <input 
-                                                    type="checkbox"
-                                                    checked={isChecked}
-                                                    onChange={() => toggleMonth(m.value)}
-                                                />
-                                                <span>{m.label}</span>
-                                            </label>
+                                            <button
+                                                key={val}
+                                                type="button"
+                                                title={titleText}
+                                                onClick={() => toggleMonth(val)}
+                                                disabled={isDisabled}
+                                                style={{
+                                                    background: bg,
+                                                    border,
+                                                    borderRadius: '10px',
+                                                    padding: '0.5rem 0.2rem',
+                                                    cursor,
+                                                    display: 'flex',
+                                                    flexDirection: 'column',
+                                                    alignItems: 'center',
+                                                    gap: '2px',
+                                                    transition: 'all 0.15s ease',
+                                                    position: 'relative',
+                                                    minHeight: '60px',
+                                                    justifyContent: 'center',
+                                                    width: '100%',
+                                                    boxSizing: 'border-box'
+                                                }}
+                                            >
+                                                <span style={{ fontSize: '0.9rem', fontWeight: '800', color, lineHeight: 1 }}>
+                                                    {dueLabel || '1'}
+                                                </span>
+                                                <span style={{ fontSize: '0.65rem', fontWeight: '600', color, opacity: 0.9 }}>
+                                                    {monthShortName}
+                                                </span>
+
+                                                {isBeforeEntry && (
+                                                    <Lock size={9} color="#9CA3AF" style={{ position: 'absolute', top: '4px', right: '4px' }} />
+                                                )}
+                                                {isPaid && (
+                                                    <>
+                                                        <Lock size={9} color="#16a34a" style={{ position: 'absolute', top: '4px', right: '4px' }} />
+                                                        <CheckCircle2 size={12} color="#16a34a" style={{ marginTop: '2px' }} />
+                                                    </>
+                                                )}
+                                                {isSelected && !isPaid && (
+                                                    <span style={{
+                                                        width: '5px',
+                                                        height: '5px',
+                                                        borderRadius: '50%',
+                                                        background: isFuture ? '#92400E' : '#2D60FF',
+                                                        marginTop: '2px'
+                                                    }} />
+                                                )}
+                                            </button>
                                         );
                                     })}
                                 </div>
-                                <div className="selector-hint">
-                                    Selected {monthList.length} month{monthList.length !== 1 ? 's' : ''} (Rent: {Number(tenant.rentAmount).toLocaleString()} {currency}/mo)
+
+                                <div className="selector-hint" style={{ marginTop: '0.65rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <span>
+                                        Selected <strong>{monthList.length}</strong> month{monthList.length !== 1 ? 's' : ''} (Rent: {Number(tenant.rentAmount).toLocaleString()} {currency}/mo)
+                                    </span>
+                                    {monthList.length > 0 && (
+                                        <button
+                                            type="button"
+                                            onClick={() => setMonthList([])}
+                                            style={{
+                                                background: 'none',
+                                                border: 'none',
+                                                color: '#EF4444',
+                                                fontSize: '0.75rem',
+                                                fontWeight: '600',
+                                                cursor: 'pointer',
+                                                padding: 0
+                                            }}
+                                        >
+                                            Clear selection
+                                        </button>
+                                    )}
                                 </div>
                             </div>
                         )}
