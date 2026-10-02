@@ -115,6 +115,7 @@ const SettingSchema = new mongoose.Schema({
 // ReceiptToken Schema
 const ReceiptTokenSchema = new mongoose.Schema({
     token: { type: String, required: true, unique: true },
+    type: { type: String, default: 'Receipt' },
     receiptNo: { type: String },
     tenantId: { type: String },
     paymentIds: [{ type: String }],

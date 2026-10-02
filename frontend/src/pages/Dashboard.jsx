@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAppState } from '../context/StateContext';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { Users, Building, Wallet, AlertCircle, Shield, FileText, ClipboardList, PlusCircle, DollarSign, CheckCircle2, X, Printer, Mail, Loader2 } from 'lucide-react';
+import { Users, Building, Wallet, AlertCircle, Shield, FileText, ClipboardList, PlusCircle, DollarSign, CheckCircle2, X, Printer, Mail, Loader2, MessageCircle } from 'lucide-react';
 import { getMonthsDifference, formatMonth } from '../utils';
 
 const StatCard = ({ title, value, icon: Icon, colorClass, bgClass, subtext }) => {
@@ -442,6 +442,7 @@ const Dashboard = () => {
     // Arrears Statement Preview & Email State
     const [previewStatement, setPreviewStatement] = useState(null);
     const [sendingArrearsEmail, setSendingArrearsEmail] = useState(false);
+    const [sendingArrearsWhatsApp, setSendingArrearsWhatsApp] = useState(false);
     const [arrearsEmailStatus, setArrearsEmailStatus] = useState(null);
 
     // Generate collection months list (last 12 months)
@@ -595,6 +596,88 @@ const Dashboard = () => {
             });
         } finally {
             setSendingArrearsEmail(false);
+        }
+    };
+
+    const sendArrearsStatementWhatsApp = async (statementData) => {
+        let targetPhone = (statementData?.tenantPhone || '').trim();
+        if (!targetPhone) {
+            const entered = prompt('This tenant does not have a phone number saved.\nPlease enter their WhatsApp phone number (with country code, e.g. +237...):');
+            if (entered) targetPhone = entered.trim();
+        }
+
+        setSendingArrearsWhatsApp(true);
+        try {
+            const token = localStorage.getItem('token');
+            const res = await axios.post(`${API_URL}/receipt/generate-link`, {
+                type: 'Arrears',
+                receiptNo: `ARR-${Date.now().toString().slice(-6)}`,
+                tenantId: statementData?.tenant?.id || statementData?.tenant?._id,
+                date: statementData.statementDate || new Date().toISOString().split('T')[0],
+                receiptData: {
+                    tenantName: statementData.tenantName,
+                    tenantPhone: statementData.tenantPhone,
+                    tenantEmail: statementData.tenantEmail,
+                    propertyName: statementData.propertyName,
+                    propertyAddress: statementData.propertyAddress,
+                    unitNumber: statementData.unitNumber,
+                    statementDate: statementData.statementDate,
+                    currency: statementData.currency,
+                    rentAmount: statementData.rentAmount,
+                    overdueMonths: statementData.overdueMonths,
+                    lastPaymentDate: statementData.lastPaymentDate,
+                    rentOutstandingAmount: statementData.rentOutstandingAmount,
+                    breakdown: statementData.breakdown,
+                    depositMonthsPaid: statementData.depositMonthsPaid,
+                    depositMonthsRequired: statementData.depositMonthsRequired,
+                    depositHeldAmount: statementData.depositHeldAmount,
+                    signatureUrl: statementData.signature
+                }
+            }, {
+                headers: token ? { Authorization: `Bearer ${token}` } : {}
+            });
+
+            const secureUrl = res.data.url;
+            const cleanPhone = targetPhone.replace(/\D/g, '');
+
+            let msg = `⚠️ *STATEMENT OF ARREARS - OVERDUE RENT NOTICE*\n`;
+            msg += `━━━━━━━━━━━━━━━━━━━━━━\n`;
+            msg += `*Date:* ${statementData.statementDate}\n`;
+            msg += `👤 *Tenant:* ${statementData.tenantName || '—'}\n`;
+            msg += `🏠 *Property:* ${statementData.propertyName || '—'}\n`;
+            if (statementData.unitNumber) {
+                msg += `🚪 *Unit:* ${statementData.unitNumber}\n`;
+            }
+            msg += `\n📊 *ARREARS OVERVIEW*\n`;
+            msg += `• *Months Overdue:* ${statementData.overdueMonths || 0} Month${statementData.overdueMonths !== 1 ? 's' : ''}\n`;
+            msg += `• *Last Payment Date:* ${statementData.lastPaymentDate || '—'}\n`;
+            msg += `• *Total Outstanding Rent:* ${Number(statementData.rentOutstandingAmount || 0).toLocaleString()} ${statementData.currency}\n`;
+
+            if (statementData.breakdown && statementData.breakdown.length > 0) {
+                msg += `\n📋 *DUE PERIOD BREAKDOWN*\n`;
+                statementData.breakdown.forEach(b => {
+                    msg += `• ${b.period} (Due: ${b.dueDate}): ${b.amount}\n`;
+                });
+            }
+
+            if (statementData.depositMonthsRequired > 0 || statementData.depositMonthsPaid > 0) {
+                msg += `\n🔒 *Security Deposit Status:* ${statementData.depositMonthsPaid || 0}/${statementData.depositMonthsRequired || 0} Months Held (${Number(statementData.depositHeldAmount || 0).toLocaleString()} ${statementData.currency})\n`;
+            }
+
+            msg += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+            msg += `🔗 *View Official Statement & Download PDF:*\n${secureUrl}\n\n`;
+            msg += `⚠️ _Please settle the outstanding balance at your earliest convenience or contact management._`;
+
+            const waUrl = cleanPhone 
+                ? `https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`
+                : `https://wa.me/?text=${encodeURIComponent(msg)}`;
+            
+            window.open(waUrl, '_blank');
+        } catch (err) {
+            console.error('Failed to generate WhatsApp statement link:', err);
+            alert('Failed to generate secure link for WhatsApp: ' + (err.response?.data?.error || err.message));
+        } finally {
+            setSendingArrearsWhatsApp(false);
         }
     };
 
@@ -2505,7 +2588,33 @@ const Dashboard = () => {
                             >
                                 Close
                             </button>
-                            <div style={{ display: 'flex', gap: '0.75rem' }}>
+                            <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+                                <button
+                                    onClick={() => sendArrearsStatementWhatsApp(previewStatement)}
+                                    disabled={sendingArrearsWhatsApp}
+                                    title="Send Statement with secure PDF link via WhatsApp"
+                                    style={{
+                                        backgroundColor: '#25D366',
+                                        color: '#FFFFFF',
+                                        border: 'none',
+                                        padding: '0.65rem 1.25rem',
+                                        borderRadius: '8px',
+                                        fontWeight: '700',
+                                        fontSize: '0.85rem',
+                                        cursor: sendingArrearsWhatsApp ? 'not-allowed' : 'pointer',
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '0.5rem',
+                                        opacity: sendingArrearsWhatsApp ? 0.7 : 1,
+                                        transition: 'background 0.2s',
+                                        boxShadow: '0 2px 6px rgba(37, 211, 102, 0.3)'
+                                    }}
+                                    onMouseEnter={(e) => { if (!sendingArrearsWhatsApp) e.currentTarget.style.background = '#1EBE5D'; }}
+                                    onMouseLeave={(e) => { if (!sendingArrearsWhatsApp) e.currentTarget.style.background = '#25D366'; }}
+                                >
+                                    {sendingArrearsWhatsApp ? <Loader2 size={16} className="animate-spin" /> : <MessageCircle size={16} />}
+                                    {sendingArrearsWhatsApp ? 'Generating Link...' : 'Send WhatsApp'}
+                                </button>
                                 <button
                                     onClick={() => sendArrearsStatementEmail(previewStatement)}
                                     disabled={sendingArrearsEmail}

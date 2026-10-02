@@ -17,7 +17,7 @@ dotenv.config();
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 const { User, Property, Apartment, Tenant, Payment, UnitType, Contract, Utility, Setting, ReceiptToken } = require('./models');
-const { generateRentReceiptPdf } = require('./pdfGenerator');
+const { generateRentReceiptPdf, generateArrearsStatementPdf } = require('./pdfGenerator');
 
 const app = express();
 app.use(cors());
@@ -2176,7 +2176,7 @@ const getAppBaseUrl = (req) => {
 // 1. Generate a secure, hashed receipt token
 app.post('/api/receipt/generate-link', authMiddleware, async (req, res) => {
     try {
-        const { receiptNo, tenantId, paymentIds, date, receiptData, previewImage } = req.body;
+        const { receiptNo, tenantId, paymentIds, date, receiptData, previewImage, type } = req.body;
         const token = crypto.randomBytes(16).toString('hex'); // 32 chars hex hash
 
         // If landlord has a signature stored in settings, attach it to receiptData
@@ -2191,9 +2191,11 @@ app.post('/api/receipt/generate-link', authMiddleware, async (req, res) => {
             receiptData.signatureUrl = sig;
         }
 
+        const itemType = type || 'Receipt';
         const docData = {
             token,
-            receiptNo: receiptNo || `RCP-${Date.now()}`,
+            type: itemType,
+            receiptNo: receiptNo || (itemType === 'Arrears' ? `ARR-${Date.now()}` : `RCP-${Date.now()}`),
             tenantId: String(tenantId || ''),
             paymentIds: Array.isArray(paymentIds) ? paymentIds.map(String) : [],
             date: date || new Date().toISOString().split('T')[0],
@@ -2250,6 +2252,404 @@ app.get('/r/:token', async (req, res) => {
         }
 
         const rData = receiptDoc.receiptData || {};
+        const baseUrl = getAppBaseUrl(req);
+        const fullUrl = `${baseUrl}/r/${token}`;
+        const previewImageUrl = `${baseUrl}/r/${token}/preview.png`;
+
+        if (receiptDoc.type === 'Arrears') {
+            const tenantName = rData.tenantName || 'Tenant';
+            const propertyName = rData.propertyName || 'Property';
+            const unitNumber = rData.unitNumber || '';
+            const totalOutstanding = Number(rData.rentOutstandingAmount || 0).toLocaleString();
+            const currency = rData.currency || 'CFA';
+            const statementDate = receiptDoc.date || rData.statementDate || '';
+            const overdueMonths = rData.overdueMonths || 0;
+            const lastPaymentDate = rData.lastPaymentDate || '—';
+            const breakdown = rData.breakdown || [];
+            const depositMonthsPaid = rData.depositMonthsPaid || 0;
+            const depositMonthsRequired = rData.depositMonthsRequired || 0;
+            const depositHeldAmount = Number(rData.depositHeldAmount || 0).toLocaleString();
+            const signatureUrl = rData.signatureUrl || rData.signature || null;
+
+            const ogTitle = `Statement of Arrears • ${tenantName}`;
+            const ogDesc = `Overdue Rent Notice: ${totalOutstanding} ${currency} (${overdueMonths} Months Overdue) • ${propertyName} ${unitNumber ? 'Unit ' + unitNumber : ''}`;
+
+            const rowsHtml = breakdown.map(item => `
+                <tr>
+                    <td style="padding: 12px 16px; font-weight: 600; color: #343C6A; border-bottom: 1px solid #EDF2F7;">${item.period || '—'}</td>
+                    <td style="padding: 12px 16px; color: #718EBF; border-bottom: 1px solid #EDF2F7;">${item.dueDate || '—'}</td>
+                    <td style="padding: 12px 16px; text-align: right; font-weight: 800; color: #DC2626; border-bottom: 1px solid #EDF2F7;">${item.amount || '—'}</td>
+                </tr>
+            `).join('');
+
+            const depositHtml = (depositMonthsRequired > 0 || depositMonthsPaid > 0) ? `
+                <div style="background: #F8FAFC; border-radius: 12px; padding: 14px 18px; margin: 18px 0; border: 1px solid #E2E8F0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+                    <div>
+                        <div style="font-size: 0.72rem; color: #718EBF; font-weight: 700; text-transform: uppercase; margin-bottom: 2px;">Security Deposit Status</div>
+                        <div style="font-size: 0.9rem; color: #343C6A; font-weight: 600;">Deposit Held: <strong>${depositMonthsPaid} / ${depositMonthsRequired} Months</strong></div>
+                    </div>
+                    <div style="color: #2563EB; font-weight: 800; font-size: 0.95rem;">(${depositHeldAmount} ${currency})</div>
+                </div>
+            ` : '';
+
+            const sigHtml = signatureUrl ? `
+                <div style="margin-top: 24px; padding-top: 16px; border-top: 1px dashed #CBD5E1; display: flex; justify-content: space-between; align-items: flex-end;">
+                    <div>
+                        <div style="font-size: 0.75rem; color: #718EBF; font-weight: 700; text-transform: uppercase; margin-bottom: 6px;">Property Owner Signature</div>
+                        <img src="${signatureUrl}" alt="Signature" style="max-height: 50px; max-width: 160px; object-fit: contain;" />
+                    </div>
+                    <div style="text-align: right;">
+                        <div style="font-size: 0.75rem; color: #718EBF; font-weight: 700; text-transform: uppercase;">Tenant Acknowledgment</div>
+                        <div style="border-bottom: 1px solid #94A3B8; width: 140px; height: 32px; margin-top: 8px;"></div>
+                    </div>
+                </div>
+            ` : `
+                <div style="margin-top: 24px; padding-top: 16px; border-top: 1px dashed #CBD5E1; display: flex; justify-content: space-between; align-items: flex-end;">
+                    <div>
+                        <div style="font-size: 0.75rem; color: #718EBF; font-weight: 700; text-transform: uppercase;">Property Owner</div>
+                        <div style="border-bottom: 1px solid #94A3B8; width: 140px; height: 28px; margin-top: 6px;"></div>
+                    </div>
+                    <div style="text-align: right;">
+                        <div style="font-size: 0.75rem; color: #718EBF; font-weight: 700; text-transform: uppercase;">Tenant Signature</div>
+                        <div style="border-bottom: 1px solid #94A3B8; width: 140px; height: 28px; margin-top: 6px;"></div>
+                    </div>
+                </div>
+            `;
+
+            const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${ogTitle}</title>
+    <meta property="og:title" content="${ogTitle}" />
+    <meta property="og:description" content="${ogDesc}" />
+    <meta property="og:image" content="${previewImageUrl}" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:url" content="${fullUrl}" />
+    <meta property="og:type" content="website" />
+    
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: #F8FAFC;
+            color: #1E293B;
+            margin: 0;
+            padding: 24px 16px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+        .container {
+            width: 100%;
+            max-width: 680px;
+            background: #FFFFFF;
+            border-radius: 20px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.08);
+            border: 1px solid #E2E8F0;
+            overflow: hidden;
+        }
+        .header {
+            background: #DC2626;
+            color: #FFFFFF;
+            padding: 28px 32px 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+        .header-title {
+            font-size: 1.45rem;
+            font-weight: 900;
+            letter-spacing: 0.5px;
+            margin: 0 0 4px 0;
+        }
+        .header-sub {
+            font-size: 0.85rem;
+            color: #FECACA;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .header-meta {
+            text-align: right;
+        }
+        .header-meta-label {
+            font-size: 0.72rem;
+            color: #FECACA;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+        .header-meta-value {
+            font-size: 1.05rem;
+            font-weight: 800;
+            color: #FFFFFF;
+            margin-top: 2px;
+        }
+        .body-content {
+            padding: 28px 32px;
+        }
+        .status-banner {
+            background: #FEF2F2;
+            border: 1.5px solid #FECACA;
+            border-radius: 12px;
+            padding: 14px 20px;
+            margin-bottom: 22px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        .status-title {
+            color: #B91C1C;
+            font-size: 0.95rem;
+            font-weight: 800;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .status-amount {
+            color: #B91C1C;
+            font-size: 1.35rem;
+            font-weight: 900;
+        }
+        .info-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+        @media (max-width: 580px) {
+            .info-grid { grid-template-columns: 1fr; }
+            .header-meta { text-align: left; }
+            .header { padding: 20px; }
+            .body-content { padding: 20px; }
+        }
+        .card {
+            background: #F8FAFC;
+            border: 1px solid #E2E8F0;
+            border-radius: 12px;
+            padding: 16px;
+        }
+        .card-label {
+            font-size: 0.72rem;
+            color: #718EBF;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 6px;
+        }
+        .card-title {
+            font-size: 1.05rem;
+            font-weight: 800;
+            color: #1E293B;
+            margin-bottom: 4px;
+        }
+        .card-sub {
+            font-size: 0.85rem;
+            color: #64748B;
+            line-height: 1.4;
+        }
+        .overview-box {
+            background: #FFFBEB;
+            border: 1.5px solid #FDE68A;
+            border-radius: 12px;
+            padding: 16px 20px;
+            margin-bottom: 24px;
+        }
+        .overview-label {
+            color: #B45309;
+            font-size: 0.72rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 10px;
+        }
+        .overview-stats {
+            display: grid;
+            grid-template-columns: 1fr 1.2fr 1.2fr;
+            gap: 12px;
+        }
+        @media (max-width: 520px) {
+            .overview-stats { grid-template-columns: 1fr; }
+        }
+        .stat-label {
+            font-size: 0.75rem;
+            color: #78350F;
+            font-weight: 600;
+            margin-bottom: 2px;
+        }
+        .stat-value {
+            font-size: 1.05rem;
+            font-weight: 800;
+            color: #1E293B;
+        }
+        .stat-value.red {
+            color: #B91C1C;
+            font-size: 1.2rem;
+        }
+        .section-heading {
+            font-size: 0.75rem;
+            color: #718EBF;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.6px;
+            margin: 0 0 10px 0;
+        }
+        .table-wrap {
+            border: 1px solid #E2E8F0;
+            border-radius: 12px;
+            overflow: hidden;
+            margin-bottom: 20px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th {
+            background: #1E293B;
+            color: #FFFFFF;
+            padding: 12px 16px;
+            text-align: left;
+            font-size: 0.8rem;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+        }
+        th.text-right { text-align: right; }
+        .actions-bar {
+            margin-top: 24px;
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 22px;
+            border-radius: 10px;
+            font-weight: 700;
+            font-size: 0.9rem;
+            text-decoration: none;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: none;
+        }
+        .btn-pdf {
+            background: #DC2626;
+            color: #FFFFFF;
+            box-shadow: 0 4px 12px rgba(220, 38, 38, 0.25);
+        }
+        .btn-pdf:hover { background: #B91C1C; }
+        .btn-print {
+            background: #2D60FF;
+            color: #FFFFFF;
+            box-shadow: 0 4px 12px rgba(45, 96, 255, 0.2);
+        }
+        .btn-print:hover { background: #1A4BDB; }
+        @media print {
+            body { background: #fff; padding: 0; }
+            .container { box-shadow: none; border: none; max-width: 100%; }
+            .actions-bar { display: none; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div>
+                <h1 class="header-title">STATEMENT OF ARREARS</h1>
+                <div class="header-sub">OUTSTANDING RENT &amp; COVERAGE NOTICE</div>
+            </div>
+            <div class="header-meta">
+                <div class="header-meta-label">Statement Date</div>
+                <div class="header-meta-value">${statementDate}</div>
+            </div>
+        </div>
+
+        <div class="body-content">
+            <div class="status-banner">
+                <div class="status-title">⚠️ STATUS: OVERDUE RENT NOTICE</div>
+                <div class="status-amount">${totalOutstanding} ${currency}</div>
+            </div>
+
+            <div class="info-grid">
+                <div class="card">
+                    <div class="card-label">Tenant Details</div>
+                    <div class="card-title">${tenantName}</div>
+                    ${rData.tenantPhone ? `<div class="card-sub">📞 ${rData.tenantPhone}</div>` : ''}
+                    ${rData.tenantEmail ? `<div class="card-sub">✉️ ${rData.tenantEmail}</div>` : ''}
+                </div>
+                <div class="card">
+                    <div class="card-label">Property / Unit</div>
+                    <div class="card-title">${propertyName}</div>
+                    <div class="card-sub" style="color: #2563EB; font-weight: 700;">Unit: ${unitNumber || '—'}</div>
+                    ${rData.propertyAddress ? `<div class="card-sub">${rData.propertyAddress}</div>` : ''}
+                </div>
+            </div>
+
+            <div class="overview-box">
+                <div class="overview-label">Arrears Overview</div>
+                <div class="overview-stats">
+                    <div>
+                        <div class="stat-label">Months Overdue</div>
+                        <div class="stat-value">${overdueMonths} Month${overdueMonths !== 1 ? 's' : ''}</div>
+                    </div>
+                    <div>
+                        <div class="stat-label">Last Payment Date</div>
+                        <div class="stat-value">${lastPaymentDate}</div>
+                    </div>
+                    <div>
+                        <div class="stat-label">Total Outstanding</div>
+                        <div class="stat-value red">${totalOutstanding} ${currency}</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section-heading">Breakdown of Due Periods</div>
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Due Period</th>
+                            <th>Due Date</th>
+                            <th class="text-right">Amount</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${rowsHtml}
+                    </tbody>
+                </table>
+            </div>
+
+            ${depositHtml}
+            ${sigHtml}
+
+            <div class="actions-bar">
+                <a href="${fullUrl}/pdf" target="_blank" class="btn btn-pdf">
+                    📄 Download Official PDF
+                </a>
+                <button onclick="window.print()" class="btn btn-print">
+                    🖨️ Print Statement
+                </button>
+            </div>
+        </div>
+    </div>
+</body>
+</html>`;
+
+            return res.send(html);
+        }
+
         const receiptNo = receiptDoc.receiptNo || rData.receiptNo || 'RCP';
         const tenantName = rData.tenantName || 'Tenant';
         const propertyName = rData.propertyName || 'Property';
@@ -2259,9 +2659,6 @@ app.get('/r/:token', async (req, res) => {
         const date = receiptDoc.date || rData.date || '';
         const items = rData.items || [];
         const depositInfo = rData.depositInfo || {};
-        const baseUrl = getAppBaseUrl(req);
-        const fullUrl = `${baseUrl}/r/${token}`;
-        const previewImageUrl = `${baseUrl}/r/${token}/preview.png`;
 
         const ogTitle = `Payment Receipt • ${receiptNo}`;
         const ogDesc = `${tenantName} • Total Paid: ${totalAmount} ${currency} • ${propertyName} ${unitNumber ? 'Unit ' + unitNumber : ''}`;
@@ -2549,6 +2946,35 @@ app.get('/r/:token/pdf', async (req, res) => {
         }
 
         const rData = receiptDoc.receiptData || {};
+
+        if (receiptDoc.type === 'Arrears') {
+            const arrearsPayload = {
+                tenantName: rData.tenantName || 'Tenant',
+                tenantPhone: rData.tenantPhone,
+                tenantEmail: rData.tenantEmail,
+                propertyName: rData.propertyName,
+                propertyAddress: rData.propertyAddress,
+                unitNumber: rData.unitNumber,
+                statementDate: receiptDoc.date || rData.statementDate,
+                currency: rData.currency || 'CFA',
+                rentAmount: rData.rentAmount || 0,
+                overdueMonths: rData.overdueMonths || 0,
+                lastPaymentDate: rData.lastPaymentDate || '—',
+                rentOutstandingAmount: rData.rentOutstandingAmount || 0,
+                breakdown: rData.breakdown || [],
+                depositMonthsPaid: rData.depositMonthsPaid || 0,
+                depositMonthsRequired: rData.depositMonthsRequired || 0,
+                depositHeldAmount: rData.depositHeldAmount || 0,
+                signatureUrl: rData.signatureUrl || rData.signature || null
+            };
+
+            const pdfBuffer = await generateArrearsStatementPdf(arrearsPayload);
+            res.set('Content-Type', 'application/pdf');
+            const safeName = (rData.tenantName || 'Tenant').replace(/[^a-zA-Z0-9_-]/g, '_');
+            res.set('Content-Disposition', `inline; filename="Statement-of-Arrears-${safeName}.pdf"`);
+            return res.send(pdfBuffer);
+        }
+
         const receiptPayload = {
             receiptNo: receiptDoc.receiptNo || rData.receiptNo || 'RCP',
             date: receiptDoc.date || rData.date,
@@ -2572,7 +2998,7 @@ app.get('/r/:token/pdf', async (req, res) => {
         res.set('Content-Disposition', `inline; filename="Payment-Receipt-${receiptPayload.receiptNo}.pdf"`);
         res.send(pdfBuffer);
     } catch (e) {
-        console.error('Error generating PDF receipt:', e);
+        console.error('Error generating PDF receipt or statement:', e);
         res.status(500).send('Failed to generate PDF');
     }
 });
@@ -2594,14 +3020,56 @@ app.get('/r/:token/preview.png', async (req, res) => {
             return res.send(imgBuffer);
         }
 
-        // Fallback: If no client-side PNG was passed, generate a crisp SVG banner
+        // Fallback: generate crisp SVG banner
         const rData = receiptDoc.receiptData || {};
-        const receiptNo = receiptDoc.receiptNo || 'RCP';
         const tenantName = rData.tenantName || 'Tenant';
-        const amount = Number(rData.totalAmount || 0).toLocaleString();
-        const currency = rData.currency || 'CFA';
         const prop = rData.propertyName || 'Property';
         const unit = rData.unitNumber ? `Unit ${rData.unitNumber}` : '';
+        const currency = rData.currency || 'CFA';
+
+        if (receiptDoc.type === 'Arrears') {
+            const totalOutstanding = Number(rData.rentOutstandingAmount || 0).toLocaleString();
+            const overdueMonths = rData.overdueMonths || 0;
+
+            const svg = `<svg width="1200" height="630" viewBox="0 0 1200 630" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+                <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stop-color="#991B1B"/>
+                    <stop offset="100%" stop-color="#DC2626"/>
+                </linearGradient>
+            </defs>
+            <rect width="1200" height="630" fill="url(#bg)"/>
+            <rect x="60" y="60" width="1080" height="510" rx="24" fill="#FFFFFF" fill-opacity="0.98"/>
+            
+            <rect x="60" y="60" width="1080" height="120" rx="24" fill="#DC2626"/>
+            <text x="110" y="115" font-family="Arial, sans-serif" font-weight="900" font-size="34" fill="#FFFFFF" letter-spacing="1">STATEMENT OF ARREARS</text>
+            <text x="110" y="152" font-family="Arial, sans-serif" font-weight="600" font-size="20" fill="#FECACA">OUTSTANDING RENT &amp; COVERAGE NOTICE</text>
+            <text x="1090" y="115" font-family="Arial, sans-serif" font-weight="700" font-size="22" fill="#FECACA" text-anchor="end">STATUS:</text>
+            <text x="1090" y="155" font-family="Arial, sans-serif" font-weight="900" font-size="28" fill="#FFFFFF" text-anchor="end">OVERDUE NOTICE</text>
+
+            <text x="110" y="240" font-family="Arial, sans-serif" font-weight="700" font-size="18" fill="#718EBF" letter-spacing="1">TENANT</text>
+            <text x="110" y="285" font-family="Arial, sans-serif" font-weight="900" font-size="36" fill="#343C6A">${tenantName}</text>
+            
+            <text x="650" y="240" font-family="Arial, sans-serif" font-weight="700" font-size="18" fill="#718EBF" letter-spacing="1">PROPERTY / UNIT</text>
+            <text x="650" y="285" font-family="Arial, sans-serif" font-weight="900" font-size="32" fill="#343C6A">${prop} ${unit}</text>
+
+            <line x1="110" y1="340" x2="1090" y2="340" stroke="#E6EFF5" stroke-width="3"/>
+
+            <rect x="110" y="380" width="980" height="120" rx="16" fill="#FEF2F2" stroke="#DC2626" stroke-width="2"/>
+            <text x="150" y="455" font-family="Arial, sans-serif" font-weight="800" font-size="28" fill="#991B1B">TOTAL OUTSTANDING RENT</text>
+            <text x="1050" y="460" font-family="Arial, sans-serif" font-weight="900" font-size="46" fill="#DC2626" text-anchor="end">${totalOutstanding} ${currency}</text>
+
+            <text x="110" y="540" font-family="Arial, sans-serif" font-weight="800" font-size="18" fill="#DC2626">⚠️ ${overdueMonths} Month${overdueMonths !== 1 ? 's' : ''} Overdue</text>
+            <text x="1090" y="540" font-family="Arial, sans-serif" font-weight="700" font-size="16" fill="#718EBF" text-anchor="end">Property Manager Pro • app.pmanager.net</text>
+        </svg>`;
+
+            res.set('Content-Type', 'image/svg+xml');
+            res.set('Cache-Control', 'public, max-age=86400');
+            return res.send(svg);
+        }
+
+        const receiptNo = receiptDoc.receiptNo || 'RCP';
+        const amount = Number(rData.totalAmount || 0).toLocaleString();
 
         const svg = `<svg width="1200" height="630" viewBox="0 0 1200 630" xmlns="http://www.w3.org/2000/svg">
             <defs>
