@@ -1911,7 +1911,7 @@ app.get('/api/email-status', authMiddleware, async (req, res) => {
     res.json({
         status: 'success',
         provider: hasResend ? 'resend' : 'smtp',
-        sender: process.env.RESEND_FROM_EMAIL || 'Property Manager <receipts@pmanager.net>',
+        sender: process.env.RESEND_FROM_EMAIL || 'Property Manager <receipts@app.pmanager.net>',
         fallbackSender: process.env.RESEND_FALLBACK_FROM || 'Property Manager <onboarding@resend.dev>',
         hasResend
     });
@@ -1927,7 +1927,7 @@ app.post('/api/send-test-email', authMiddleware, async (req, res) => {
                 <div style="font-family: sans-serif; padding: 24px; color: #1e293b;">
                     <h2 style="color: #2563eb;">🚀 Property Manager Email Test</h2>
                     <p>Congratulations! Your email delivery system is functioning properly via <strong>Resend API</strong>.</p>
-                    <p>Sent from: <code>${process.env.RESEND_FROM_EMAIL || 'receipts@pmanager.net'}</code></p>
+                    <p>Sent from: <code>${process.env.RESEND_FROM_EMAIL || 'receipts@app.pmanager.net'}</code></p>
                     <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 20px 0;" />
                     <p style="font-size: 12px; color: #94a3b8;">Property Manager Pro • All rights reserved</p>
                 </div>

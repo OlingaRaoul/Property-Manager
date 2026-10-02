@@ -8,7 +8,7 @@ const getResendClient = () => {
 };
 
 // Default senders
-const PRIMARY_FROM = process.env.RESEND_FROM_EMAIL || 'Property Manager <receipts@pmanager.net>';
+const PRIMARY_FROM = process.env.RESEND_FROM_EMAIL || 'Property Manager <receipts@app.pmanager.net>';
 const FALLBACK_FROM = process.env.RESEND_FALLBACK_FROM || 'Property Manager <onboarding@resend.dev>';
 
 /**

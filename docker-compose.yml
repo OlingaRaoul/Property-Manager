@@ -21,7 +21,7 @@ services:
       - MONGODB_URI=${MONGODB_URI:-mongodb://mongodb:27017/property_manager}
       - JWT_SECRET=pm_super_secret_key_production_2026
       - RESEND_API_KEY=${RESEND_API_KEY}
-      - RESEND_FROM_EMAIL=${RESEND_FROM_EMAIL:-Property Manager <receipts@pmanager.net>}
+      - RESEND_FROM_EMAIL=${RESEND_FROM_EMAIL:-Property Manager <receipts@app.pmanager.net>}
       - RESEND_FALLBACK_FROM=${RESEND_FALLBACK_FROM:-Property Manager <onboarding@resend.dev>}
     depends_on:
       - mongodb
