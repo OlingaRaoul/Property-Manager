@@ -16,7 +16,8 @@ dotenv.config();
 
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
-const { User, Property, Apartment, Tenant, Payment, UnitType, Contract, Utility, Setting } = require('./models');
+const { User, Property, Apartment, Tenant, Payment, UnitType, Contract, Utility, Setting, ReceiptToken } = require('./models');
+const { generateRentReceiptPdf } = require('./pdfGenerator');
 
 const app = express();
 app.use(cors());
@@ -46,6 +47,7 @@ let mockData = {
     ],
     contracts: [],
     utilities: [],
+    receiptTokens: [],
     settings: { currency: 'CFA', lang: 'en', notificationThresholdDays: 3 }
 };
 
@@ -2158,6 +2160,487 @@ app.post('/api/send-arrears-statement', authMiddleware, async (req, res) => {
     } catch (e) {
         console.error("Arrears statement delivery error:", e.message);
         res.status(500).json({ error: e.message });
+    }
+});
+
+// ── Public Secure Receipt Routes & WhatsApp Integration ─────────────
+
+// Helper to resolve base URL
+const getAppBaseUrl = (req) => {
+    if (process.env.APP_URL) return process.env.APP_URL.replace(/\/$/, '');
+    const proto = req.headers['x-forwarded-proto'] || req.protocol;
+    const host = req.headers['x-forwarded-host'] || req.get('host');
+    return `${proto}://${host}`;
+};
+
+// 1. Generate a secure, hashed receipt token
+app.post('/api/receipt/generate-link', authMiddleware, async (req, res) => {
+    try {
+        const { receiptNo, tenantId, paymentIds, date, receiptData, previewImage } = req.body;
+        const token = crypto.randomBytes(16).toString('hex'); // 32 chars hex hash
+
+        // If landlord has a signature stored in settings, attach it to receiptData
+        let sig = null;
+        if (isConnected()) {
+            const row = await Setting.findOne({ key: 'signature', userId: req.userId });
+            if (row) sig = row.value;
+        } else if (mockData.settings) {
+            sig = mockData.settings[`signature_${req.userId}`];
+        }
+        if (receiptData && sig && !receiptData.signatureUrl) {
+            receiptData.signatureUrl = sig;
+        }
+
+        const docData = {
+            token,
+            receiptNo: receiptNo || `RCP-${Date.now()}`,
+            tenantId: String(tenantId || ''),
+            paymentIds: Array.isArray(paymentIds) ? paymentIds.map(String) : [],
+            date: date || new Date().toISOString().split('T')[0],
+            previewImage: previewImage || null,
+            receiptData: receiptData || null,
+            createdAt: new Date()
+        };
+
+        if (isConnected()) {
+            await ReceiptToken.create(docData);
+        } else {
+            if (!mockData.receiptTokens) mockData.receiptTokens = [];
+            mockData.receiptTokens.push(docData);
+            saveMock();
+        }
+
+        const baseUrl = getAppBaseUrl(req);
+        res.json({
+            status: 'success',
+            token,
+            url: `${baseUrl}/r/${token}`,
+            pdfUrl: `${baseUrl}/r/${token}/pdf`
+        });
+    } catch (e) {
+        console.error('Error generating receipt token:', e);
+        res.status(500).json({ error: 'Failed to generate secure receipt link' });
+    }
+});
+
+// Helper to fetch receipt token record
+const findReceiptTokenDoc = async (token) => {
+    if (isConnected()) {
+        return await ReceiptToken.findOne({ token }).lean();
+    } else {
+        return (mockData.receiptTokens || []).find(r => r.token === token) || null;
+    }
+};
+
+// 2. View receipt online with OpenGraph meta tags for WhatsApp
+app.get('/r/:token', async (req, res) => {
+    try {
+        const { token } = req.params;
+        const receiptDoc = await findReceiptTokenDoc(token);
+        if (!receiptDoc) {
+            return res.status(404).send(`
+                <!DOCTYPE html>
+                <html><head><meta charset="UTF-8"><title>Receipt Not Found</title>
+                <style>body{font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;background:#F5F7FA;color:#343C6A;margin:0;}</style>
+                </head><body><div style="text-align:center;background:#fff;padding:2.5rem;border-radius:16px;box-shadow:0 10px 30px rgba(0,0,0,0.06);max-width:400px;">
+                <h2 style="color:#EF4444;margin-top:0;">Receipt Not Found</h2>
+                <p style="color:#718EBF;">This receipt link is invalid, expired, or has been removed.</p>
+                </div></body></html>
+            `);
+        }
+
+        const rData = receiptDoc.receiptData || {};
+        const receiptNo = receiptDoc.receiptNo || rData.receiptNo || 'RCP';
+        const tenantName = rData.tenantName || 'Tenant';
+        const propertyName = rData.propertyName || 'Property';
+        const unitNumber = rData.unitNumber || '';
+        const totalAmount = Number(rData.totalAmount || 0).toLocaleString();
+        const currency = rData.currency || 'CFA';
+        const date = receiptDoc.date || rData.date || '';
+        const items = rData.items || [];
+        const depositInfo = rData.depositInfo || {};
+        const baseUrl = getAppBaseUrl(req);
+        const fullUrl = `${baseUrl}/r/${token}`;
+        const previewImageUrl = `${baseUrl}/r/${token}/preview.png`;
+
+        const ogTitle = `Payment Receipt • ${receiptNo}`;
+        const ogDesc = `${tenantName} • Total Paid: ${totalAmount} ${currency} • ${propertyName} ${unitNumber ? 'Unit ' + unitNumber : ''}`;
+
+        // Build HTML table rows
+        const rowsHtml = items.map(item => `
+            <tr>
+                <td style="padding: 10px 14px; font-weight: 600; color: #343C6A; border-bottom: 1px solid #EDF2F7;">${item.description || 'Monthly Rent'}</td>
+                <td style="padding: 10px 14px; color: #718EBF; border-bottom: 1px solid #EDF2F7;">${item.period || '—'}</td>
+                <td style="padding: 10px 14px; text-align: right; font-weight: 800; color: #2D60FF; border-bottom: 1px solid #EDF2F7;">${Number(item.amount || 0).toLocaleString()} ${currency}</td>
+            </tr>
+        `).join('');
+
+        const depositHtml = (depositInfo.monthsTotal > 0 || depositInfo.paid > 0) ? `
+            <div style="background: #F8FAFC; border-radius: 12px; padding: 12px 16px; margin: 16px 0; border: 1px solid #E2E8F0;">
+                <div style="font-size: 0.72rem; color: #718EBF; font-weight: 700; text-transform: uppercase; margin-bottom: 4px;">Security Deposit Status</div>
+                <div style="display: flex; justify-content: space-between; font-size: 0.85rem; color: #343C6A;">
+                    <span><strong>Progress:</strong> ${depositInfo.monthsPaid || 0} / ${depositInfo.monthsTotal || 0} paid</span>
+                    <span style="color: #10B981; font-weight: 700;"><strong>Held:</strong> ${Number(depositInfo.paid || 0).toLocaleString()} ${currency}</span>
+                </div>
+            </div>
+        ` : '';
+
+        const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${ogTitle}</title>
+    
+    <!-- OpenGraph Metadata for WhatsApp & Social Media Preview Cards -->
+    <meta property="og:title" content="${ogTitle}" />
+    <meta property="og:description" content="${ogDesc}" />
+    <meta property="og:image" content="${previewImageUrl}" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="${fullUrl}" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="${ogTitle}" />
+    <meta name="twitter:description" content="${ogDesc}" />
+    <meta name="twitter:image" content="${previewImageUrl}" />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: linear-gradient(135deg, #F0F4F8 0%, #D9E4F5 100%);
+            margin: 0;
+            padding: 1.5rem 1rem;
+            color: #343C6A;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .receipt-container {
+            max-width: 620px;
+            width: 100%;
+        }
+        .action-bar {
+            display: flex;
+            justify-content: flex-end;
+            gap: 0.75rem;
+            margin-bottom: 1rem;
+        }
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.65rem 1.25rem;
+            border-radius: 10px;
+            font-size: 0.9rem;
+            font-weight: 700;
+            text-decoration: none;
+            cursor: pointer;
+            border: none;
+            transition: all 0.2s ease;
+        }
+        .btn-pdf {
+            background: #2D60FF;
+            color: white;
+            box-shadow: 0 4px 12px rgba(45, 96, 255, 0.25);
+        }
+        .btn-pdf:hover {
+            background: #1e4bd6;
+            transform: translateY(-1px);
+        }
+        .btn-print {
+            background: #FFFFFF;
+            color: #343C6A;
+            border: 1px solid #D2DCF2;
+        }
+        .btn-print:hover {
+            background: #F8FAFC;
+        }
+        .receipt-card {
+            background: #FFFFFF;
+            border-radius: 20px;
+            padding: 2.2rem;
+            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.06);
+            border: 1px solid #E6EFF5;
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            border-bottom: 2.5px solid #2D60FF;
+            padding-bottom: 1.25rem;
+            margin-bottom: 1.5rem;
+        }
+        .header-title {
+            font-size: 1.5rem;
+            font-weight: 900;
+            color: #2D60FF;
+            letter-spacing: -0.5px;
+            line-height: 1.1;
+        }
+        .header-subtitle {
+            font-size: 0.75rem;
+            color: #718EBF;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-top: 4px;
+        }
+        .info-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+        .info-box {
+            background: #F8FAFC;
+            border: 1px solid #E2E8F0;
+            border-radius: 12px;
+            padding: 1rem;
+        }
+        .info-label {
+            font-size: 0.68rem;
+            color: #718EBF;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 4px;
+        }
+        .info-val {
+            font-size: 1.05rem;
+            font-weight: 800;
+            color: #343C6A;
+        }
+        .table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+            font-size: 0.9rem;
+        }
+        .table th {
+            background: #2D60FF;
+            color: white;
+            font-weight: 700;
+            padding: 10px 14px;
+            text-align: left;
+        }
+        .table th:first-child { border-radius: 8px 0 0 0; }
+        .table th:last-child { border-radius: 0 8px 0 0; text-align: right; }
+        .total-box {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #F8FAFC;
+            border-radius: 12px;
+            padding: 1rem 1.25rem;
+            margin-top: 1rem;
+            border: 1.5px solid #E2E8F0;
+        }
+        .footer-stamp {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 1.75rem;
+            padding-top: 1rem;
+            border-top: 1px dashed #D2DCF2;
+        }
+        @media (max-width: 520px) {
+            .info-grid { grid-template-columns: 1fr; }
+            .receipt-card { padding: 1.5rem; }
+        }
+        @media print {
+            body { background: white; padding: 0; }
+            .action-bar { display: none; }
+            .receipt-card { box-shadow: none; border: none; padding: 0; }
+        }
+    </style>
+</head>
+<body>
+    <div class="receipt-container">
+        <div class="action-bar">
+            <a href="${fullUrl}/pdf" class="btn btn-pdf" target="_blank" download="Payment-Receipt-${receiptNo}.pdf">
+                📄 Download Official PDF
+            </a>
+            <button onclick="window.print()" class="btn btn-print">
+                🖨 Print
+            </button>
+        </div>
+
+        <div class="receipt-card">
+            <div class="header">
+                <div>
+                    <div class="header-title">RENT RECEIPT</div>
+                    <div class="header-subtitle">Official Payment Confirmation</div>
+                </div>
+                <div style="text-align: right;">
+                    <div style="font-size: 0.72rem; color: #718EBF; font-weight: 700;">Receipt No.</div>
+                    <div style="font-size: 1rem; font-weight: 800; color: #343C6A;">${receiptNo}</div>
+                    <div style="font-size: 0.78rem; color: #718EBF; margin-top: 2px;">Date: ${date}</div>
+                </div>
+            </div>
+
+            <div class="info-grid">
+                <div class="info-box">
+                    <div class="info-label">Received From</div>
+                    <div class="info-val">${tenantName}</div>
+                    ${rData.tenantPhone ? `<div style="font-size: 0.8rem; color: #718EBF; margin-top: 3px;">📞 ${rData.tenantPhone}</div>` : ''}
+                    ${rData.tenantEmail ? `<div style="font-size: 0.8rem; color: #718EBF;">✉ ${rData.tenantEmail}</div>` : ''}
+                </div>
+                <div class="info-box">
+                    <div class="info-label">Property / Unit</div>
+                    <div class="info-val">${propertyName}</div>
+                    ${rData.propertyAddress ? `<div style="font-size: 0.78rem; color: #718EBF; margin-top: 3px;">${rData.propertyAddress}</div>` : ''}
+                    ${unitNumber ? `<div style="font-size: 0.85rem; font-weight: 700; color: #2D60FF; margin-top: 3px;">Unit: ${unitNumber}</div>` : ''}
+                </div>
+            </div>
+
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Description</th>
+                        <th>Period</th>
+                        <th style="text-align: right;">Amount</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${rowsHtml}
+                </tbody>
+            </table>
+
+            <div class="total-box">
+                <span style="font-weight: 800; font-size: 1.05rem; color: #343C6A;">TOTAL PAID</span>
+                <span style="font-weight: 900; font-size: 1.45rem; color: #2D60FF;">${totalAmount} ${currency}</span>
+            </div>
+
+            ${depositHtml}
+
+            <div class="footer-stamp">
+                <span style="font-size: 0.82rem; font-weight: 800; color: #10B981; display: inline-flex; align-items: center; gap: 4px;">
+                    ✓ PAYMENT CONFIRMED & RECORDED
+                </span>
+                <span style="font-size: 0.75rem; color: #718EBF; font-weight: 600;">
+                    Property Manager Pro
+                </span>
+            </div>
+        </div>
+    </div>
+</body>
+</html>`;
+
+        res.send(html);
+    } catch (e) {
+        console.error('Error serving receipt view:', e);
+        res.status(500).send('Error loading receipt');
+    }
+});
+
+// 3. Download official PDF dynamically in-memory
+app.get('/r/:token/pdf', async (req, res) => {
+    try {
+        const { token } = req.params;
+        const receiptDoc = await findReceiptTokenDoc(token);
+        if (!receiptDoc) {
+            return res.status(404).send('Receipt not found or expired.');
+        }
+
+        const rData = receiptDoc.receiptData || {};
+        const receiptPayload = {
+            receiptNo: receiptDoc.receiptNo || rData.receiptNo || 'RCP',
+            date: receiptDoc.date || rData.date,
+            tenantName: rData.tenantName || 'Tenant',
+            tenantPhone: rData.tenantPhone,
+            tenantEmail: rData.tenantEmail,
+            propertyName: rData.propertyName,
+            propertyAddress: rData.propertyAddress,
+            unitNumber: rData.unitNumber,
+            unitType: rData.unitType,
+            items: rData.items || [],
+            totalAmount: rData.totalAmount || 0,
+            currency: rData.currency || 'CFA',
+            note: rData.note,
+            depositInfo: rData.depositInfo || {},
+            signatureUrl: rData.signatureUrl || null
+        };
+
+        const pdfBuffer = await generateRentReceiptPdf(receiptPayload);
+        res.set('Content-Type', 'application/pdf');
+        res.set('Content-Disposition', `inline; filename="Payment-Receipt-${receiptPayload.receiptNo}.pdf"`);
+        res.send(pdfBuffer);
+    } catch (e) {
+        console.error('Error generating PDF receipt:', e);
+        res.status(500).send('Failed to generate PDF');
+    }
+});
+
+// 4. OpenGraph preview image for WhatsApp card
+app.get('/r/:token/preview.png', async (req, res) => {
+    try {
+        const { token } = req.params;
+        const receiptDoc = await findReceiptTokenDoc(token);
+        if (!receiptDoc) {
+            return res.status(404).send('Preview not found');
+        }
+
+        if (receiptDoc.previewImage && receiptDoc.previewImage.startsWith('data:image/')) {
+            const base64Data = receiptDoc.previewImage.replace(/^data:image\/\w+;base64,/, '');
+            const imgBuffer = Buffer.from(base64Data, 'base64');
+            res.set('Content-Type', 'image/png');
+            res.set('Cache-Control', 'public, max-age=86400');
+            return res.send(imgBuffer);
+        }
+
+        // Fallback: If no client-side PNG was passed, generate a crisp SVG banner
+        const rData = receiptDoc.receiptData || {};
+        const receiptNo = receiptDoc.receiptNo || 'RCP';
+        const tenantName = rData.tenantName || 'Tenant';
+        const amount = Number(rData.totalAmount || 0).toLocaleString();
+        const currency = rData.currency || 'CFA';
+        const prop = rData.propertyName || 'Property';
+        const unit = rData.unitNumber ? `Unit ${rData.unitNumber}` : '';
+
+        const svg = `<svg width="1200" height="630" viewBox="0 0 1200 630" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+                <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stop-color="#1E40AF"/>
+                    <stop offset="100%" stop-color="#2D60FF"/>
+                </linearGradient>
+            </defs>
+            <rect width="1200" height="630" fill="url(#bg)"/>
+            <rect x="60" y="60" width="1080" height="510" rx="24" fill="#FFFFFF" fill-opacity="0.96"/>
+            
+            <rect x="60" y="60" width="1080" height="120" rx="24" fill="#2D60FF"/>
+            <text x="110" y="115" font-family="Arial, sans-serif" font-weight="900" font-size="34" fill="#FFFFFF" letter-spacing="1">OFFICIAL PAYMENT RECEIPT</text>
+            <text x="110" y="152" font-family="Arial, sans-serif" font-weight="600" font-size="20" fill="#93C5FD">PAYMENT CONFIRMATION</text>
+            <text x="1090" y="115" font-family="Arial, sans-serif" font-weight="700" font-size="22" fill="#93C5FD" text-anchor="end">RECEIPT NO:</text>
+            <text x="1090" y="155" font-family="Arial, sans-serif" font-weight="900" font-size="32" fill="#FFFFFF" text-anchor="end">${receiptNo}</text>
+
+            <text x="110" y="240" font-family="Arial, sans-serif" font-weight="700" font-size="18" fill="#718EBF" letter-spacing="1">RECEIVED FROM</text>
+            <text x="110" y="285" font-family="Arial, sans-serif" font-weight="900" font-size="36" fill="#343C6A">${tenantName}</text>
+            
+            <text x="650" y="240" font-family="Arial, sans-serif" font-weight="700" font-size="18" fill="#718EBF" letter-spacing="1">PROPERTY / UNIT</text>
+            <text x="650" y="285" font-family="Arial, sans-serif" font-weight="900" font-size="32" fill="#343C6A">${prop} ${unit}</text>
+
+            <line x1="110" y1="340" x2="1090" y2="340" stroke="#E6EFF5" stroke-width="3"/>
+
+            <rect x="110" y="380" width="980" height="120" rx="16" fill="#F0F5FF" stroke="#2D60FF" stroke-width="2"/>
+            <text x="150" y="455" font-family="Arial, sans-serif" font-weight="800" font-size="28" fill="#343C6A">TOTAL AMOUNT PAID</text>
+            <text x="1050" y="460" font-family="Arial, sans-serif" font-weight="900" font-size="46" fill="#2D60FF" text-anchor="end">${amount} ${currency}</text>
+
+            <text x="110" y="540" font-family="Arial, sans-serif" font-weight="800" font-size="18" fill="#16A34A">✓ STATUS: PAYMENT VERIFIED &amp; CONFIRMED</text>
+            <text x="1090" y="540" font-family="Arial, sans-serif" font-weight="700" font-size="16" fill="#718EBF" text-anchor="end">Property Manager Pro • app.pmanager.net</text>
+        </svg>`;
+
+        res.set('Content-Type', 'image/svg+xml');
+        res.set('Cache-Control', 'public, max-age=86400');
+        res.send(svg);
+    } catch (e) {
+        console.error('Error serving preview image:', e);
+        res.status(500).send('Preview image error');
     }
 });
 

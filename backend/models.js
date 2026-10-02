@@ -112,7 +112,18 @@ const SettingSchema = new mongoose.Schema({
     value: { type: String },
     userId: { type: String, ref: 'User' } // optional to support global settings fallback
 });
-SettingSchema.index({ key: 1, userId: 1 }, { unique: true });
+// ReceiptToken Schema
+const ReceiptTokenSchema = new mongoose.Schema({
+    token: { type: String, required: true, unique: true },
+    receiptNo: { type: String },
+    tenantId: { type: String },
+    paymentIds: [{ type: String }],
+    date: { type: String },
+    previewImage: { type: String },
+    receiptData: { type: mongoose.Schema.Types.Mixed },
+    createdAt: { type: Date, default: Date.now, expires: 31536000 }
+});
+ReceiptTokenSchema.index({ token: 1 }, { unique: true });
 
 module.exports = {
     User: mongoose.model('User', UserSchema),
@@ -123,5 +134,7 @@ module.exports = {
     UnitType: mongoose.model('UnitType', UnitTypeSchema),
     Contract: mongoose.model('Contract', ContractSchema),
     Utility: mongoose.model('Utility', UtilitySchema),
-    Setting: mongoose.model('Setting', SettingSchema)
+    Setting: mongoose.model('Setting', SettingSchema),
+    ReceiptToken: mongoose.model('ReceiptToken', ReceiptTokenSchema)
 };
+

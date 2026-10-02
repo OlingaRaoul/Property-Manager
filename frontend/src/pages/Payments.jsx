@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom';
 import axios from 'axios';
 import { useAppState } from '../context/StateContext';
 import { formatMonth, getMonthsDifference } from '../utils';
-import { Receipt, PlusCircle, Building2, ChevronDown, MapPin, Printer, Trash2, X, CheckCircle2, Lock, CalendarDays, Edit, Search, Mail, Loader2, Send } from 'lucide-react';
+import { Receipt, PlusCircle, Building2, ChevronDown, MapPin, Printer, Trash2, X, CheckCircle2, Lock, CalendarDays, Edit, Search, Mail, Loader2, Send, MessageCircle } from 'lucide-react';
 
 
 const TODAY      = new Date().toISOString().split('T')[0];
@@ -215,6 +215,7 @@ const Payments = () => {
     // ── Receipt state ─────────────────────────────────────────────────
     const [receipt, setReceipt] = useState(null);
     const [sendingEmail, setSendingEmail] = useState(false);
+    const [sendingWhatsApp, setSendingWhatsApp] = useState(false);
     const [emailStatus, setEmailStatus] = useState(null);
 
     const openReceipt = useCallback((paymentGroup, tenant) => {
@@ -222,22 +223,129 @@ const Payments = () => {
         setReceipt({ ...paymentGroup, tenant });
     }, []);
 
-    const sendReceiptEmail = async (receiptData) => {
-        const tenant = receiptData.tenant || state.tenants.find(t => String(t.id) === String(receiptData.tenantId));
-        if (!tenant?.email) {
-            alert('This tenant does not have an email address configured. Please add an email address in the Tenants tab first.');
-            return;
-        }
+    const generateReceiptPreviewPng = (receiptData, tenant, apt, prop, receiptNo, currency) => {
+        try {
+            const canvas = document.createElement('canvas');
+            canvas.width = 1200;
+            canvas.height = 630;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) return null;
 
+            // Background Gradient
+            const grad = ctx.createLinearGradient(0, 0, 1200, 630);
+            grad.addColorStop(0, '#1E40AF');
+            grad.addColorStop(1, '#2D60FF');
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, 1200, 630);
+
+            // White Container
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.98)';
+            ctx.beginPath();
+            if (ctx.roundRect) ctx.roundRect(50, 50, 1100, 530, 20); else ctx.rect(50, 50, 1100, 530);
+            ctx.fill();
+
+            // Top blue banner
+            ctx.fillStyle = '#2D60FF';
+            ctx.beginPath();
+            if (ctx.roundRect) ctx.roundRect(50, 50, 1100, 115, [20, 20, 0, 0]); else ctx.fillRect(50, 50, 1100, 115);
+            ctx.fill();
+
+            // Banner text
+            ctx.fillStyle = '#FFFFFF';
+            ctx.font = 'bold 32px Arial, sans-serif';
+            ctx.fillText('OFFICIAL PAYMENT RECEIPT', 90, 105);
+            ctx.font = '600 18px Arial, sans-serif';
+            ctx.fillStyle = '#93C5FD';
+            ctx.fillText('PAYMENT CONFIRMATION', 90, 138);
+
+            // Receipt No on right
+            ctx.font = 'bold 20px Arial, sans-serif';
+            ctx.textAlign = 'right';
+            ctx.fillText('RECEIPT NO:', 1110, 100);
+            ctx.font = 'bold 30px Arial, sans-serif';
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fillText(receiptNo, 1110, 140);
+            ctx.textAlign = 'left';
+
+            // Content
+            ctx.fillStyle = '#718EBF';
+            ctx.font = 'bold 16px Arial, sans-serif';
+            ctx.fillText('RECEIVED FROM', 90, 225);
+            ctx.fillStyle = '#343C6A';
+            ctx.font = 'bold 32px Arial, sans-serif';
+            ctx.fillText(tenant?.name || 'Tenant', 90, 268);
+
+            ctx.fillStyle = '#718EBF';
+            ctx.font = 'bold 16px Arial, sans-serif';
+            ctx.fillText('PROPERTY / UNIT', 650, 225);
+            ctx.fillStyle = '#343C6A';
+            ctx.font = 'bold 28px Arial, sans-serif';
+            ctx.fillText(`${prop?.name || 'Property'}${apt?.unitNumber ? ' • Unit ' + apt.unitNumber : ''}`, 650, 268);
+
+            // Separator
+            ctx.strokeStyle = '#E2E8F0';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(90, 315);
+            ctx.lineTo(1110, 315);
+            ctx.stroke();
+
+            // Amount Box
+            ctx.fillStyle = '#F0F5FF';
+            ctx.strokeStyle = '#2D60FF';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            if (ctx.roundRect) ctx.roundRect(90, 345, 1020, 120, 16); else ctx.rect(90, 345, 1020, 120);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.fillStyle = '#343C6A';
+            ctx.font = 'bold 26px Arial, sans-serif';
+            ctx.fillText('TOTAL AMOUNT PAID', 130, 418);
+
+            ctx.fillStyle = '#2D60FF';
+            ctx.font = 'bold 44px Arial, sans-serif';
+            ctx.textAlign = 'right';
+            const totalStr = `${Number(receiptData.totalAmount || receiptData.amount || 0).toLocaleString()} ${currency}`;
+            ctx.fillText(totalStr, 1070, 422);
+            ctx.textAlign = 'left';
+
+            // Footer status
+            ctx.fillStyle = '#16A34A';
+            ctx.font = 'bold 18px Arial, sans-serif';
+            ctx.fillText('✓ STATUS: PAYMENT VERIFIED & CONFIRMED', 90, 525);
+
+            ctx.fillStyle = '#718EBF';
+            ctx.font = '600 16px Arial, sans-serif';
+            ctx.textAlign = 'right';
+            ctx.fillText('Property Manager Pro • app.pmanager.net', 1110, 525);
+
+            return canvas.toDataURL('image/png');
+        } catch (e) {
+            console.warn('Could not generate canvas receipt preview:', e);
+            return null;
+        }
+    };
+
+    const sendReceiptWhatsApp = async (receiptData) => {
+        const tenant = receiptData.tenant || state.tenants.find(t => String(t.id) === String(receiptData.tenantId));
         const apt = tenant ? state.apartments.find(a => String(a.id) === String(tenant.apartmentId)) : null;
         const prop = apt ? state.properties.find(p => String(p.id) === String(apt.propertyId)) : null;
         const receiptNo = `RCP-${receiptData.id?.replace('pay','').slice(-6) || Date.now()}`;
+        const currency = state.settings.currency || 'CFA';
+        const totalAmount = receiptData.totalAmount || receiptData.amount || 0;
 
-        // Format items
+        // Format items in chronological order
         const groupPayments = receiptData.payments || [];
+        const sortedGroupPayments = [...groupPayments].sort((a, b) => {
+            const keyA = a.monthPaid || (a.monthList && a.monthList[0]) || a.date?.slice(0, 7) || '';
+            const keyB = b.monthPaid || (b.monthList && b.monthList[0]) || b.date?.slice(0, 7) || '';
+            return keyA.localeCompare(keyB);
+        });
+
         let items = [];
-        if (groupPayments.length > 0) {
-            items = groupPayments.map(p => ({
+        if (sortedGroupPayments.length > 0) {
+            items = sortedGroupPayments.map(p => ({
                 description: p.type === 'Deposit' ? 'Security Deposit' : (p.type === 'Utility' ? 'Utility Bill' : 'Monthly Rent'),
                 period: (p.monthList && p.monthList.length > 0)
                     ? p.monthList.map(m => formatMonth(m, lang)).join(', ')
@@ -255,7 +363,7 @@ const Payments = () => {
             items = [{
                 description: desc,
                 period,
-                amount: receiptData.totalAmount || receiptData.amount || 0
+                amount: totalAmount
             }];
         }
 
@@ -273,25 +381,40 @@ const Payments = () => {
             0
         );
 
-        setSendingEmail(true);
-        setEmailStatus(null);
+        const paymentIds = groupPayments.length > 0 
+            ? groupPayments.map(p => p.id) 
+            : (receiptData.id ? [receiptData.id] : []);
+
+        let targetPhone = (tenant?.phone || '').trim();
+        if (!targetPhone) {
+            const entered = prompt('This tenant does not have a phone number saved.\nPlease enter their WhatsApp phone number (with country code, e.g. +237...):');
+            if (entered) targetPhone = entered.trim();
+        }
+
+        setSendingWhatsApp(true);
         try {
             const token = localStorage.getItem('token');
-            const res = await axios.post(`${API_URL}/send-receipt`, {
-                to: tenant.email,
+            const previewPng = generateReceiptPreviewPng(receiptData, tenant, apt, prop, receiptNo, currency);
+
+            const res = await axios.post(`${API_URL}/receipt/generate-link`, {
+                receiptNo,
+                tenantId: tenant?.id,
+                paymentIds,
+                date: receiptData.date || TODAY,
+                previewImage: previewPng,
                 receiptData: {
                     receiptNo,
                     date: receiptData.date || TODAY,
-                    tenantName: tenant.name,
-                    tenantPhone: tenant.phone,
-                    tenantEmail: tenant.email,
+                    tenantName: tenant?.name || 'Tenant',
+                    tenantPhone: tenant?.phone,
+                    tenantEmail: tenant?.email,
                     propertyName: prop?.name,
                     propertyAddress: prop?.address,
                     unitNumber: apt?.unitNumber,
                     unitType: apt?.type,
                     items,
-                    totalAmount: receiptData.totalAmount || receiptData.amount || 0,
-                    currency: state.settings.currency || 'EUR',
+                    totalAmount,
+                    currency,
                     note: receiptData.note,
                     depositInfo: {
                         required: reqDeposit,
@@ -304,17 +427,41 @@ const Payments = () => {
                 headers: token ? { Authorization: `Bearer ${token}` } : {}
             });
 
-            setEmailStatus({
-                type: 'success',
-                message: res.data.message || `Receipt sent to ${tenant.email}!`,
-                note: res.data.note
+            const secureUrl = res.data.url;
+            const cleanPhone = targetPhone.replace(/\D/g, '');
+
+            let msg = `🧾 *RENT PAYMENT RECEIPT*\n`;
+            msg += `━━━━━━━━━━━━━━━━━━━━━━\n`;
+            msg += `*Receipt No:* ${receiptNo}\n`;
+            msg += `*Date:* ${receiptData.date || TODAY}\n\n`;
+            msg += `👤 *Tenant:* ${tenant?.name || '—'}\n`;
+            msg += `🏠 *Property:* ${prop?.name || '—'}\n`;
+            if (apt?.unitNumber) {
+                msg += `🚪 *Unit:* ${apt.unitNumber}\n`;
+            }
+            msg += `\n📋 *PAYMENT BREAKDOWN*\n`;
+            items.forEach(item => {
+                msg += `• ${item.description} (${item.period}): ${Number(item.amount).toLocaleString()} ${currency}\n`;
             });
+            msg += `\n━━━━━━━━━━━━━━━━━━━━━━\n`;
+            msg += `💰 *TOTAL PAID:* ${Number(totalAmount).toLocaleString()} ${currency}\n`;
+            if (depositMonths > 0 || paidDeposit > 0) {
+                msg += `🔒 *Security Deposit:* ${depositMonthsPaid}/${depositMonths} paid\n`;
+            }
+            msg += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+            msg += `🔗 *View Official Receipt & Download PDF:*\n${secureUrl}\n\n`;
+            msg += `✅ _Payment Confirmed & Recorded._\n_Thank you!_`;
+
+            const waUrl = cleanPhone 
+                ? `https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`
+                : `https://wa.me/?text=${encodeURIComponent(msg)}`;
+            
+            window.open(waUrl, '_blank');
         } catch (err) {
-            console.error("Receipt email error:", err);
-            const msg = err.response?.data?.error || err.message || 'Failed to send receipt email';
-            setEmailStatus({ type: 'error', message: msg });
+            console.error("WhatsApp receipt link error:", err);
+            alert(err.response?.data?.error || 'Failed to prepare WhatsApp receipt link. Please try again.');
         } finally {
-            setSendingEmail(false);
+            setSendingWhatsApp(false);
         }
     };
 
@@ -337,7 +484,7 @@ const Payments = () => {
         const sortedPayments = [...groupPayments].sort((a, b) => {
             const keyA = a.monthPaid || (a.monthList && a.monthList[0]) || a.date?.slice(0, 7) || '';
             const keyB = b.monthPaid || (b.monthList && b.monthList[0]) || b.date?.slice(0, 7) || '';
-            return keyB.localeCompare(keyA);
+            return keyA.localeCompare(keyB);
         });
 
         // Security Deposit calculations
@@ -1784,7 +1931,7 @@ const Payments = () => {
             const sortedPayments = [...groupPayments].sort((a, b) => {
                 const keyA = a.monthPaid || (a.monthList && a.monthList[0]) || a.date?.slice(0, 7) || '';
                 const keyB = b.monthPaid || (b.monthList && b.monthList[0]) || b.date?.slice(0, 7) || '';
-                return keyB.localeCompare(keyA);
+                return keyA.localeCompare(keyB);
             });
 
             // Security Deposit calculations
@@ -2240,6 +2387,28 @@ const Payments = () => {
                             <div className="modal-footer" style={{ padding: '1rem 1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                 <button className="btn btn-secondary" onClick={() => setReceipt(null)}>Close</button>
                                 <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+                                    <button
+                                        className="btn"
+                                        style={{
+                                            backgroundColor: '#25D366',
+                                            color: '#fff',
+                                            border: 'none',
+                                            padding: '0.75rem 1.4rem',
+                                            borderRadius: '10px',
+                                            fontWeight: '600',
+                                            cursor: sendingWhatsApp ? 'not-allowed' : 'pointer',
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            gap: '0.5rem',
+                                            opacity: sendingWhatsApp ? 0.7 : 1,
+                                            boxShadow: '0 2px 8px rgba(37, 211, 102, 0.25)'
+                                        }}
+                                        disabled={sendingWhatsApp}
+                                        onClick={() => sendReceiptWhatsApp(receipt)}
+                                    >
+                                        {sendingWhatsApp ? <Loader2 size={16} className="animate-spin" /> : <MessageCircle size={16} />}
+                                        {sendingWhatsApp ? 'Preparing...' : 'WhatsApp'}
+                                    </button>
                                     <button
                                         className="btn"
                                         style={{
