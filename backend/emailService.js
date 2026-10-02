@@ -1,5 +1,5 @@
 const { Resend } = require('resend');
-const { generateRentReceiptPdf, generateUtilityBillPdf } = require('./pdfGenerator');
+const { generateRentReceiptPdf, generateUtilityBillPdf, generateArrearsStatementPdf } = require('./pdfGenerator');
 
 // Initialize Resend with API key from environment
 const getResendClient = () => {
@@ -355,14 +355,173 @@ async function sendUtilityBillWithPdf({ to, utilityData, subject, replyTo }) {
     });
 }
 
+/**
+ * Generate formal email copy for Statement of Arrears (Notice of Outstanding Rent)
+ */
+function buildFormalArrearsStatementEmail(data) {
+    const tenantName = data.tenantName || 'Valued Resident';
+    const propertyName = data.propertyName || 'Property Management';
+    const unitNumber = data.unitNumber || '—';
+    const currency = data.currency || '$';
+    const totalOutstanding = Number(data.rentOutstandingAmount || 0).toLocaleString();
+    const overdueMonths = data.overdueMonths || 0;
+    const lastPaymentDate = data.lastPaymentDate || '—';
+    const statementDate = data.statementDate || new Date().toISOString().split('T')[0];
+
+    const breakdownRows = (data.breakdown && data.breakdown.length > 0)
+        ? data.breakdown.map(b => `
+            <tr>
+                <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-weight: 600;">${b.period || '—'}</td>
+                <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; color: #64748b;">${b.dueDate || '—'}</td>
+                <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; text-align: right; color: #b91c1c; font-weight: bold;">${b.amount || '—'}</td>
+            </tr>
+        `).join('')
+        : `<tr><td colspan="3" style="padding: 8px; text-align: center; color: #64748b;">Outstanding balance: ${totalOutstanding} ${currency}</td></tr>`;
+
+    const textBreakdown = (data.breakdown && data.breakdown.length > 0)
+        ? data.breakdown.map(b => `• ${b.period || 'Period'} (Due: ${b.dueDate || '—'}): ${b.amount || '—'}`).join('\n')
+        : `• Outstanding: ${totalOutstanding} ${currency}`;
+
+    const html = `
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <title>Statement of Arrears - ${tenantName}</title>
+    </head>
+    <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1e293b; line-height: 1.6; max-width: 600px; margin: 0 auto; padding: 24px;">
+        <div style="border-bottom: 2px solid #b91c1c; padding-bottom: 12px; margin-bottom: 20px;">
+            <h2 style="margin: 0; color: #b91c1c; font-size: 20px;">${propertyName}</h2>
+            <div style="font-size: 13px; color: #64748b; font-weight: 500;">Notice of Outstanding Rent & Statement of Arrears</div>
+        </div>
+
+        <p>Dear ${tenantName},</p>
+
+        <p>This is a formal notice regarding the outstanding rental balance for your tenancy at <strong>${propertyName}</strong>, Unit <strong>${unitNumber}</strong> as of <strong>${statementDate}</strong>.</p>
+
+        <div style="background-color: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 18px 20px; margin: 20px 0;">
+            <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+                <tr>
+                    <td style="padding: 6px 0; color: #64748b; width: 45%;">Months Overdue:</td>
+                    <td style="padding: 6px 0; font-weight: bold; color: #b91c1c;">${overdueMonths} Month${overdueMonths !== 1 ? 's' : ''}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 6px 0; color: #64748b;">Last Payment Date:</td>
+                    <td style="padding: 6px 0; font-weight: 600; color: #0f172a;">${lastPaymentDate}</td>
+                </tr>
+                <tr style="border-top: 1px solid #fecaca;">
+                    <td style="padding: 10px 0 6px 0; font-weight: bold; color: #991b1b;">Total Overdue Amount:</td>
+                    <td style="padding: 10px 0 6px 0; font-weight: 800; font-size: 18px; color: #b91c1c;">${totalOutstanding} ${currency}</td>
+                </tr>
+            </table>
+        </div>
+
+        <div style="margin: 20px 0;">
+            <div style="font-size: 13px; font-weight: bold; color: #475569; text-transform: uppercase; margin-bottom: 8px;">Breakdown of Unpaid Periods</div>
+            <table style="width: 100%; border-collapse: collapse; font-size: 13px; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 6px;">
+                <thead>
+                    <tr style="background: #f8fafc; color: #475569; text-align: left;">
+                        <th style="padding: 8px; border-bottom: 1px solid #e2e8f0;">Due Period</th>
+                        <th style="padding: 8px; border-bottom: 1px solid #e2e8f0;">Due Date</th>
+                        <th style="padding: 8px; border-bottom: 1px solid #e2e8f0; text-align: right;">Amount</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${breakdownRows}
+                </tbody>
+            </table>
+        </div>
+
+        ${data.depositHeldAmount !== undefined ? `
+        <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 12px 16px; margin: 16px 0; font-size: 13px;">
+            <strong style="color: #475569;">Security Deposit on File:</strong> 
+            ${data.depositMonthsPaid || 0} / ${data.depositMonthsRequired || 0} Months (${Number(data.depositHeldAmount || 0).toLocaleString()} ${currency})
+        </div>
+        ` : ''}
+
+        <p>A formal copy of your <strong>Statement of Arrears</strong> is attached to this email as a PDF document for your records and review.</p>
+
+        <p>Please arrange for the prompt settlement of this outstanding balance. If you have already executed this payment or believe there is an error in our records, please contact the management office immediately so we can update your account.</p>
+
+        <p style="margin-top: 32px; border-top: 1px solid #e2e8f0; padding-top: 16px; font-size: 13px; color: #64748b;">
+            Sincerely,<br/>
+            <strong>Property Management Office</strong><br/>
+            ${propertyName}<br/>
+            ${data.propertyAddress ? `<span style="font-size: 12px; color: #94a3b8;">${data.propertyAddress}</span><br/>` : ''}
+            <span style="font-size: 11px; color: #94a3b8;">Property Manager Pro • www.pmanager.net</span>
+        </p>
+    </body>
+    </html>
+    `;
+
+    const text = `
+Dear ${tenantName},
+
+Please find below the notice of outstanding rent balance for ${propertyName}, Unit ${unitNumber} as of ${statementDate}.
+
+STATEMENT OF ARREARS SUMMARY:
+------------------------------------------
+Months Overdue: ${overdueMonths}
+Last Payment Date: ${lastPaymentDate}
+Total Overdue Amount: ${totalOutstanding} ${currency}
+
+BREAKDOWN:
+${textBreakdown}
+------------------------------------------
+
+A detailed Statement of Arrears PDF is attached to this email for your records.
+Please arrange for the prompt settlement of this balance or contact the management office if you have any questions.
+
+Sincerely,
+Property Management Office
+${propertyName}
+${data.propertyAddress || ''}
+    `.trim();
+
+    return { html, text };
+}
+
+/**
+ * Send arrears statement email with attached PDF
+ */
+async function sendArrearsStatementWithPdf({ to, statementData, subject, replyTo }) {
+    // 1. Generate PDF buffer
+    const pdfBuffer = await generateArrearsStatementPdf(statementData);
+    const cleanTenantName = (statementData.tenantName || 'Tenant').replace(/[^a-zA-Z0-9_-]/g, '_');
+    const filename = `Statement_of_Arrears_${cleanTenantName}.pdf`;
+
+    // 2. Generate formal email text & HTML
+    const { html, text } = buildFormalArrearsStatementEmail(statementData);
+    const emailSubject = subject || `Notice of Outstanding Balance & Statement of Arrears — Unit ${statementData.unitNumber || '—'} (${statementData.propertyName || 'Property Management'})`;
+
+    // 3. Send via Resend with attachment
+    return await sendEmail({
+        to,
+        subject: emailSubject,
+        html,
+        text,
+        replyTo,
+        attachments: [
+            {
+                filename,
+                content: pdfBuffer
+            }
+        ]
+    });
+}
+
 module.exports = {
     sendEmail,
     sendRentReceiptWithPdf,
     sendUtilityBillWithPdf,
+    sendArrearsStatementWithPdf,
     generateRentReceiptPdf,
     generateUtilityBillPdf,
+    generateArrearsStatementPdf,
     buildFormalRentReceiptEmail,
     buildFormalUtilityBillEmail,
+    buildFormalArrearsStatementEmail,
     PRIMARY_FROM,
     FALLBACK_FROM
 };
+

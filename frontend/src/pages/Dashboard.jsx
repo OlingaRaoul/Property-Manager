@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useAppState } from '../context/StateContext';
 import { useNavigate } from 'react-router-dom';
-import { Users, Building, Wallet, AlertCircle, Shield, FileText, ClipboardList, PlusCircle, DollarSign, CheckCircle2, X, Printer } from 'lucide-react';
+import axios from 'axios';
+import { Users, Building, Wallet, AlertCircle, Shield, FileText, ClipboardList, PlusCircle, DollarSign, CheckCircle2, X, Printer, Mail, Loader2 } from 'lucide-react';
 import { getMonthsDifference, formatMonth } from '../utils';
 
 const StatCard = ({ title, value, icon: Icon, colorClass, bgClass, subtext }) => {
@@ -422,7 +423,7 @@ const getDueDateForMonth = (dueDateDay, monthStr) => {
 };
 
 const Dashboard = () => {
-    const { state, loading } = useAppState();
+    const { state, loading, API_URL } = useAppState();
     const navigate = useNavigate();
 
     const todayStr = new Date().toISOString().split('T')[0];
@@ -437,6 +438,11 @@ const Dashboard = () => {
     const [printEndDate, setPrintEndDate] = useState(todayStr);
     const [selectedReportPropertyId, setSelectedReportPropertyId] = useState('');
     const [showUnpaidModal, setShowUnpaidModal] = useState(false);
+
+    // Arrears Statement Preview & Email State
+    const [previewStatement, setPreviewStatement] = useState(null);
+    const [sendingArrearsEmail, setSendingArrearsEmail] = useState(false);
+    const [arrearsEmailStatus, setArrearsEmailStatus] = useState(null);
 
     // Generate collection months list (last 12 months)
     const collectionMonthsList = [];
@@ -458,6 +464,139 @@ const Dashboard = () => {
             setSelectedReportPropertyId(state.properties[0].id);
         }
     }, [state.properties, selectedReportPropertyId]);
+
+    const prepareArrearsStatementData = (tenantObj) => {
+        const lang = state.settings.lang || 'en';
+        const currentMonthStr = new Date().toISOString().slice(0, 7); // YYYY-MM
+        const apartment = state.apartments.find(a => String(a.id) === String(tenantObj.apartmentId));
+        const property  = apartment ? state.properties.find(p => String(p.id) === String(apartment.propertyId)) : null;
+        
+        const propName = property ? property.name : (lang === 'fr' ? 'Non assigné' : 'Unassigned');
+        const unitNumber = apartment ? apartment.unitNumber : (lang === 'fr' ? 'Aucune' : 'None');
+        const currency = state.settings.currency || '$';
+        const signature = state.settings.signature;
+
+        // 1. Date of Last Payment
+        const tenantPayments = state.payments.filter(p => String(p.tenantId) === String(tenantObj.id));
+        const sortedPayments = [...tenantPayments].sort((a, b) => b.date.localeCompare(a.date));
+        const lastPaymentDate = sortedPayments.length > 0 ? sortedPayments[0].date : (lang === 'fr' ? 'Aucun paiement' : 'No payments');
+
+        // 2. Agreed contract/due date
+        const tenantContract = state.contracts ? state.contracts.find(c => String(c.tenantId) === String(tenantObj.id) && c.active !== false) : null;
+        
+        // Unpaid months calculation
+        const startMonth = tenantObj.lastPaidMonth 
+            ? getNextMonth(tenantObj.lastPaidMonth) 
+            : (tenantContract ? tenantContract.startDate.slice(0, 7) : currentMonthStr);
+        
+        const unpaidMonthsList = [];
+        let tempMonth = startMonth;
+        while (tempMonth <= currentMonthStr) {
+            unpaidMonthsList.push(tempMonth);
+            tempMonth = getNextMonth(tempMonth);
+        }
+
+        const overdueMonths = unpaidMonthsList.length;
+
+        // 3. Deposit logic
+        const depositMonthsPaid = tenantObj.depositMonthsPaid || 0;
+        const depositMonthsRequired = tenantObj.depositMonths || 0;
+        const rentAmount = tenantObj.rentAmount || 0;
+        const depositHeldAmount = depositMonthsPaid * rentAmount;
+        const rentOutstandingAmount = overdueMonths * rentAmount;
+
+        const breakdown = unpaidMonthsList.map((m) => {
+            const dueDate = getDueDateForMonth(tenantObj.dueDateDay, m);
+            return {
+                period: `${formatMonth(m, lang)} ${m.split('-')[0]}`,
+                dueDate: dueDate || '—',
+                amount: `${rentAmount.toLocaleString()} ${currency}`
+            };
+        });
+
+        const statementDate = new Date().toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
+
+        return {
+            tenant: tenantObj,
+            tenantName: tenantObj.name,
+            tenantPhone: tenantObj.phone,
+            tenantEmail: tenantObj.email,
+            propertyName: propName,
+            propertyAddress: property?.address,
+            unitNumber,
+            statementDate,
+            currency,
+            signature,
+            lastPaymentDate,
+            overdueMonths,
+            rentAmount,
+            rentOutstandingAmount,
+            depositMonthsPaid,
+            depositMonthsRequired,
+            depositHeldAmount,
+            unpaidMonthsList,
+            breakdown
+        };
+    };
+
+    const openStatementPreview = (tenantObj) => {
+        setArrearsEmailStatus(null);
+        const data = prepareArrearsStatementData(tenantObj);
+        setPreviewStatement(data);
+    };
+
+    const sendArrearsStatementEmail = async (statementData) => {
+        if (!statementData?.tenantEmail) {
+            alert(
+                `Tenant ${statementData?.tenantName || ''} does not have an email address configured. Please add an email address in the Tenants section first.`
+            );
+            return;
+        }
+
+        setSendingArrearsEmail(true);
+        setArrearsEmailStatus(null);
+
+        try {
+            const token = localStorage.getItem('token');
+            const res = await axios.post(`${API_URL}/send-arrears-statement`, {
+                to: statementData.tenantEmail,
+                statementData: {
+                    tenantName: statementData.tenantName,
+                    tenantPhone: statementData.tenantPhone,
+                    tenantEmail: statementData.tenantEmail,
+                    propertyName: statementData.propertyName,
+                    propertyAddress: statementData.propertyAddress,
+                    unitNumber: statementData.unitNumber,
+                    statementDate: statementData.statementDate,
+                    currency: statementData.currency,
+                    rentAmount: statementData.rentAmount,
+                    overdueMonths: statementData.overdueMonths,
+                    lastPaymentDate: statementData.lastPaymentDate,
+                    rentOutstandingAmount: statementData.rentOutstandingAmount,
+                    breakdown: statementData.breakdown,
+                    depositMonthsPaid: statementData.depositMonthsPaid,
+                    depositMonthsRequired: statementData.depositMonthsRequired,
+                    depositHeldAmount: statementData.depositHeldAmount
+                }
+            }, {
+                headers: token ? { Authorization: `Bearer ${token}` } : {}
+            });
+
+            setArrearsEmailStatus({
+                type: 'success',
+                message: res.data.message || `Statement of Arrears with PDF sent successfully to ${statementData.tenantEmail}!`
+            });
+        } catch (err) {
+            console.error("Arrears email error:", err);
+            const msg = err.response?.data?.error || err.message || 'Failed to email Statement of Arrears';
+            setArrearsEmailStatus({
+                type: 'error',
+                message: msg
+            });
+        } finally {
+            setSendingArrearsEmail(false);
+        }
+    };
 
     const printTenantStatement = (tenantObj) => {
         const lang = state.settings.lang || 'en';
@@ -1981,8 +2120,8 @@ const Dashboard = () => {
                                                     </td>
                                                     <td style={{ padding: '12px', textAlign: 'center' }}>
                                                         <button
-                                                            onClick={() => printTenantStatement(item.tenant)}
-                                                            title="Print Statement of Arrears"
+                                                            onClick={() => openStatementPreview(item.tenant)}
+                                                            title="View Statement of Arrears & Decide"
                                                             style={{
                                                                 background: '#E7EDFF',
                                                                 border: 'none',
@@ -2037,8 +2176,390 @@ const Dashboard = () => {
                     </div>
                 </div>
             )}
+
+            {/* Statement of Arrears Preview Modal */}
+            {previewStatement && (
+                <div style={{
+                    position: 'fixed',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    backgroundColor: 'rgba(15, 23, 42, 0.7)',
+                    backdropFilter: 'blur(5px)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    zIndex: 1100,
+                    padding: '1rem',
+                }}>
+                    <div style={{
+                        background: '#FFFFFF',
+                        borderRadius: '16px',
+                        width: '100%',
+                        maxWidth: '680px',
+                        maxHeight: '92vh',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+                        overflow: 'hidden'
+                    }}>
+                        {/* Modal Header */}
+                        <div style={{
+                            padding: '1.2rem 1.5rem',
+                            borderBottom: '1px solid #E6EFF5',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            background: '#FAFCFE'
+                        }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                <div style={{
+                                    width: '36px',
+                                    height: '36px',
+                                    borderRadius: '10px',
+                                    background: '#FEE2E2',
+                                    color: '#DC2626',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center'
+                                }}>
+                                    <FileText size={18} />
+                                </div>
+                                <div>
+                                    <h3 style={{ margin: 0, color: '#1E293B', fontSize: '1.05rem', fontWeight: '800', fontFamily: 'Outfit, sans-serif' }}>
+                                        Statement of Arrears Preview
+                                    </h3>
+                                    <p style={{ margin: '2px 0 0 0', color: '#64748B', fontSize: '0.75rem', fontWeight: '500' }}>
+                                        Review details before printing or emailing to tenant
+                                    </p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => setPreviewStatement(null)}
+                                style={{
+                                    background: 'transparent',
+                                    border: 'none',
+                                    cursor: 'pointer',
+                                    color: '#94A3B8',
+                                    padding: '6px',
+                                    borderRadius: '50%',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    transition: 'all 0.2s'
+                                }}
+                                onMouseEnter={(e) => { e.currentTarget.style.color = '#0F172A'; e.currentTarget.style.background = '#F1F5F9'; }}
+                                onMouseLeave={(e) => { e.currentTarget.style.color = '#94A3B8'; e.currentTarget.style.background = 'transparent'; }}
+                            >
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        {/* Modal Scrollable Document Content */}
+                        <div style={{
+                            padding: '1.5rem',
+                            overflowY: 'auto',
+                            background: '#F8FAFC',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '1rem'
+                        }}>
+                            {/* Email status feedback banner */}
+                            {arrearsEmailStatus && (
+                                <div style={{
+                                    padding: '0.75rem 1rem',
+                                    borderRadius: '8px',
+                                    fontSize: '0.85rem',
+                                    fontWeight: '600',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '0.6rem',
+                                    background: arrearsEmailStatus.type === 'success' ? '#DCFCE7' : '#FEE2E2',
+                                    color: arrearsEmailStatus.type === 'success' ? '#15803D' : '#B91C1C',
+                                    border: `1px solid ${arrearsEmailStatus.type === 'success' ? '#86EFAC' : '#FCA5A5'}`
+                                }}>
+                                    {arrearsEmailStatus.type === 'success' ? <CheckCircle2 size={18} /> : <AlertCircle size={18} />}
+                                    <span>{arrearsEmailStatus.message}</span>
+                                </div>
+                            )}
+
+                            {/* Printable Paper Card Preview */}
+                            <div style={{
+                                background: '#FFFFFF',
+                                border: '1px solid #E2E8F0',
+                                borderRadius: '12px',
+                                padding: '1.5rem',
+                                boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)',
+                                fontFamily: 'Inter, system-ui, sans-serif'
+                            }}>
+                                {/* Paper Document Header */}
+                                <div style={{
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    alignItems: 'flex-start',
+                                    borderBottom: '2px solid #EF4444',
+                                    paddingBottom: '12px',
+                                    marginBottom: '14px'
+                                }}>
+                                    <div>
+                                        <div style={{ fontSize: '18px', fontWeight: '900', color: '#B91C1C', letterSpacing: '-0.3px' }}>
+                                            STATEMENT OF ARREARS
+                                        </div>
+                                        <div style={{ fontSize: '10px', color: '#64748B', marginTop: '2px', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                                            Outstanding Rent & Coverage Notice
+                                        </div>
+                                    </div>
+                                    <div style={{ textAlign: 'right' }}>
+                                        <div style={{ fontSize: '10px', color: '#64748B', fontWeight: '600' }}>Statement Date</div>
+                                        <div style={{ fontSize: '12px', fontWeight: '800', color: '#0F172A' }}>{previewStatement.statementDate}</div>
+                                    </div>
+                                </div>
+
+                                {/* Notice Banner */}
+                                <div style={{
+                                    background: '#FEF2F2',
+                                    border: '1px solid #FECACA',
+                                    borderRadius: '8px',
+                                    padding: '10px 14px',
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    alignItems: 'center',
+                                    marginBottom: '14px'
+                                }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#B91C1C', fontWeight: '800', fontSize: '0.85rem' }}>
+                                        <span>⚠️ STATUS: OVERDUE RENT NOTICE</span>
+                                    </div>
+                                    <div style={{ fontSize: '1.1rem', fontWeight: '900', color: '#B91C1C' }}>
+                                        {previewStatement.rentOutstandingAmount.toLocaleString()} {previewStatement.currency}
+                                    </div>
+                                </div>
+
+                                {/* Tenant & Property Details Grid */}
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '14px' }}>
+                                    <div style={{ background: '#F8FAFC', borderRadius: '10px', padding: '10px 14px', border: '1px solid #E2E8F0' }}>
+                                        <div style={{ fontSize: '9px', color: '#64748B', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>
+                                            Tenant Details
+                                        </div>
+                                        <div style={{ fontSize: '13px', fontWeight: '800', color: '#0F172A' }}>
+                                            {previewStatement.tenantName}
+                                        </div>
+                                        {previewStatement.tenantPhone && (
+                                            <div style={{ fontSize: '11px', color: '#64748B', marginTop: '3px' }}>
+                                                📞 {previewStatement.tenantPhone}
+                                            </div>
+                                        )}
+                                        <div style={{ fontSize: '11px', color: previewStatement.tenantEmail ? '#2563EB' : '#EF4444', marginTop: '2px', fontWeight: '500' }}>
+                                            ✉️ {previewStatement.tenantEmail || 'No email configured'}
+                                        </div>
+                                    </div>
+
+                                    <div style={{ background: '#F8FAFC', borderRadius: '10px', padding: '10px 14px', border: '1px solid #E2E8F0' }}>
+                                        <div style={{ fontSize: '9px', color: '#64748B', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>
+                                            Property / Unit
+                                        </div>
+                                        <div style={{ fontSize: '13px', fontWeight: '800', color: '#0F172A' }}>
+                                            {previewStatement.propertyName}
+                                        </div>
+                                        <div style={{ fontSize: '11px', fontWeight: '700', color: '#2563EB', marginTop: '3px' }}>
+                                            Unit: {previewStatement.unitNumber}
+                                        </div>
+                                        {previewStatement.propertyAddress && (
+                                            <div style={{ fontSize: '10px', color: '#64748B', marginTop: '2px' }}>
+                                                {previewStatement.propertyAddress}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Arrears Summary Card */}
+                                <div style={{
+                                    background: '#FFFBEB',
+                                    border: '1px solid #FEF3C7',
+                                    borderRadius: '10px',
+                                    padding: '12px 14px',
+                                    marginBottom: '14px'
+                                }}>
+                                    <div style={{ fontSize: '10px', color: '#B45309', fontWeight: '700', textTransform: 'uppercase', marginBottom: '8px', letterSpacing: '0.5px' }}>
+                                        Arrears Overview
+                                    </div>
+                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
+                                        <div>
+                                            <span style={{ fontSize: '9px', color: '#B45309', textTransform: 'uppercase', display: 'block', fontWeight: '600' }}>Months Overdue</span>
+                                            <span style={{ fontSize: '14px', fontWeight: '800', color: '#78350F' }}>
+                                                {previewStatement.overdueMonths} Month{previewStatement.overdueMonths !== 1 ? 's' : ''}
+                                            </span>
+                                        </div>
+                                        <div>
+                                            <span style={{ fontSize: '9px', color: '#B45309', textTransform: 'uppercase', display: 'block', fontWeight: '600' }}>Last Payment Date</span>
+                                            <span style={{ fontSize: '12px', fontWeight: '800', color: '#0F172A' }}>
+                                                {previewStatement.lastPaymentDate}
+                                            </span>
+                                        </div>
+                                        <div style={{ textAlign: 'right' }}>
+                                            <span style={{ fontSize: '9px', color: '#B45309', textTransform: 'uppercase', display: 'block', fontWeight: '600' }}>Total Outstanding</span>
+                                            <span style={{ fontSize: '14px', fontWeight: '900', color: '#B91C1C' }}>
+                                                {previewStatement.rentOutstandingAmount.toLocaleString()} {previewStatement.currency}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Breakdown Table */}
+                                <div style={{ marginBottom: '14px' }}>
+                                    <div style={{ fontSize: '10px', color: '#64748B', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>
+                                        Breakdown of Due Periods
+                                    </div>
+                                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
+                                        <thead>
+                                            <tr style={{ background: '#1E293B', color: '#FFFFFF' }}>
+                                                <th style={{ padding: '7px 10px', textAlign: 'left', fontWeight: '700' }}>Due Period</th>
+                                                <th style={{ padding: '7px 10px', textAlign: 'left', fontWeight: '700' }}>Due Date</th>
+                                                <th style={{ padding: '7px 10px', textAlign: 'right', fontWeight: '700' }}>Amount</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {previewStatement.breakdown.map((row, idx) => (
+                                                <tr key={idx} style={{ background: idx % 2 === 0 ? '#FFFFFF' : '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
+                                                    <td style={{ padding: '8px 10px', fontWeight: '600', color: '#0F172A' }}>{row.period}</td>
+                                                    <td style={{ padding: '8px 10px', color: '#64748B' }}>{row.dueDate}</td>
+                                                    <td style={{ padding: '8px 10px', textAlign: 'right', color: '#EF4444', fontWeight: '800' }}>{row.amount}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+
+                                {/* Security Deposit Info */}
+                                <div style={{
+                                    background: '#F8FAFC',
+                                    borderRadius: '10px',
+                                    padding: '10px 14px',
+                                    border: '1px solid #E2E8F0',
+                                    marginBottom: '14px',
+                                    fontSize: '11px',
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    alignItems: 'center'
+                                }}>
+                                    <div>
+                                        <span style={{ fontSize: '9px', color: '#64748B', textTransform: 'uppercase', display: 'block', fontWeight: '700' }}>
+                                            Security Deposit Status
+                                        </span>
+                                        <span style={{ fontWeight: '800', color: '#0F172A' }}>
+                                            Deposit Held: {previewStatement.depositMonthsPaid} / {previewStatement.depositMonthsRequired} Months
+                                        </span>
+                                    </div>
+                                    <div style={{ fontWeight: '700', color: '#2563EB' }}>
+                                        ({previewStatement.depositHeldAmount.toLocaleString()} {previewStatement.currency})
+                                    </div>
+                                </div>
+
+                                {/* Signatures */}
+                                <div style={{
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    alignItems: 'flex-end',
+                                    paddingTop: '15px',
+                                    borderTop: '1px dashed #CBD5E1',
+                                    marginTop: '15px'
+                                }}>
+                                    <div>
+                                        {state.settings.signature ? (
+                                            <img src={state.settings.signature} style={{ maxHeight: '35px', maxWidth: '140px', display: 'block', marginBottom: '2px' }} alt="Owner Signature" />
+                                        ) : null}
+                                        <div style={{ fontSize: '9px', color: '#64748B', textTransform: 'uppercase', borderTop: '1px solid #CBD5E1', width: '130px', paddingTop: '3px', fontWeight: '700' }}>
+                                            Property Owner
+                                        </div>
+                                    </div>
+                                    <div style={{ textAlign: 'right' }}>
+                                        <div style={{ fontSize: '9px', color: '#64748B', textTransform: 'uppercase', borderTop: '1px dashed #CBD5E1', width: '130px', paddingTop: '3px', fontWeight: '700' }}>
+                                            Tenant Signature
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Modal Footer with Actions */}
+                        <div style={{
+                            padding: '1rem 1.5rem',
+                            borderTop: '1px solid #E6EFF5',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            background: '#FAFCFE'
+                        }}>
+                            <button
+                                onClick={() => setPreviewStatement(null)}
+                                style={{
+                                    padding: '0.6rem 1.25rem',
+                                    borderRadius: '8px',
+                                    border: '1px solid #CBD5E1',
+                                    background: '#FFFFFF',
+                                    color: '#64748B',
+                                    fontWeight: '700',
+                                    fontSize: '0.85rem',
+                                    cursor: 'pointer'
+                                }}
+                            >
+                                Close
+                            </button>
+                            <div style={{ display: 'flex', gap: '0.75rem' }}>
+                                <button
+                                    onClick={() => sendArrearsStatementEmail(previewStatement)}
+                                    disabled={sendingArrearsEmail}
+                                    title={!previewStatement.tenantEmail ? "Tenant does not have an email address" : "Send Statement with PDF attachment via email"}
+                                    style={{
+                                        backgroundColor: '#4318FF',
+                                        color: '#FFFFFF',
+                                        border: 'none',
+                                        padding: '0.65rem 1.25rem',
+                                        borderRadius: '8px',
+                                        fontWeight: '700',
+                                        fontSize: '0.85rem',
+                                        cursor: sendingArrearsEmail ? 'not-allowed' : 'pointer',
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '0.5rem',
+                                        opacity: sendingArrearsEmail ? 0.7 : 1,
+                                        transition: 'background 0.2s'
+                                    }}
+                                    onMouseEnter={(e) => { if (!sendingArrearsEmail) e.currentTarget.style.background = '#3210cc'; }}
+                                    onMouseLeave={(e) => { if (!sendingArrearsEmail) e.currentTarget.style.background = '#4318FF'; }}
+                                >
+                                    {sendingArrearsEmail ? <Loader2 size={16} className="animate-spin" /> : <Mail size={16} />}
+                                    {sendingArrearsEmail ? 'Sending Email...' : 'Send Email'}
+                                </button>
+                                <button
+                                    onClick={() => printTenantStatement(previewStatement.tenant)}
+                                    style={{
+                                        backgroundColor: '#2D60FF',
+                                        color: '#FFFFFF',
+                                        border: 'none',
+                                        padding: '0.65rem 1.35rem',
+                                        borderRadius: '8px',
+                                        fontWeight: '700',
+                                        fontSize: '0.85rem',
+                                        cursor: 'pointer',
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '0.5rem',
+                                        transition: 'background 0.2s'
+                                    }}
+                                    onMouseEnter={(e) => e.currentTarget.style.background = '#1A4BDB'}
+                                    onMouseLeave={(e) => e.currentTarget.style.background = '#2D60FF'}
+                                >
+                                    <Printer size={16} /> Print Statement
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
 
 export default Dashboard;
+

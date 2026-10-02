@@ -2065,7 +2065,43 @@ app.post('/api/send-utility-bill', authMiddleware, async (req, res) => {
     }
 });
 
+app.post('/api/send-arrears-statement', authMiddleware, async (req, res) => {
+    const { to, statementData, subject } = req.body;
+    if (!to) {
+        return res.status(400).json({ error: 'Recipient email is required.' });
+    }
+    if (!statementData) {
+        return res.status(400).json({ error: 'Statement of Arrears details are required.' });
+    }
+
+    try {
+        if (process.env.RESEND_API_KEY) {
+            const result = await emailService.sendArrearsStatementWithPdf({
+                to,
+                statementData,
+                subject
+            });
+
+            return res.json({
+                status: 'success',
+                message: `Statement of Arrears with PDF attached sent successfully to ${to}!`,
+                sender: result.sender,
+                note: result.note
+            });
+        }
+
+        return res.json({
+            status: 'success',
+            message: `Statement of Arrears simulated for ${to} (Add Resend API key for live emails)`
+        });
+    } catch (e) {
+        console.error("Arrears statement delivery error:", e.message);
+        res.status(500).json({ error: e.message });
+    }
+});
+
 // Enhanced Seed endpoint - Securely isolated for local development resets
+
 app.get('/api/seed', async (req, res) => {
     const { secret } = req.query;
     if (secret !== 'pm_dev_2026') {
