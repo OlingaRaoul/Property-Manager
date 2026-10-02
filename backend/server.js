@@ -2272,47 +2272,30 @@ app.get('/r/:token', async (req, res) => {
             const signatureUrl = rData.signatureUrl || rData.signature || null;
 
             const ogTitle = `Statement of Arrears • ${tenantName}`;
-            const ogDesc = `Overdue Rent Notice: ${totalOutstanding} ${currency} (${overdueMonths} Months Overdue) • ${propertyName} ${unitNumber ? 'Unit ' + unitNumber : ''}`;
+            const ogDesc = `Outstanding Rent & Coverage: ${totalOutstanding} ${currency} • ${propertyName} ${unitNumber ? 'Unit ' + unitNumber : ''}`;
 
             const rowsHtml = breakdown.map(item => `
                 <tr>
-                    <td style="padding: 12px 16px; font-weight: 600; color: #343C6A; border-bottom: 1px solid #EDF2F7;">${item.period || '—'}</td>
-                    <td style="padding: 12px 16px; color: #718EBF; border-bottom: 1px solid #EDF2F7;">${item.dueDate || '—'}</td>
-                    <td style="padding: 12px 16px; text-align: right; font-weight: 800; color: #DC2626; border-bottom: 1px solid #EDF2F7;">${item.amount || '—'}</td>
+                    <td style="padding: 8px 10px; border-bottom: 1px solid #E6EFF5; font-size: 11px; color: #1a1a2e;">${item.period ? item.period.split(' ')[0] : '—'}</td>
+                    <td style="padding: 8px 10px; border-bottom: 1px solid #E6EFF5; font-size: 11px; color: #1a1a2e;">${item.dueDate || '—'}</td>
+                    <td style="padding: 8px 10px; border-bottom: 1px solid #E6EFF5; font-size: 11px; color: #EF4444; font-weight: 700; text-align: right;">${item.amount || '—'}</td>
                 </tr>
             `).join('');
 
-            const depositHtml = (depositMonthsRequired > 0 || depositMonthsPaid > 0) ? `
-                <div style="background: #F8FAFC; border-radius: 12px; padding: 14px 18px; margin: 18px 0; border: 1px solid #E2E8F0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
-                    <div>
-                        <div style="font-size: 0.72rem; color: #718EBF; font-weight: 700; text-transform: uppercase; margin-bottom: 2px;">Security Deposit Status</div>
-                        <div style="font-size: 0.9rem; color: #343C6A; font-weight: 600;">Deposit Held: <strong>${depositMonthsPaid} / ${depositMonthsRequired} Months</strong></div>
-                    </div>
-                    <div style="color: #2563EB; font-weight: 800; font-size: 0.95rem;">(${depositHeldAmount} ${currency})</div>
-                </div>
-            ` : '';
-
             const sigHtml = signatureUrl ? `
-                <div style="margin-top: 24px; padding-top: 16px; border-top: 1px dashed #CBD5E1; display: flex; justify-content: space-between; align-items: flex-end;">
-                    <div>
-                        <div style="font-size: 0.75rem; color: #718EBF; font-weight: 700; text-transform: uppercase; margin-bottom: 6px;">Property Owner Signature</div>
-                        <img src="${signatureUrl}" alt="Signature" style="max-height: 50px; max-width: 160px; object-fit: contain;" />
-                    </div>
-                    <div style="text-align: right;">
-                        <div style="font-size: 0.75rem; color: #718EBF; font-weight: 700; text-transform: uppercase;">Tenant Acknowledgment</div>
-                        <div style="border-bottom: 1px solid #94A3B8; width: 140px; height: 32px; margin-top: 8px;"></div>
-                    </div>
+                <div style="text-align: left;">
+                    <img src="${signatureUrl}" style="max-height: 40px; max-width: 150px; display: block; margin-bottom: 2px;" alt="Owner Signature" />
+                    <div style="font-size: 8px; color: #718EBF; text-transform: uppercase; border-top: 1px solid #E6EFF5; display: inline-block; width: 140px; padding-top: 2px; font-weight: bold;">Property Owner Signature</div>
+                </div>
+                <div style="text-align: right; padding-top: 25px;">
+                    <div style="font-size: 8px; color: #718EBF; text-transform: uppercase; border-top: 1px dashed #B1B1B1; display: inline-block; width: 140px; padding-top: 2px; font-weight: bold;">Tenant Signature</div>
                 </div>
             ` : `
-                <div style="margin-top: 24px; padding-top: 16px; border-top: 1px dashed #CBD5E1; display: flex; justify-content: space-between; align-items: flex-end;">
-                    <div>
-                        <div style="font-size: 0.75rem; color: #718EBF; font-weight: 700; text-transform: uppercase;">Property Owner</div>
-                        <div style="border-bottom: 1px solid #94A3B8; width: 140px; height: 28px; margin-top: 6px;"></div>
-                    </div>
-                    <div style="text-align: right;">
-                        <div style="font-size: 0.75rem; color: #718EBF; font-weight: 700; text-transform: uppercase;">Tenant Signature</div>
-                        <div style="border-bottom: 1px solid #94A3B8; width: 140px; height: 28px; margin-top: 6px;"></div>
-                    </div>
+                <div style="text-align: left; padding-top: 25px;">
+                    <div style="font-size: 8px; color: #718EBF; text-transform: uppercase; border-top: 1px dashed #B1B1B1; display: inline-block; width: 140px; padding-top: 2px; font-weight: bold;">Property Owner Signature</div>
+                </div>
+                <div style="text-align: right; padding-top: 25px;">
+                    <div style="font-size: 8px; color: #718EBF; text-transform: uppercase; border-top: 1px dashed #B1B1B1; display: inline-block; width: 140px; padding-top: 2px; font-weight: bold;">Tenant Signature</div>
                 </div>
             `;
 
@@ -2321,7 +2304,7 @@ app.get('/r/:token', async (req, res) => {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>${ogTitle}</title>
+    <title>Statement - ${tenantName}</title>
     <meta property="og:title" content="${ogTitle}" />
     <meta property="og:description" content="${ogDesc}" />
     <meta property="og:image" content="${previewImageUrl}" />
@@ -2330,318 +2313,339 @@ app.get('/r/:token', async (req, res) => {
     <meta property="og:image:height" content="630" />
     <meta property="og:url" content="${fullUrl}" />
     <meta property="og:type" content="website" />
-    
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
     <style>
-        * { box-sizing: border-box; }
-        body {
-            font-family: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
-            background: #F8FAFC;
-            color: #1E293B;
-            margin: 0;
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        html, body {
+            min-height: 100%;
+            background: #F0F2F5;
+            font-family: Arial, sans-serif;
+            color: #1a1a2e;
+            line-height: 1.4;
             padding: 24px 16px;
+        }
+        .outer-wrap {
+            max-width: 580px;
+            margin: 0 auto;
+        }
+        .page {
+            background: #FFFFFF;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+            border: 1px solid #E6EFF5;
+            padding: 32px 30px 24px;
             display: flex;
             flex-direction: column;
-            align-items: center;
-            min-height: 100vh;
-        }
-        .container {
-            width: 100%;
-            max-width: 680px;
-            background: #FFFFFF;
-            border-radius: 20px;
-            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.08);
-            border: 1px solid #E2E8F0;
-            overflow: hidden;
+            box-sizing: border-box;
         }
         .header {
-            background: #DC2626;
-            color: #FFFFFF;
-            padding: 28px 32px 24px;
             display: flex;
             justify-content: space-between;
             align-items: flex-start;
-            flex-wrap: wrap;
-            gap: 16px;
+            border-bottom: 2px solid #2D60FF;
+            padding-bottom: 10px;
+            margin-bottom: 12px;
         }
-        .header-title {
-            font-size: 1.45rem;
+        .title {
+            font-size: 20px;
             font-weight: 900;
-            letter-spacing: 0.5px;
-            margin: 0 0 4px 0;
+            color: #2D60FF;
+            letter-spacing: -0.5px;
         }
-        .header-sub {
-            font-size: 0.85rem;
-            color: #FECACA;
+        .subtitle {
+            font-size: 10px;
+            color: #718EBF;
+            margin-top: 2px;
             font-weight: 600;
             text-transform: uppercase;
             letter-spacing: 0.5px;
         }
-        .header-meta {
+        .receipt-no-label {
+            font-size: 10px;
+            color: #718EBF;
+            font-weight: 600;
             text-align: right;
         }
-        .header-meta-label {
-            font-size: 0.72rem;
-            color: #FECACA;
-            font-weight: 700;
-            text-transform: uppercase;
-        }
-        .header-meta-value {
-            font-size: 1.05rem;
+        .receipt-no {
+            font-size: 11px;
             font-weight: 800;
-            color: #FFFFFF;
-            margin-top: 2px;
+            text-align: right;
+            color: #1a1a2e;
+            margin-top: 1px;
         }
-        .body-content {
-            padding: 28px 32px;
-        }
-        .status-banner {
-            background: #FEF2F2;
-            border: 1.5px solid #FECACA;
-            border-radius: 12px;
-            padding: 14px 20px;
-            margin-bottom: 22px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            flex-wrap: wrap;
-            gap: 8px;
-        }
-        .status-title {
-            color: #B91C1C;
-            font-size: 0.95rem;
-            font-weight: 800;
-            display: flex;
-            align-items: center;
-            gap: 6px;
-        }
-        .status-amount {
-            color: #B91C1C;
-            font-size: 1.35rem;
-            font-weight: 900;
-        }
-        .info-grid {
+        .grid2 {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 16px;
-            margin-bottom: 20px;
+            gap: 12px;
+            margin-bottom: 14px;
         }
-        @media (max-width: 580px) {
-            .info-grid { grid-template-columns: 1fr; }
-            .header-meta { text-align: left; }
-            .header { padding: 20px; }
-            .body-content { padding: 20px; }
+        @media (max-width: 480px) {
+            .grid2 { grid-template-columns: 1fr; }
         }
-        .card {
-            background: #F8FAFC;
-            border: 1px solid #E2E8F0;
+        .info-box {
+            background: #F5F7FA;
+            border-radius: 10px;
+            padding: 8px 12px;
+        }
+        .info-label {
+            font-size: 8px;
+            color: #718EBF;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 3px;
+        }
+        .info-name {
+            font-size: 13px;
+            font-weight: 800;
+            color: #1a1a2e;
+        }
+        .info-sub {
+            font-size: 10px;
+            color: #718EBF;
+            margin-top: 2px;
+        }
+        .info-unit {
+            font-size: 11px;
+            font-weight: 700;
+            color: #2D60FF;
+            margin-top: 2px;
+        }
+        .summary-card {
+            background: #FFFBEB;
+            border: 1px solid #FEF3C7;
             border-radius: 12px;
-            padding: 16px;
+            padding: 12px 14px;
+            margin-bottom: 14px;
         }
-        .card-label {
-            font-size: 0.72rem;
+        .summary-title {
+            font-size: 10px;
+            color: #B45309;
+            font-weight: 700;
+            text-transform: uppercase;
+            margin-bottom: 6px;
+        }
+        .summary-grid {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+        }
+        .summary-val {
+            font-size: 15px;
+            font-weight: 800;
+            color: #78350F;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 12px;
+            font-size: 11px;
+        }
+        thead tr {
+            background: #2D60FF;
+            color: white;
+        }
+        th {
+            padding: 6px 8px;
+            text-align: left;
+            font-weight: 700;
+        }
+        th:last-child {
+            text-align: right;
+        }
+        .deposit-section {
+            margin-top: 10px;
+            margin-bottom: 10px;
+            background: #F5F7FA;
+            border-radius: 12px;
+            padding: 10px 12px;
+            border: 1px solid #E6EFF5;
+        }
+        .deposit-title {
+            font-size: 10px;
             color: #718EBF;
             font-weight: 700;
             text-transform: uppercase;
             letter-spacing: 0.5px;
             margin-bottom: 6px;
-        }
-        .card-title {
-            font-size: 1.05rem;
-            font-weight: 800;
-            color: #1E293B;
-            margin-bottom: 4px;
-        }
-        .card-sub {
-            font-size: 0.85rem;
-            color: #64748B;
-            line-height: 1.4;
-        }
-        .overview-box {
-            background: #FFFBEB;
-            border: 1.5px solid #FDE68A;
-            border-radius: 12px;
-            padding: 16px 20px;
-            margin-bottom: 24px;
-        }
-        .overview-label {
-            color: #B45309;
-            font-size: 0.72rem;
-            font-weight: 800;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            margin-bottom: 10px;
-        }
-        .overview-stats {
-            display: grid;
-            grid-template-columns: 1fr 1.2fr 1.2fr;
-            gap: 12px;
-        }
-        @media (max-width: 520px) {
-            .overview-stats { grid-template-columns: 1fr; }
-        }
-        .stat-label {
-            font-size: 0.75rem;
-            color: #78350F;
-            font-weight: 600;
-            margin-bottom: 2px;
-        }
-        .stat-value {
-            font-size: 1.05rem;
-            font-weight: 800;
-            color: #1E293B;
-        }
-        .stat-value.red {
-            color: #B91C1C;
-            font-size: 1.2rem;
-        }
-        .section-heading {
-            font-size: 0.75rem;
-            color: #718EBF;
-            font-weight: 800;
-            text-transform: uppercase;
-            letter-spacing: 0.6px;
-            margin: 0 0 10px 0;
-        }
-        .table-wrap {
-            border: 1px solid #E2E8F0;
-            border-radius: 12px;
-            overflow: hidden;
-            margin-bottom: 20px;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-        th {
-            background: #1E293B;
-            color: #FFFFFF;
-            padding: 12px 16px;
             text-align: left;
-            font-size: 0.8rem;
+        }
+        .deposit-grid {
+            display: flex;
+            justify-content: space-between;
+            gap: 15px;
+            text-align: left;
+        }
+        .deposit-val {
+            font-size: 11px;
+            font-weight: 800;
+            color: #343C6A;
+            display: block;
+            margin-top: 1px;
+        }
+        .signatures-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            margin-top: 25px;
+            margin-bottom: 15px;
+        }
+        .footer {
+            border-top: 1px dashed #E6EFF5;
+            padding-top: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 15px;
+        }
+        .footer-note {
+            font-size: 10px;
+            color: #718EBF;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            font-weight: bold;
+        }
+        .footer-status {
+            font-size: 10px;
+            color: #EF4444;
             font-weight: 700;
-            letter-spacing: 0.5px;
             text-transform: uppercase;
         }
-        th.text-right { text-align: right; }
         .actions-bar {
-            margin-top: 24px;
+            margin-top: 16px;
             display: flex;
-            gap: 12px;
+            gap: 10px;
             justify-content: center;
             flex-wrap: wrap;
         }
         .btn {
             display: inline-flex;
             align-items: center;
-            gap: 8px;
-            padding: 12px 22px;
-            border-radius: 10px;
+            gap: 6px;
+            padding: 9px 18px;
+            border-radius: 8px;
             font-weight: 700;
-            font-size: 0.9rem;
+            font-size: 12px;
             text-decoration: none;
             cursor: pointer;
             transition: all 0.2s;
             border: none;
         }
         .btn-pdf {
-            background: #DC2626;
-            color: #FFFFFF;
-            box-shadow: 0 4px 12px rgba(220, 38, 38, 0.25);
-        }
-        .btn-pdf:hover { background: #B91C1C; }
-        .btn-print {
             background: #2D60FF;
             color: #FFFFFF;
-            box-shadow: 0 4px 12px rgba(45, 96, 255, 0.2);
+            box-shadow: 0 4px 12px rgba(45, 96, 255, 0.25);
         }
-        .btn-print:hover { background: #1A4BDB; }
+        .btn-pdf:hover { background: #1A4BDB; }
+        .btn-print {
+            background: #FFFFFF;
+            color: #343C6A;
+            border: 1px solid #CBD5E1;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+        }
+        .btn-print:hover { background: #F8FAFC; }
         @media print {
             body { background: #fff; padding: 0; }
-            .container { box-shadow: none; border: none; max-width: 100%; }
+            .outer-wrap { max-width: 100%; margin: 0; }
+            .page { border: none; box-shadow: none; border-radius: 0; padding: 0.8cm; }
             .actions-bar { display: none; }
+            @page { margin: 0.6cm; size: A5 portrait; }
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="header">
-            <div>
-                <h1 class="header-title">STATEMENT OF ARREARS</h1>
-                <div class="header-sub">OUTSTANDING RENT &amp; COVERAGE NOTICE</div>
+    <div class="outer-wrap">
+        <div class="page">
+            <div class="header">
+                <div>
+                    <div class="title">STATEMENT OF ARREARS</div>
+                    <div class="subtitle">OUTSTANDING RENT &amp; COVERAGE</div>
+                </div>
+                <div>
+                    <div class="receipt-no-label">Statement Date</div>
+                    <div class="receipt-no">${statementDate}</div>
+                </div>
             </div>
-            <div class="header-meta">
-                <div class="header-meta-label">Statement Date</div>
-                <div class="header-meta-value">${statementDate}</div>
+
+            <div class="grid2">
+                <div class="info-box">
+                    <div class="info-label">Tenant Details</div>
+                    <div class="info-name">${tenantName}</div>
+                    ${rData.tenantPhone ? `<div class="info-sub">📞 ${rData.tenantPhone}</div>` : ''}
+                    ${rData.tenantEmail ? `<div class="info-sub">✉️ ${rData.tenantEmail}</div>` : ''}
+                </div>
+                <div class="info-box">
+                    <div class="info-label">Property / Unit</div>
+                    <div class="info-name">${propertyName}</div>
+                    <div class="info-unit">Unit: ${unitNumber || '—'}</div>
+                </div>
+            </div>
+
+            <div class="summary-card">
+                <div class="summary-title">Arrears Overview</div>
+                <div class="summary-grid">
+                    <div>
+                        <span style="font-size: 8px; color: #B45309; text-transform: uppercase; display: block; font-weight: 600;">Months Overdue</span>
+                        <span class="summary-val">${overdueMonths} Month${overdueMonths !== 1 ? 's' : ''}</span>
+                    </div>
+                    <div>
+                        <span style="font-size: 8px; color: #B45309; text-transform: uppercase; display: block; font-weight: 600;">Last Payment Date</span>
+                        <span class="summary-val" style="color: #343C6A; font-size: 13px;">${lastPaymentDate}</span>
+                    </div>
+                    <div style="text-align: right;">
+                        <span style="font-size: 8px; color: #B45309; text-transform: uppercase; display: block; font-weight: 600;">Rent Outstanding</span>
+                        <span class="summary-val" style="color: #EF4444;">${totalOutstanding} ${currency}</span>
+                    </div>
+                </div>
+            </div>
+
+            <div style="font-size: 10px; color: #718EBF; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; text-align: left;">BREAKDOWN OF DUE PERIODS</div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Due Period</th>
+                        <th>Due Date</th>
+                        <th>Amount</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${rowsHtml}
+                </tbody>
+            </table>
+
+            <div class="deposit-section">
+                <div class="deposit-title">Security Deposit Status</div>
+                <div class="deposit-grid" style="display: flex; justify-content: flex-start; align-items: center;">
+                    <div style="flex: 1;">
+                        <span style="font-size: 8px; color: #718EBF; text-transform: uppercase; display: block; font-weight: 600;">Total Held</span>
+                        <span class="deposit-val">${depositMonthsPaid} / ${depositMonthsRequired} Months</span>
+                        <span style="font-size: 8px; color: #718EBF; display: block; margin-top: 0px;">(${depositHeldAmount} ${currency})</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="signatures-row">
+                ${sigHtml}
+            </div>
+
+            <div class="footer">
+                <div class="footer-note">
+                    <span style="background: #1E293B; color: #38BDF8; font-weight: 900; font-size: 8px; padding: 1px 4px; border-radius: 3px; letter-spacing: 0.5px;">PM</span>
+                    Powered by Property Manager Suite
+                </div>
+                <div class="footer-status">
+                    ${Number(rData.rentOutstandingAmount || 0) > 0 ? '⚠️ PAYMENT REQUIRED' : '✓ COVERED BY DEPOSIT'}
+                </div>
             </div>
         </div>
 
-        <div class="body-content">
-            <div class="status-banner">
-                <div class="status-title">⚠️ STATUS: OVERDUE RENT NOTICE</div>
-                <div class="status-amount">${totalOutstanding} ${currency}</div>
-            </div>
-
-            <div class="info-grid">
-                <div class="card">
-                    <div class="card-label">Tenant Details</div>
-                    <div class="card-title">${tenantName}</div>
-                    ${rData.tenantPhone ? `<div class="card-sub">📞 ${rData.tenantPhone}</div>` : ''}
-                    ${rData.tenantEmail ? `<div class="card-sub">✉️ ${rData.tenantEmail}</div>` : ''}
-                </div>
-                <div class="card">
-                    <div class="card-label">Property / Unit</div>
-                    <div class="card-title">${propertyName}</div>
-                    <div class="card-sub" style="color: #2563EB; font-weight: 700;">Unit: ${unitNumber || '—'}</div>
-                    ${rData.propertyAddress ? `<div class="card-sub">${rData.propertyAddress}</div>` : ''}
-                </div>
-            </div>
-
-            <div class="overview-box">
-                <div class="overview-label">Arrears Overview</div>
-                <div class="overview-stats">
-                    <div>
-                        <div class="stat-label">Months Overdue</div>
-                        <div class="stat-value">${overdueMonths} Month${overdueMonths !== 1 ? 's' : ''}</div>
-                    </div>
-                    <div>
-                        <div class="stat-label">Last Payment Date</div>
-                        <div class="stat-value">${lastPaymentDate}</div>
-                    </div>
-                    <div>
-                        <div class="stat-label">Total Outstanding</div>
-                        <div class="stat-value red">${totalOutstanding} ${currency}</div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="section-heading">Breakdown of Due Periods</div>
-            <div class="table-wrap">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Due Period</th>
-                            <th>Due Date</th>
-                            <th class="text-right">Amount</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${rowsHtml}
-                    </tbody>
-                </table>
-            </div>
-
-            ${depositHtml}
-            ${sigHtml}
-
-            <div class="actions-bar">
-                <a href="${fullUrl}/pdf" target="_blank" class="btn btn-pdf">
-                    📄 Download Official PDF
-                </a>
-                <button onclick="window.print()" class="btn btn-print">
-                    🖨️ Print Statement
-                </button>
-            </div>
+        <div class="actions-bar">
+            <a href="${fullUrl}/pdf" target="_blank" class="btn btn-pdf">
+                📄 Download Official PDF
+            </a>
+            <button onclick="window.print()" class="btn btn-print">
+                🖨️ Print Statement
+            </button>
         </div>
     </div>
 </body>
@@ -3034,18 +3038,18 @@ app.get('/r/:token/preview.png', async (req, res) => {
             const svg = `<svg width="1200" height="630" viewBox="0 0 1200 630" xmlns="http://www.w3.org/2000/svg">
             <defs>
                 <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" stop-color="#991B1B"/>
-                    <stop offset="100%" stop-color="#DC2626"/>
+                    <stop offset="0%" stop-color="#1E40AF"/>
+                    <stop offset="100%" stop-color="#2D60FF"/>
                 </linearGradient>
             </defs>
             <rect width="1200" height="630" fill="url(#bg)"/>
             <rect x="60" y="60" width="1080" height="510" rx="24" fill="#FFFFFF" fill-opacity="0.98"/>
             
-            <rect x="60" y="60" width="1080" height="120" rx="24" fill="#DC2626"/>
+            <rect x="60" y="60" width="1080" height="120" rx="24" fill="#2D60FF"/>
             <text x="110" y="115" font-family="Arial, sans-serif" font-weight="900" font-size="34" fill="#FFFFFF" letter-spacing="1">STATEMENT OF ARREARS</text>
-            <text x="110" y="152" font-family="Arial, sans-serif" font-weight="600" font-size="20" fill="#FECACA">OUTSTANDING RENT &amp; COVERAGE NOTICE</text>
-            <text x="1090" y="115" font-family="Arial, sans-serif" font-weight="700" font-size="22" fill="#FECACA" text-anchor="end">STATUS:</text>
-            <text x="1090" y="155" font-family="Arial, sans-serif" font-weight="900" font-size="28" fill="#FFFFFF" text-anchor="end">OVERDUE NOTICE</text>
+            <text x="110" y="152" font-family="Arial, sans-serif" font-weight="600" font-size="20" fill="#93C5FD">OUTSTANDING RENT &amp; COVERAGE</text>
+            <text x="1090" y="115" font-family="Arial, sans-serif" font-weight="700" font-size="22" fill="#93C5FD" text-anchor="end">STATUS:</text>
+            <text x="1090" y="155" font-family="Arial, sans-serif" font-weight="900" font-size="28" fill="#FFFFFF" text-anchor="end">PAYMENT REQUIRED</text>
 
             <text x="110" y="240" font-family="Arial, sans-serif" font-weight="700" font-size="18" fill="#718EBF" letter-spacing="1">TENANT</text>
             <text x="110" y="285" font-family="Arial, sans-serif" font-weight="900" font-size="36" fill="#343C6A">${tenantName}</text>
@@ -3055,12 +3059,12 @@ app.get('/r/:token/preview.png', async (req, res) => {
 
             <line x1="110" y1="340" x2="1090" y2="340" stroke="#E6EFF5" stroke-width="3"/>
 
-            <rect x="110" y="380" width="980" height="120" rx="16" fill="#FEF2F2" stroke="#DC2626" stroke-width="2"/>
-            <text x="150" y="455" font-family="Arial, sans-serif" font-weight="800" font-size="28" fill="#991B1B">TOTAL OUTSTANDING RENT</text>
-            <text x="1050" y="460" font-family="Arial, sans-serif" font-weight="900" font-size="46" fill="#DC2626" text-anchor="end">${totalOutstanding} ${currency}</text>
+            <rect x="110" y="380" width="980" height="120" rx="16" fill="#FFFBEB" stroke="#FEF3C7" stroke-width="2"/>
+            <text x="150" y="455" font-family="Arial, sans-serif" font-weight="800" font-size="28" fill="#B45309">RENT OUTSTANDING (${overdueMonths} MONTHS)</text>
+            <text x="1050" y="460" font-family="Arial, sans-serif" font-weight="900" font-size="46" fill="#EF4444" text-anchor="end">${totalOutstanding} ${currency}</text>
 
-            <text x="110" y="540" font-family="Arial, sans-serif" font-weight="800" font-size="18" fill="#DC2626">⚠️ ${overdueMonths} Month${overdueMonths !== 1 ? 's' : ''} Overdue</text>
-            <text x="1090" y="540" font-family="Arial, sans-serif" font-weight="700" font-size="16" fill="#718EBF" text-anchor="end">Property Manager Pro • app.pmanager.net</text>
+            <text x="110" y="540" font-family="Arial, sans-serif" font-weight="800" font-size="18" fill="#EF4444">⚠️ PAYMENT REQUIRED</text>
+            <text x="1090" y="540" font-family="Arial, sans-serif" font-weight="700" font-size="16" fill="#718EBF" text-anchor="end">Powered by Property Manager Suite</text>
         </svg>`;
 
             res.set('Content-Type', 'image/svg+xml');

@@ -509,7 +509,7 @@ const Dashboard = () => {
         const breakdown = unpaidMonthsList.map((m) => {
             const dueDate = getDueDateForMonth(tenantObj.dueDateDay, m);
             return {
-                period: `${formatMonth(m, lang)} ${m.split('-')[0]}`,
+                period: formatMonth(m, lang),
                 dueDate: dueDate || '—',
                 amount: `${rentAmount.toLocaleString()} ${currency}`
             };
