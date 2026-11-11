@@ -592,10 +592,20 @@ const Tenants = () => {
     const assignedTenants = state.tenants.filter(t => t.isAssigned !== false);
     const unassignedTenants = state.tenants.filter(t => t.isAssigned === false);
 
-    const filteredAssigned = assignedTenants.filter(t =>
-        t.name.toLowerCase().includes(search.toLowerCase()) ||
-        (t.email || '').toLowerCase().includes(search.toLowerCase())
-    );
+    const searchMatches = (t) => {
+        const q = search.toLowerCase().trim();
+        if (!q) return true;
+        if (t.name.toLowerCase().includes(q)) return true;
+        if ((t.email || '').toLowerCase().includes(q)) return true;
+        if ((t.phone || '').toLowerCase().includes(q)) return true;
+        const apt = state.apartments.find(a => String(a.id) === String(t.apartmentId));
+        if (apt && (apt.unitNumber || '').toLowerCase().includes(q)) return true;
+        const prop = apt ? state.properties.find(p => String(p.id) === String(apt.propertyId)) : null;
+        if (prop && (prop.name || '').toLowerCase().includes(q)) return true;
+        return false;
+    };
+
+    const filteredAssigned = assignedTenants.filter(searchMatches);
 
     const getUrgencyScore = (tenant) => {
         const rentStatus = calculateRentStatus(tenant, state.settings);
@@ -637,10 +647,7 @@ const Tenants = () => {
         return a.name.localeCompare(b.name);
     });
 
-    const filteredUnassigned = unassignedTenants.filter(t =>
-        t.name.toLowerCase().includes(search.toLowerCase()) ||
-        (t.email || '').toLowerCase().includes(search.toLowerCase())
-    );
+    const filteredUnassigned = unassignedTenants.filter(searchMatches);
 
     return (
         <div className="view-container animate-fade-in" style={{ paddingTop: '1.25rem' }}>
@@ -663,7 +670,7 @@ const Tenants = () => {
                             <UserPlus size={18} /> Add Tenant
                         </button>
                         <div className="search-box">
-                            <input type="text" placeholder="Search..." value={search} onChange={e => setSearch(e.target.value)} />
+                            <input type="text" placeholder={lang === 'fr' ? "Rechercher locataire, chambre, propriété..." : "Search tenant, room, property..."} value={search} onChange={e => setSearch(e.target.value)} />
                         </div>
                     </div>
                 </div>
@@ -786,10 +793,31 @@ const Tenants = () => {
                                         <img src={`https://robohash.org/${encodeURIComponent(tenantObj.name)}?set=set4`} style={{ width: '100%', height: '100%', objectFit: 'cover', background: '#F5F7FA' }} alt="Avatar" />
                                     </div>
                                     <div>
-                                        <div className="clickable-tenant" style={{ fontWeight: '700', fontSize: '1rem' }} onClick={() => showTenantHistory(tenantObj.id)}>
-                                            {tenantObj.name}
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                            <div className="clickable-tenant" style={{ fontWeight: '700', fontSize: '1rem' }} onClick={() => showTenantHistory(tenantObj.id)}>
+                                                {tenantObj.name}
+                                            </div>
+                                            {apartment?.unitNumber && (
+                                                <span style={{
+                                                    backgroundColor: tenantObj.isAssigned !== false ? '#F0F5FF' : '#FEF3C7',
+                                                    color: tenantObj.isAssigned !== false ? '#2D60FF' : '#D97706',
+                                                    fontSize: '0.72rem',
+                                                    fontWeight: '800',
+                                                    padding: '2px 7px',
+                                                    borderRadius: '6px',
+                                                    border: `1px solid ${tenantObj.isAssigned !== false ? '#D6E4FF' : '#FDE68A'}`,
+                                                    display: 'inline-flex',
+                                                    alignItems: 'center',
+                                                    gap: '3px',
+                                                    letterSpacing: '0.3px'
+                                                }}>
+                                                    🚪 {apartment.unitNumber.toLowerCase().startsWith('room') || apartment.unitNumber.toLowerCase().startsWith('chambre') || apartment.unitNumber.toLowerCase().startsWith('apt') || apartment.unitNumber.toLowerCase().startsWith('unit')
+                                                        ? apartment.unitNumber
+                                                        : `${lang === 'fr' ? 'Chambre' : 'Room'} ${apartment.unitNumber}`}
+                                                </span>
+                                            )}
                                         </div>
-                                        <div style={{ fontSize: '0.75rem', color: rentStatus.color || (rentStatus.isPaid ? 'var(--success)' : 'var(--error)'), fontWeight: '700', textTransform: 'uppercase' }}>
+                                        <div style={{ fontSize: '0.75rem', color: rentStatus.color || (rentStatus.isPaid ? 'var(--success)' : 'var(--error)'), fontWeight: '700', textTransform: 'uppercase', marginTop: '2px' }}>
                                             {rentStatus.status}
                                         </div>
                                     </div>
@@ -812,10 +840,10 @@ const Tenants = () => {
                                     </div>
                                     <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: '500', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                         {tenantObj.isAssigned !== false ? (
-                                            `${property ? property.name : 'Unassigned'} • ${apartment ? apartment.unitNumber : 'No unit'}`
+                                            `${property ? property.name : 'Unassigned'} • ${apartment ? (apartment.unitNumber.toLowerCase().startsWith('room') || apartment.unitNumber.toLowerCase().startsWith('chambre') || apartment.unitNumber.toLowerCase().startsWith('apt') || apartment.unitNumber.toLowerCase().startsWith('unit') ? apartment.unitNumber : `${lang === 'fr' ? 'Chambre' : 'Room'} ${apartment.unitNumber}`) : (lang === 'fr' ? 'Sans chambre' : 'No room')}`
                                         ) : (
                                             <span style={{ color: '#D97706', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                                                ⚠️ Previous Unit: {property ? property.name : '—'} • {apartment ? apartment.unitNumber : '—'}
+                                                ⚠️ {lang === 'fr' ? 'Précédente chambre :' : 'Previous Room:'} {property ? property.name : '—'} • {apartment ? apartment.unitNumber : '—'}
                                             </span>
                                         )}
                                     </div>
@@ -856,6 +884,12 @@ const Tenants = () => {
                                 border: '1px dashed var(--border-light)',
                                 marginBottom: '1.25rem'
                             }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', fontWeight: '500' }}>
+                                    <span style={{ color: 'var(--text-muted)' }}>{lang === 'fr' ? 'Chambre / Pièce :' : 'Room Number:'}</span>
+                                    <span style={{ fontWeight: '800', color: apartment?.unitNumber ? '#2D60FF' : 'var(--text-muted)' }}>
+                                        {apartment ? (apartment.unitNumber || '—') : (lang === 'fr' ? 'Non assignée' : 'Unassigned')}
+                                    </span>
+                                </div>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', fontWeight: '500' }}>
                                     <span style={{ color: 'var(--text-muted)' }}>{lang === 'fr' ? 'Dernier paiement :' : 'Last Payment:'}</span>
                                     <span style={{ fontWeight: '700', color: '#343C6A' }}>{lastPaymentDate}</span>
